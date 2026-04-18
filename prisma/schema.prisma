@@ -1,0 +1,37 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String        @id @default(uuid())
+  lineId       String        @unique
+  name         String?
+  transactions Transaction[]
+  goals        Goal[]
+}
+
+model Transaction {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  type      String   // "INCOME" หรือ "EXPENSE"
+  amount    Float
+  category  String   // เช่น "Food", "Transport", "Investment"
+  note      String?
+  date      DateTime @default(now())
+}
+
+model Goal {
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+  targetAmount  Float
+  currentAmount Float     @default(0)
+  title         String    // เช่น "DCA Portfolio", "Emergency Fund"
+  deadline      DateTime?
+}
