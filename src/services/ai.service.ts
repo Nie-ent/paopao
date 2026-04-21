@@ -5,16 +5,20 @@ const apiKey = process.env.AI_API_KEY || "dummy_key";
 const ai = new GoogleGenAI({ apiKey });
 
 export const TRANSACTION_CATEGORIES = [
-  "Food & Drink",        // Meals, snacks, coffee, dining out, groceries
-  "Transport & Travel",  // BTS, MRT, grab, taxi, gas, flights
-  "Housing & Utilities", // Rent, electricity, water, internet, repairs
-  "Shopping & Personal Care", // Clothes, cosmetics, gadgets, haircuts
-  "Health & Fitness",    // Hospital, medicine, gym, sports equipment
-  "Entertainment & Social", // Movies, concerts, games, parties, subscriptions
-  "Education & Self-Improvement", // Books, courses, workshops
-  "Investment & Savings", // Stocks, DCA, funds, deposits
-  "Income & Salary",     // Payroll, freelance, side-hustle, interest
-  "Other"                // Anything that completely doesn't fit the above
+  "Food & Drink",
+  "Transport & Travel",
+  "Housing & Utilities",
+  "Shopping & Personal Care",
+  "Health & Fitness",
+  "Entertainment & Social",
+  "Education & Self-Improvement",
+  "Investment",
+  "Salary",
+  "Freelance",
+  "Gift",
+  "Transfer In",
+  "Other Income",
+  "Other"
 ];
 
 const transactionSchema = {
@@ -32,7 +36,7 @@ const transactionSchema = {
     category: { 
       type: Type.STRING, 
       enum: TRANSACTION_CATEGORIES, 
-      description: "The most fitting category perfectly chosen from the available list without overlapping." 
+      description: "The precise category chosen from the available list." 
     },
     note: { 
       type: Type.STRING, 
@@ -49,11 +53,29 @@ export interface ExtractedTransaction {
   note: string;
 }
 
-const SYSTEM_INSTRUCTION = `You are an expert financial assistant AI. 
+const CATEGORY_DEFINITIONS = `
+Strictly use these definitions to prevent overlap:
+- "Food & Drink": Edible items (meals, snacks, coffee, dining out, grocery/supermarket food).
+- "Transport & Travel": Moving around (BTS, MRT, grab, taxi, gas, flights).
+- "Housing & Utilities": Home related (Rent, electricity, water, internet, home repairs).
+- "Shopping & Personal Care": Physical goods not for eating (Clothes, cosmetics, gadgets, haircuts, Shopee/Lazada items).
+- "Health & Fitness": Wellbeing (Hospital, medicine, supplements, gym, sports equipment).
+- "Entertainment & Social": Leisure (Movies, concerts, games, parties, digital subscriptions like Netflix).
+- "Education & Self-Improvement": Learning (Books, courses, workshops).
+- "Investment": Outbound or inbound cash related to assets, DCA, crypto, gold, funds.
+- "Salary": Inbound cash from regular monthly employment/payroll.
+- "Freelance": Inbound cash from side-hustles, contract work, odds jobs.
+- "Gift": Inbound free money from birthdays, gifts.
+- "Transfer In": Money moved between own accounts or refund from friends.
+- "Other Income": Inbound cash that is not salary/freelance/gift/transfer.
+- "Other": Use ONLY if it absolutely does not fit anywhere else.
+`;
+
+const SYSTEM_INSTRUCTION = \`You are an expert financial assistant AI. 
 Your goal is to parse Thai and English inputs (messages or bank slips) and rigidly extract the exact transaction details into JSON. 
-Ensure you categorize the transaction precisely using ONLY the provided categories. 
+\${CATEGORY_DEFINITIONS}
 If an image is provided, parse the transfer amount, infer if it's an expense (user paid someone) or income (someone paid user), and categorize it based on the memo/receiver context. Use standard timezone for 'Today'.
-IMPORTANT: You MUST write the 'note' value entirely in the Thai language.`;
+IMPORTANT: You MUST write the 'note' value entirely in the Thai language.\`;
 
 export async function extractTransactionFromText(text: string): Promise<ExtractedTransaction | null> {
   const response = await ai.models.generateContent({

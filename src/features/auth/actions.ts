@@ -34,6 +34,36 @@ export async function signInWithLineDirect(formData: FormData) {
   redirect("/")
 }
 
+export async function signInWithLiffAction(lineId: string, displayName: string, avatarUrl: string) {
+  if (!lineId) return redirect("/login?error=Invalid%20LIFF%20Profile")
+  
+  let user = await prisma.user.findUnique({
+    where: { lineId }
+  })
+
+  if (!user) {
+    user = await prisma.user.create({
+      data: {
+        lineId,
+        name: displayName,
+        avatarUrl
+      }
+    })
+  } else {
+    // Sync the freshest LINE profile data automatically
+    if (user.avatarUrl !== avatarUrl || user.name !== displayName) {
+      user = await prisma.user.update({
+        where: { lineId },
+        data: { avatarUrl, name: displayName }
+      });
+    }
+  }
+
+  const cookieStore = await cookies()
+  cookieStore.set("direct_line_session", user.lineId, { maxAge: 60 * 60 * 24 * 30 })
+  redirect("/")
+}
+
 export async function signInAsDemo() {
   const cookieStore = await cookies()
   cookieStore.set("demo_mode_bypass", "true", { maxAge: 60 * 60 * 24 * 7 })

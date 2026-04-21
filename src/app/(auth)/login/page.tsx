@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, Suspense } from "react"
+import React, { useEffect, useState, useTransition, Suspense } from "react"
 import { motion } from "framer-motion"
 import { Wallet, MessageCircle, AlertCircle, Cat } from "lucide-react"
 import { useSearchParams } from "next/navigation"
@@ -8,7 +8,7 @@ import { toast } from "sonner"
 
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { signInWithLineDirect, signInAsDemo } from "@/features/auth/actions"
+import { signInWithLineDirect, signInAsDemo, signInWithLiffAction } from "@/features/auth/actions"
 
 function ErrorMessageHandler() {
   const searchParams = useSearchParams()
@@ -26,12 +26,54 @@ function ErrorMessageHandler() {
 }
 
 export default function LoginPage() {
+  const [isLiffLoading, setIsLiffLoading] = useState(false);
+  const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    async function initLiff() {
+      const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
+      if (!liffId) return;
+      
+        try {
+          const { default: liff } = await import('@line/liff');
+          await liff.init({ liffId });
+          
+          if (liff.isInClient()) {
+            if (!liff.isLoggedIn()) {
+              liff.login();
+              return;
+            }
+            
+            setIsLiffLoading(true);
+            const profile = await liff.getProfile();
+            
+            startTransition(() => {
+              signInWithLiffAction(profile.userId, profile.displayName, profile.pictureUrl || "");
+            });
+          }
+        } catch (err) {
+          console.error("LIFF initialization failed", err);
+        }
+    }
+    
+    // Slight delay to ensure DOM readiness but keep it snappy
+    setTimeout(initLiff, 100);
+  }, []);
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-background relative overflow-hidden selection:bg-primary/20">
       <Suspense fallback={null}>
         <ErrorMessageHandler />
       </Suspense>
       
+      {/* Loading Overlay when LIFF is taking over */}
+      {(isLiffLoading || isPending) && (
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/80 backdrop-blur-md">
+          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4" />
+          <p className="text-primary font-medium animate-pulse text-lg">กำลังเชื่อมโยงบัญชี LINE...</p>
+        </div>
+      )}
+
       {/* Decorative blurred backgrounds */}
       <div className="absolute top-10 left-10 w-72 h-72 bg-primary/20 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-10 right-10 w-96 h-96 bg-accent/20 rounded-full blur-3xl pointer-events-none" />

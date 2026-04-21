@@ -53,12 +53,16 @@ export async function handleLineEvent(event: any) {
       const textMessage = messageEvent.message as any;
       const text = textMessage.text.trim().toLowerCase();
       
-      // Magic Login Command
       if (text === "login" || text === "เข้าสู่ระบบ" || text === "รหัสผ่าน" || text === "dashboard") {
+        const liffUrl = process.env.NEXT_PUBLIC_LIFF_ID 
+          ? `https://liff.line.me/${process.env.NEXT_PUBLIC_LIFF_ID}` 
+          : "https://paopao-wealthness.vercel.app/login";
+
         await lineClient.replyMessage({
           replyToken: actualReplyToken,
           messages: [
-            { type: "text", text: "🔐 ล็อกอินเข้าสู่แดชบอร์ดอย่างปลอดภัย\n\nรหัสเข้าใช้งานของคุณอยู่ด้านล่างนี้\n(กดค้างที่ข้อความถัดไปเพื่อคัดลอกได้เลยครับ) 👇" },
+            { type: "text", text: `✨ เข้าสู่แดชบอร์ดแบบไม่ต้องใช้รหัสผ่านผ่าน LINE LIFF ได้เลยครับ:\n${liffUrl}` },
+            { type: "text", text: "🔐 หรือถ้านำไปเปิดในคอมพิวเตอร์ ใช้รหัส (LINE Token) ด้านล่างนี้เพื่อล็อกอินครับ 👇" },
             { type: "text", text: user.lineId }
           ]
         });
@@ -88,8 +92,8 @@ export async function handleLineEvent(event: any) {
       userQueue.buffers.push(buffer);
       userQueue.replyToken = actualReplyToken;
 
-      // Wait 2.5 seconds blockingly to allow other concurrent images to accumulate
-      await new Promise(resolve => setTimeout(resolve, 2500));
+      // Wait 1.0 second blockingly to allow other concurrent images to accumulate
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
       if (userQueue.isProcessing) {
         // Another concurrent request handled it

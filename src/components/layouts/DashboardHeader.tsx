@@ -27,8 +27,14 @@ export function DashboardHeader() {
 
   return (
     <header className="sticky top-0 z-10 flex h-16 w-full items-center justify-between border-b border-border/40 bg-background/80 px-4 backdrop-blur-md">
-      <div className="flex items-center gap-4">
-        <SidebarTrigger className="md:hidden" />
+      <div className="flex items-center gap-3">
+        {/* Logo specifically for mobile screens to brand the Navbar */}
+        <div className="md:hidden flex items-center">
+           <img src="/paopao-logo.png" alt="PaoPao Logo" className="h-9 min-w-[70px] w-auto mix-blend-multiply dark:mix-blend-normal object-contain drop-shadow-sm" />
+        </div>
+        {/* Sidebar Trigger only visible on larger screens but generally we rely on permanent sidebar */}
+        <SidebarTrigger className="hidden md:flex" />
+
         <div className="relative hidden w-full max-w-sm sm:flex items-center">
           <Search className="absolute left-2.5 h-4 w-4 text-muted-foreground" />
           <Input
