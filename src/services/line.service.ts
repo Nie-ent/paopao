@@ -1,5 +1,5 @@
 import { lineClient, lineBlobClient } from "@/config/line";
-import { extractTransactionFromText, extractTransactionFromImage, ExtractedTransaction } from "@/services/ai.service";
+import { extractTransactionFromText, extractTransactionFromImage, extractTransactionsFromImages, ExtractedTransaction } from "@/services/ai.service";
 import prisma from "@/lib/db";
 
 /**
@@ -26,6 +26,13 @@ async function getOrCreateUser(lineId: string) {
   return user;
 }
 
+interface BatchQueue {
+  buffers: Buffer[];
+  replyToken: string;
+  isProcessing: boolean;
+}
+const imageQueue = new Map<string, BatchQueue>();
+
 /**
  * Handles incoming LINE Webhook events.
  */
@@ -36,11 +43,11 @@ export async function handleLineEvent(event: any) {
 
   const userId = event.source.userId;
   const messageEvent = event as any;
-  const replyToken = messageEvent.replyToken;
+  let actualReplyToken = messageEvent.replyToken;
 
   try {
     const user = await getOrCreateUser(userId);
-    let extractedData: ExtractedTransaction | null = null;
+    let extractedDataArray: ExtractedTransaction[] = [];
 
     if (messageEvent.message.type === "text") {
       const textMessage = messageEvent.message as any;
@@ -49,17 +56,17 @@ export async function handleLineEvent(event: any) {
       // Magic Login Command
       if (text === "login" || text === "เข้าสู่ระบบ" || text === "รหัสผ่าน" || text === "dashboard") {
         await lineClient.replyMessage({
-          replyToken,
+          replyToken: actualReplyToken,
           messages: [
-            { type: "text", text: "🔐 Secure Dashboard Login\n\nYour personal Login ID is below.\n(Long press the next bubble to copy it easily) 👇" },
+            { type: "text", text: "🔐 ล็อกอินเข้าสู่แดชบอร์ดอย่างปลอดภัย\n\nรหัสเข้าใช้งานของคุณอยู่ด้านล่างนี้\n(กดค้างที่ข้อความถัดไปเพื่อคัดลอกได้เลยครับ) 👇" },
             { type: "text", text: user.lineId }
           ]
         });
         return;
       }
 
-
-      extractedData = await extractTransactionFromText(textMessage.text);
+      const extracted = await extractTransactionFromText(textMessage.text);
+      if (extracted) extractedDataArray.push(extracted);
     } 
     else if (messageEvent.message.type === "image") {
       const imageMessage = messageEvent.message as any;
@@ -73,50 +80,78 @@ export async function handleLineEvent(event: any) {
       }
       const buffer = Buffer.concat(chunks);
       
-      extractedData = await extractTransactionFromImage(buffer);
+      if (!imageQueue.has(userId)) {
+        imageQueue.set(userId, { buffers: [], replyToken: actualReplyToken, isProcessing: false });
+      }
+      
+      const userQueue = imageQueue.get(userId)!;
+      userQueue.buffers.push(buffer);
+      userQueue.replyToken = actualReplyToken;
+
+      // Wait 2.5 seconds blockingly to allow other concurrent images to accumulate
+      await new Promise(resolve => setTimeout(resolve, 2500));
+      
+      if (userQueue.isProcessing) {
+        // Another concurrent request handled it
+        return null;
+      }
+      userQueue.isProcessing = true;
+      
+      const buffersToProcess = [...userQueue.buffers];
+      actualReplyToken = userQueue.replyToken; // use the latest replyToken
+      imageQueue.delete(userId);
+
+      if (buffersToProcess.length === 1) {
+        const extracted = await extractTransactionFromImage(buffersToProcess[0]);
+        if (extracted) extractedDataArray.push(extracted);
+      } else {
+        const mappedImages = buffersToProcess.map(b => ({ buffer: b, mimeType: "image/jpeg" }));
+        const extractedBatch = await extractTransactionsFromImages(mappedImages);
+        if (extractedBatch && extractedBatch.length > 0) {
+          extractedDataArray.push(...extractedBatch);
+        }
+      }
     } 
     else {
-      return replyText(replyToken, "ขออภัยครับ ตอนนี้ผมเข้าใจเฉพาะข้อความและภาพสลิปธนาคารเท่านั้นครับ 😅");
+      return replyText(actualReplyToken, "ขออภัยครับ ตอนนี้ผมเข้าใจเฉพาะข้อความและภาพสลิปธนาคารเท่านั้นครับ 😅");
     }
 
-    if (!extractedData) {
-      return replyText(replyToken, "ผมไม่สามารถอ่านข้อมูลรายการจากข้อความ/รูปภาพของคุณได้ รบกวนพิมพ์ให้ชัดเจนขึ้นหรือส่งสลิปมาอีกครั้งนะครับ! 🙏");
+    if (extractedDataArray.length === 0) {
+      return replyText(actualReplyToken, "ผมไม่สามารถอ่านข้อมูลรายการจากข้อความ/รูปภาพของคุณได้ รบกวนพิมพ์ให้ชัดเจนขึ้นหรือส่งสลิปมาอีกครั้งนะครับ! 🙏");
     }
 
-    // Preparation for auto deductions
-    const newTransactionsData = [{
-      userId: user.id,
-      type: extractedData.type,
-      amount: extractedData.amount,
-      category: extractedData.category,
-      note: extractedData.note,
-    }];
+    const newTransactionsData: any[] = [];
 
-    // Auto-Deductions Interception
-    if (extractedData.type === "INCOME") {
-      if (
-        (extractedData.category.includes("Salary")) && 
-        user.salaryDeduction > 0
-      ) {
-        newTransactionsData.push({
-          userId: user.id,
-          type: "EXPENSE",
-          amount: user.salaryDeduction,
-          category: "Other Expense",
-          note: "Social Security Auto-Deduction",
-        });
-      } else if (
-        extractedData.category === "Freelance" && 
-        user.freelanceTaxRate > 0
-      ) {
-        const taxAmount = extractedData.amount * (user.freelanceTaxRate / 100);
-        newTransactionsData.push({
-          userId: user.id,
-          type: "EXPENSE",
-          amount: taxAmount,
-          category: "Other Expense",
-          note: `Withholding Tax Auto-Deduction (${user.freelanceTaxRate}%)`,
-        });
+    // Preparation for auto deductions and normal saving
+    for (const data of extractedDataArray) {
+      newTransactionsData.push({
+        userId: user.id,
+        type: data.type,
+        amount: data.amount,
+        category: data.category,
+        note: data.note,
+      });
+
+      // Auto-Deductions Interception
+      if (data.type === "INCOME") {
+        if ((data.category.includes("Salary")) && user.salaryDeduction > 0) {
+          newTransactionsData.push({
+            userId: user.id,
+            type: "EXPENSE",
+            amount: user.salaryDeduction,
+            category: "Other Expense",
+            note: "Social Security Auto-Deduction",
+          });
+        } else if (data.category === "Freelance" && user.freelanceTaxRate > 0) {
+          const taxAmount = data.amount * (user.freelanceTaxRate / 100);
+          newTransactionsData.push({
+            userId: user.id,
+            type: "EXPENSE",
+            amount: taxAmount,
+            category: "Other Expense",
+            note: `Withholding Tax Auto-Deduction (${user.freelanceTaxRate}%)`,
+          });
+        }
       }
     }
 
@@ -125,10 +160,22 @@ export async function handleLineEvent(event: any) {
       await prisma.transaction.create({ data: tData });
     }
 
-    const emoji = extractedData.type === "INCOME" ? "💵" : "💸";
-    const typeTH = extractedData.type === "INCOME" ? "รับ" : "จ่าย";
-    let statusText = `บันทึกรายการสำเร็จ ${emoji}\nยอดเงิน${typeTH}: ฿${extractedData.amount}\nหมวดหมู่: ${extractedData.category}\nหมายเหตุ: ${extractedData.note || "-"}`;
+    // Build status response msg
+    let statusText = "";
+    if (extractedDataArray.length === 1) {
+      const d = extractedDataArray[0];
+      const emoji = d.type === "INCOME" ? "💵" : "💸";
+      const typeTH = d.type === "INCOME" ? "รับ" : "จ่าย";
+      statusText = `บันทึกรายการสำเร็จ ${emoji}\nยอดเงิน${typeTH}: ฿${d.amount}\nหมวดหมู่: ${d.category}\nหมายเหตุ: ${d.note || "-"}`;
+    } else {
+      statusText = `📝 บันทึกสำเร็จทั้งหมด ${extractedDataArray.length} รายการ:\n`;
+      extractedDataArray.forEach((d, i) => {
+         const emoji = d.type === "INCOME" ? "➕" : "➖";
+         statusText += `${i+1}. ${emoji} ฿${d.amount} | ${d.category}\n`;
+      });
+    }
     
+    // Budget evaluation logic
     try {
       const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
       const mtdTransactions = await prisma.transaction.groupBy({
@@ -144,7 +191,8 @@ export async function handleLineEvent(event: any) {
         if (t.type === 'EXPENSE') totalExpense += t._sum.amount || 0;
       });
 
-      if (totalIncome > 0 && extractedData.type === 'EXPENSE') {
+      const hasExpense = extractedDataArray.some(d => d.type === 'EXPENSE');
+      if (totalIncome > 0 && hasExpense) {
         const ratio = (totalExpense / totalIncome) * 100;
         if (ratio >= 90) {
           statusText += `\n\n🚨 วิกฤตการเงิน!: เดือนนี้คุณใช้เงินทะลุ ${ratio.toFixed(0)}% ของรายรับแล้ว! โปรดงดใช้จ่ายด่วน 🛑`;
@@ -158,17 +206,17 @@ export async function handleLineEvent(event: any) {
       console.error("Failed to calculate budget ratio", budgetError);
     }
 
-    return replyText(replyToken, statusText);
+    return replyText(actualReplyToken, statusText);
 
   } catch (error: any) {
     console.error("Error processing line event:", error);
 
     const errorMsg = error?.message?.toLowerCase() || "";
     if (error?.status === 429 || errorMsg.includes("429") || errorMsg.includes("quota") || errorMsg.includes("depleted") || errorMsg.includes("exhausted")) {
-       return replyText(replyToken, "❌ ไม่สามารถประมวลผลได้ เนื่องจากโควต้าระบบ AI (Gemini API) ของคุณหมดแล้ว กรุณาไปที่ Google AI Studio เพื่อจัดการการเรียกเก็บเงินครับ");
+       return replyText(actualReplyToken, "❌ ไม่สามารถประมวลผลได้ เนื่องจากโควต้าระบบ AI (Gemini API) ของคุณหมดแล้ว กรุณาไปที่ Google AI Studio เพื่อจัดการการเรียกเก็บเงินครับ");
     }
 
-    return replyText(replyToken, "เกิดข้อผิดพลาดในระบบเซิร์ฟเวอร์ ไม่สามารถบันทึกข้อมูลของคุณได้ในขณะนี้ครับ 🙏");
+    return replyText(actualReplyToken, "เกิดข้อผิดพลาดในระบบเซิร์ฟเวอร์ ไม่สามารถบันทึกข้อมูลของคุณได้ในขณะนี้ครับ 🙏");
   }
 }
 

@@ -55,10 +55,11 @@ Here are the raw transaction details:
 ${transactionDetails}
 
 Rules for the message:
-1. Start with a cheerful morning greeting "🌅 Morning Briefing!"
+1. Start with a cheerful morning greeting "🌅 สวัสดีตอนเช้า สรุปยอดเงินเมื่อวานมาแล้ว!"
 2. Give a 1-sentence summary of yesterday's cashflow.
 3. Add a 1-sentence tip or warning based strictly on their categories.
 4. Keep it VERY short (mobile friendly) and use emojis. Do not output markdown asterisks(**) because LINE text doesn't render them gracefully.
+5. You MUST reply entirely in the Thai language.
 `;
       
       try {
@@ -68,7 +69,7 @@ Rules for the message:
           config: { temperature: 0.7 }
         });
 
-        const replyText = response.text || `🌅 Morning Brief: You spent ฿${totalSpent} yesterday. Have a great day!`;
+        const replyText = response.text || `🌅 สวัสดีตอนเช้า: เมื่อวานคุณใช้จ่ายไป ฿${totalSpent} ขอให้วันนี้เป็นวันที่ดีนะ!`;
         
         // Push message via LINE Official Account
         await lineClient.pushMessage({
