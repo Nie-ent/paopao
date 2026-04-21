@@ -55,9 +55,8 @@ Ensure you categorize the transaction precisely using ONLY the provided categori
 If an image is provided, parse the transfer amount, infer if it's an expense (user paid someone) or income (someone paid user), and categorize it based on the memo/receiver context. Use standard timezone for 'Today'.`;
 
 export async function extractTransactionFromText(text: string): Promise<ExtractedTransaction | null> {
-  try {
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+  const response = await ai.models.generateContent({
+    model: "gemini-flash-latest",
       contents: text,
       config: {
         systemInstruction: SYSTEM_INSTRUCTION,
@@ -67,20 +66,15 @@ export async function extractTransactionFromText(text: string): Promise<Extracte
       }
     });
 
-    if (response.text) {
-      return JSON.parse(response.text) as ExtractedTransaction;
-    }
-    return null;
-  } catch (error) {
-    console.error("AI Text Extraction Error:", error);
-    return null;
+  if (response.text) {
+    return JSON.parse(response.text) as ExtractedTransaction;
   }
+  return null;
 }
 
 export async function extractTransactionFromImage(imageBuffer: Buffer, mimeType: string = "image/jpeg"): Promise<ExtractedTransaction | null> {
-  try {
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+  const response = await ai.models.generateContent({
+    model: "gemini-flash-latest",
       contents: [
         "Please extract the transaction details from this bank slip.",
         {
@@ -98,12 +92,8 @@ export async function extractTransactionFromImage(imageBuffer: Buffer, mimeType:
       }
     });
 
-    if (response.text) {
-      return JSON.parse(response.text) as ExtractedTransaction;
-    }
-    return null;
-  } catch (error) {
-    console.error("AI Image Extraction Error:", error);
-    return null;
+  if (response.text) {
+    return JSON.parse(response.text) as ExtractedTransaction;
   }
+  return null;
 }

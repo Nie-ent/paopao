@@ -8,11 +8,12 @@ import { ArrowUpRight, ArrowDownRight, Wallet, Sparkles, Loader2, Calendar, Cloc
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { getDashboardData } from "@/features/dashboard/actions"
 import { generateDashboardInsight } from "@/features/ai/actions"
 import { useLanguage } from "@/contexts/LanguageContext"
 
-type Timeframe = 'YTD' | 'MONTH' | 'WEEK'
+type Timeframe = 'ALL' | 'YTD' | 'MONTH' | 'WEEK'
 
 const INCOME_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6']
 const EXPENSE_COLORS = ['#ef4444', '#f97316', '#eab308', '#06b6d4', '#6366f1', '#d946ef']
@@ -20,9 +21,12 @@ const DONUT_COLORS = ['#10b981', '#ef4444'] // Income, Expense
 
 export default function DashboardOverview() {
   const { t, language } = useLanguage()
-  const [timeframe, setTimeframe] = useState<Timeframe>('MONTH')
+  const [timeframe, setTimeframe] = useState<Timeframe>('ALL')
   const [dbData, setDbData] = useState<any>(null)
   const [insight, setInsight] = useState<string | null>(null)
+  const [modalConfig, setModalConfig] = useState<{isOpen: boolean, title: string, data: any[], colors: string[]}>({
+    isOpen: false, title: '', data: [], colors: []
+  })
   
   // Fetch Data Payload
   useEffect(() => {
@@ -34,13 +38,20 @@ export default function DashboardOverview() {
     })
   }, [timeframe])
 
-  // Lazy Load AI Insight
+  // Lazy Load AI Insight (Once per day/language)
   useEffect(() => {
-    setInsight(null)
-    generateDashboardInsight(language, timeframe).then(res => {
-      if (res.advice) setInsight(res.advice)
+    generateDashboardInsight(language, 'MONTH').then(res => {
+      if (res?.advice) {
+        setInsight(res.advice)
+      } else if (res?.error) {
+        setInsight(res.error)
+      } else {
+        setInsight(language === 'th' ? "❌ ไม่สามารถดึงคำแนะนำได้ (โควต้า Gemini API ประจำเดือนของคุณอาจหมดแล้ว)" : "❌ AI service unavailable. Your Gemini API quota may be exhausted.")
+      }
+    }).catch(() => {
+      setInsight(language === 'th' ? "❌ การเชื่อมต่อ AI ล้มเหลว" : "❌ AI connection failed.")
     })
-  }, [language, timeframe])
+  }, [language])
 
   if (!dbData) {
     return (
@@ -72,6 +83,32 @@ export default function DashboardOverview() {
         <div>
           <h2 className="text-3xl font-bold tracking-tight text-foreground/90">{t('dashboard.title')}</h2>
           <p className="text-muted-foreground">{t('dashboard.welcome')}</p>
+        </div>
+        <div className="flex bg-muted/50 p-1 rounded-lg self-start sm:self-auto overflow-x-auto no-scrollbar max-w-full">
+          <Button 
+            variant={timeframe === 'ALL' ? 'default' : 'ghost'} 
+            size="sm" 
+            onClick={() => setTimeframe('ALL')}
+            className={timeframe === 'ALL' ? 'shadow-sm whitespace-nowrap' : 'whitespace-nowrap'}
+          >
+            <Activity className="w-4 h-4 mr-2" /> ทั้งหมด
+          </Button>
+          <Button 
+            variant={timeframe === 'YTD' ? 'default' : 'ghost'} 
+            size="sm" 
+            onClick={() => setTimeframe('YTD')}
+            className={timeframe === 'YTD' ? 'shadow-sm whitespace-nowrap' : 'whitespace-nowrap'}
+          >
+            <Calendar className="w-4 h-4 mr-2" /> รายปี
+          </Button>
+          <Button 
+            variant={timeframe === 'MONTH' ? 'default' : 'ghost'} 
+            size="sm" 
+            onClick={() => setTimeframe('MONTH')}
+            className={timeframe === 'MONTH' ? 'shadow-sm whitespace-nowrap' : 'whitespace-nowrap'}
+          >
+            <Activity className="w-4 h-4 mr-2" /> รายเดือน
+          </Button>
         </div>
       </div>
 
@@ -110,14 +147,14 @@ export default function DashboardOverview() {
                 <div className="text-2xl font-bold">฿{stats.totalBalance.toLocaleString()}</div>
                 <p className="text-xs text-muted-foreground mt-1">Overall Net Balance</p>
               </div>
-              <div className="h-[120px] w-full mt-2">
+              <div className="h-[280px] w-full mt-2">
                 <ResponsiveContainer width="100%" height="100%">
-                  <PieChart margin={{ top: 0, right: 0, bottom: 0, left: -20 }}>
-                    <Pie data={balanceData} innerRadius={25} outerRadius={35} paddingAngle={2} dataKey="value" stroke="none">
+                  <PieChart margin={{ top: 10, right: 10, bottom: 20, left: 0 }}>
+                    <Pie data={balanceData} innerRadius={55} outerRadius={75} paddingAngle={2} dataKey="value" stroke="none">
                       {balanceData.map((entry: any, index: number) => <Cell key={`cell-${index}`} fill={DONUT_COLORS[index % DONUT_COLORS.length]} />)}
                     </Pie>
-                    <Tooltip contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
-                    <Legend layout="vertical" verticalAlign="middle" align="right" wrapperStyle={{ fontSize: '10px', right: 0, lineHeight: '14px' }} />
+                    <Tooltip contentStyle={{ borderRadius: '8px', fontSize: '12px' }} formatter={(v: any) => `฿${Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 })}`} />
+                    <Legend layout="horizontal" verticalAlign="bottom" align="center" wrapperStyle={{ fontSize: '12px', paddingTop: '15px' }} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -127,7 +164,10 @@ export default function DashboardOverview() {
 
         {/* Income Card */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.1 }}>
-          <Card className="glass-panel overflow-hidden relative h-full flex flex-col">
+          <Card 
+            className="glass-panel overflow-hidden relative h-full flex flex-col cursor-pointer transition-all hover:ring-2 hover:ring-emerald-500/50 hover:shadow-lg"
+            onClick={() => setModalConfig({ isOpen: true, title: t('dashboard.total_income'), data: incomeByCategory, colors: INCOME_COLORS })}
+          >
             <div className="absolute right-0 top-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-2xl -mt-8 -mr-8 pointer-events-none" />
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">{t('dashboard.total_income')}</CardTitle>
@@ -138,16 +178,16 @@ export default function DashboardOverview() {
                 <div className="text-2xl font-bold">฿{stats.totalIncome.toLocaleString()}</div>
                 <p className="text-xs text-muted-foreground mt-1">Lifetime Income</p>
               </div>
-              <div className="h-[120px] w-full mt-2">
+              <div className="h-[280px] w-full mt-2">
                 <ResponsiveContainer width="100%" height="100%">
-                  <PieChart margin={{ top: 0, right: 0, bottom: 0, left: -20 }}>
-                    <Pie data={incomeByCategory.length ? incomeByCategory : [{name: 'None', value: 1}]} innerRadius={25} outerRadius={35} paddingAngle={2} dataKey="value" stroke="none">
+                  <PieChart margin={{ top: 10, right: 10, bottom: 20, left: 0 }}>
+                    <Pie data={incomeByCategory.length ? incomeByCategory : [{name: 'None', value: 1}]} innerRadius={55} outerRadius={75} paddingAngle={2} dataKey="value" stroke="none">
                       {(incomeByCategory.length ? incomeByCategory : [{name: 'None', value: 1}]).map((entry: any, index: number) => (
                         <Cell key={`cell-${index}`} fill={incomeByCategory.length ? INCOME_COLORS[index % INCOME_COLORS.length] : '#888'} />
                       ))}
                     </Pie>
-                    <Tooltip contentStyle={{ borderRadius: '8px', fontSize: '12px' }} formatter={(v) => `฿${v}`} />
-                    <Legend layout="vertical" verticalAlign="middle" align="right" wrapperStyle={{ fontSize: '10px', right: 0, lineHeight: '14px' }} />
+                    <Tooltip contentStyle={{ borderRadius: '8px', fontSize: '12px' }} formatter={(v: any) => `฿${Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 })}`} />
+                    <Legend layout="horizontal" verticalAlign="bottom" align="center" wrapperStyle={{ fontSize: '12px', paddingTop: '15px' }} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -157,9 +197,12 @@ export default function DashboardOverview() {
 
         {/* Expense Card */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.2 }}>
-          <Card className="glass-panel overflow-hidden relative h-full flex flex-col">
+          <Card 
+            className="glass-panel overflow-hidden relative h-full flex flex-col cursor-pointer transition-all hover:ring-2 hover:ring-red-500/50 hover:shadow-lg"
+            onClick={() => setModalConfig({ isOpen: true, title: t('dashboard.total_expense'), data: expenseByCategory, colors: EXPENSE_COLORS })}
+          >
             <div className="absolute right-0 top-0 w-24 h-24 bg-red-500/5 rounded-full blur-2xl -mt-8 -mr-8 pointer-events-none" />
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">{t('dashboard.total_expense')}</CardTitle>
               <ArrowDownRight className="h-4 w-4 text-red-500" />
             </CardHeader>
@@ -168,16 +211,16 @@ export default function DashboardOverview() {
                 <div className="text-2xl font-bold">฿{stats.totalExpense.toLocaleString()}</div>
                 <p className="text-xs text-muted-foreground mt-1">Lifetime Expense</p>
               </div>
-              <div className="h-[120px] w-full mt-2">
+              <div className="h-[280px] w-full mt-2">
                 <ResponsiveContainer width="100%" height="100%">
-                  <PieChart margin={{ top: 0, right: 0, bottom: 0, left: -20 }}>
-                    <Pie data={expenseByCategory.length ? expenseByCategory : [{name: 'None', value: 1}]} innerRadius={25} outerRadius={35} paddingAngle={2} dataKey="value" stroke="none">
+                  <PieChart margin={{ top: 10, right: 10, bottom: 20, left: 0 }}>
+                    <Pie data={expenseByCategory.length ? expenseByCategory : [{name: 'None', value: 1}]} innerRadius={55} outerRadius={75} paddingAngle={2} dataKey="value" stroke="none">
                       {(expenseByCategory.length ? expenseByCategory : [{name: 'None', value: 1}]).map((entry: any, index: number) => (
                         <Cell key={`cell-${index}`} fill={expenseByCategory.length ? EXPENSE_COLORS[index % EXPENSE_COLORS.length] : '#888'} />
                       ))}
                     </Pie>
-                    <Tooltip contentStyle={{ borderRadius: '8px', fontSize: '12px' }} formatter={(v) => `฿${v}`} />
-                    <Legend layout="vertical" verticalAlign="middle" align="right" wrapperStyle={{ fontSize: '10px', right: 0, lineHeight: '14px' }} />
+                    <Tooltip contentStyle={{ borderRadius: '8px', fontSize: '12px' }} formatter={(v: any) => `฿${Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 })}`} />
+                    <Legend layout="horizontal" verticalAlign="bottom" align="center" wrapperStyle={{ fontSize: '12px', paddingTop: '15px' }} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -197,32 +240,7 @@ export default function DashboardOverview() {
               <CardTitle>Cash Flow Overview</CardTitle>
               <CardDescription>Visualizing your cash flow across different timelines.</CardDescription>
             </div>
-            <div className="flex bg-muted/50 p-1 rounded-lg self-start sm:self-auto">
-              <Button 
-                variant={timeframe === 'YTD' ? 'default' : 'ghost'} 
-                size="sm" 
-                onClick={() => setTimeframe('YTD')}
-                className={timeframe === 'YTD' ? 'shadow-sm' : ''}
-              >
-                <Calendar className="w-4 h-4 mr-2" /> {t('dashboard.time.ytd')}
-              </Button>
-              <Button 
-                variant={timeframe === 'MONTH' ? 'default' : 'ghost'} 
-                size="sm" 
-                onClick={() => setTimeframe('MONTH')}
-                className={timeframe === 'MONTH' ? 'shadow-sm' : ''}
-              >
-                <Activity className="w-4 h-4 mr-2" /> {t('dashboard.time.month')}
-              </Button>
-              <Button 
-                variant={timeframe === 'WEEK' ? 'default' : 'ghost'} 
-                size="sm" 
-                onClick={() => setTimeframe('WEEK')}
-                className={timeframe === 'WEEK' ? 'shadow-sm' : ''}
-              >
-                <Clock className="w-4 h-4 mr-2" /> {t('dashboard.time.week')}
-              </Button>
-            </div>
+            {/* The timeframe buttons have been moved to the top of the dashboard */}
           </CardHeader>
           <CardContent>
             <div className="h-[300px] w-full mt-4">
@@ -251,6 +269,42 @@ export default function DashboardOverview() {
           </CardContent>
         </Card>
       </motion.div>
+
+      {/* Category List Modal */}
+      <Dialog open={modalConfig.isOpen} onOpenChange={(open) => setModalConfig({ ...modalConfig, isOpen: open })}>
+        <DialogContent className="sm:max-w-md max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>รายละเอียดหมวดหมู่ ({modalConfig.title})</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            {modalConfig.data && modalConfig.data.length > 0 ? (
+              (() => {
+                const totalValue = modalConfig.data.reduce((acc, curr) => Number(acc) + Number(curr.value), 0);
+                return modalConfig.data.map((item, index) => {
+                  const percent = totalValue > 0 ? ((Number(item.value) / totalValue) * 100).toFixed(1) : "0.0";
+                  return (
+                    <div key={index} className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border border-border/50">
+                      <div className="flex items-center gap-3">
+                        <div 
+                          className="w-3 h-3 rounded-full shrink-0" 
+                          style={{ backgroundColor: modalConfig.colors[index % modalConfig.colors.length] }} 
+                        />
+                        <span className="font-medium line-clamp-1">{item.name}</span>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span className="font-bold">฿{item.value.toLocaleString()}</span>
+                        <span className="text-sm font-medium text-muted-foreground w-12 text-right">{percent}%</span>
+                      </div>
+                    </div>
+                  );
+                });
+              })()
+            ) : (
+              <div className="text-center text-muted-foreground py-8">ไม่มีข้อมูลในหมวดหมู่นี้</div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

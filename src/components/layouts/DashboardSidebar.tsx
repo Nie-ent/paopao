@@ -8,6 +8,7 @@ import {
   Settings,
   LogOut,
   Sparkles,
+  Cat,
 } from "lucide-react"
 import Link from "next/link"
 import { signOut } from "@/features/auth/actions"
@@ -57,24 +58,21 @@ export function DashboardSidebar() {
 
   return (
     <Sidebar variant="inset" className="border-none bg-transparent">
-      <SidebarHeader className="pt-6 pb-4 px-4">
-        <div className="flex items-center gap-2 px-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <Wallet className="h-5 w-5" />
-          </div>
-          <span className="text-xl font-bold tracking-tight">Wealthness</span>
+      <SidebarHeader className="p-0 m-0 w-full flex items-center justify-center overflow-hidden">
+        <div className="flex justify-center items-center w-full">
+          <img src="/paopao-logo.png" alt="PaoPao Logo" className="w-full max-w-[240px] h-auto object-contain scale-[1.2] lg:scale-[1.3] origin-center mix-blend-multiply dark:mix-blend-normal" />
         </div>
       </SidebarHeader>
       <SidebarContent className="px-4">
-        <SidebarMenu>
+        <SidebarMenu className="gap-2 mt-4">
           {items.map((item) => (
             <SidebarMenuItem key={item.titleKey}>
-              <SidebarMenuButton tooltip={t(item.titleKey)} className="hover:bg-primary/10 hover:text-primary transition-colors hover:font-medium active:scale-95 duration-200">
-                <Link href={item.url}>
-                  <item.icon className="h-4 w-4" />
-                  <span className="font-medium">{t(item.titleKey)}</span>
-                </Link>
-              </SidebarMenuButton>
+              <Link href={item.url} className="w-full block">
+                <SidebarMenuButton tooltip={t(item.titleKey)} className="hover:bg-primary/10 hover:text-primary transition-colors hover:font-medium active:scale-95 duration-200 py-6">
+                  <item.icon className="h-5 w-5" />
+                  <span className="font-medium text-[15px]">{t(item.titleKey)}</span>
+                </SidebarMenuButton>
+              </Link>
             </SidebarMenuItem>
           ))}
         </SidebarMenu>

@@ -20,31 +20,6 @@ export async function getGoals() {
     orderBy: { deadline: 'asc' }
   })
 
-  // Ensure default demo goals exist if empty
-  if (goals.length === 0) {
-    const demoGoals = await prisma.$transaction([
-      prisma.goal.create({
-        data: {
-          userId: prismaUser.id,
-          title: "New MacBook Pro",
-          targetAmount: 85000,
-          currentAmount: 20000,
-          deadline: new Date(new Date().setFullYear(new Date().getFullYear() + 1))
-        }
-      }),
-      prisma.goal.create({
-        data: {
-          userId: prismaUser.id,
-          title: "Emergency Fund",
-          targetAmount: 100000,
-          currentAmount: 85000,
-          deadline: new Date(new Date().setFullYear(new Date().getFullYear() + 2))
-        }
-      })
-    ])
-    return { data: demoGoals }
-  }
-
   return { data: goals }
 }
 

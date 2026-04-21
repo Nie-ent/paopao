@@ -76,26 +76,58 @@ export async function handleLineEvent(event: any) {
       extractedData = await extractTransactionFromImage(buffer);
     } 
     else {
-      return replyText(replyToken, "I currently only understand text and image slips.");
+      return replyText(replyToken, "ขออภัยครับ ตอนนี้ผมเข้าใจเฉพาะข้อความและภาพสลิปธนาคารเท่านั้นครับ 😅");
     }
 
     if (!extractedData) {
-      return replyText(replyToken, "I couldn't extract transaction details from your message. Please try being more specific!");
+      return replyText(replyToken, "ผมไม่สามารถอ่านข้อมูลรายการจากข้อความ/รูปภาพของคุณได้ รบกวนพิมพ์ให้ชัดเจนขึ้นหรือส่งสลิปมาอีกครั้งนะครับ! 🙏");
+    }
+
+    // Preparation for auto deductions
+    const newTransactionsData = [{
+      userId: user.id,
+      type: extractedData.type,
+      amount: extractedData.amount,
+      category: extractedData.category,
+      note: extractedData.note,
+    }];
+
+    // Auto-Deductions Interception
+    if (extractedData.type === "INCOME") {
+      if (
+        (extractedData.category.includes("Salary")) && 
+        user.salaryDeduction > 0
+      ) {
+        newTransactionsData.push({
+          userId: user.id,
+          type: "EXPENSE",
+          amount: user.salaryDeduction,
+          category: "Other Expense",
+          note: "Social Security Auto-Deduction",
+        });
+      } else if (
+        extractedData.category === "Freelance" && 
+        user.freelanceTaxRate > 0
+      ) {
+        const taxAmount = extractedData.amount * (user.freelanceTaxRate / 100);
+        newTransactionsData.push({
+          userId: user.id,
+          type: "EXPENSE",
+          amount: taxAmount,
+          category: "Other Expense",
+          note: `Withholding Tax Auto-Deduction (${user.freelanceTaxRate}%)`,
+        });
+      }
     }
 
     // Save to Database
-    await prisma.transaction.create({
-      data: {
-        userId: user.id,
-        type: extractedData.type,
-        amount: extractedData.amount,
-        category: extractedData.category,
-        note: extractedData.note,
-      }
-    });
+    for (const tData of newTransactionsData) {
+      await prisma.transaction.create({ data: tData });
+    }
 
     const emoji = extractedData.type === "INCOME" ? "💵" : "💸";
-    let statusText = `Successfully recorded ${emoji}\n${extractedData.type}: ฿${extractedData.amount}\nCategory: ${extractedData.category}\nNote: ${extractedData.note}`;
+    const typeTH = extractedData.type === "INCOME" ? "รับ" : "จ่าย";
+    let statusText = `บันทึกรายการสำเร็จ ${emoji}\nยอดเงิน${typeTH}: ฿${extractedData.amount}\nหมวดหมู่: ${extractedData.category}\nหมายเหตุ: ${extractedData.note || "-"}`;
     
     try {
       const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
@@ -115,11 +147,11 @@ export async function handleLineEvent(event: any) {
       if (totalIncome > 0 && extractedData.type === 'EXPENSE') {
         const ratio = (totalExpense / totalIncome) * 100;
         if (ratio >= 90) {
-          statusText += `\n\n🚨 CRITICAL RISK: Your expenses reached ${ratio.toFixed(0)}% of your income! Stop spending! 🛑`;
+          statusText += `\n\n🚨 วิกฤตการเงิน!: เดือนนี้คุณใช้เงินทะลุ ${ratio.toFixed(0)}% ของรายรับแล้ว! โปรดงดใช้จ่ายด่วน 🛑`;
         } else if (ratio >= 80) {
-          statusText += `\n\n⚠️ HIGH RISK: You've spent ${ratio.toFixed(0)}% of your monthly income. Please be careful.`;
+          statusText += `\n\n⚠️ ความเสี่ยงสูง: เดือนนี้คุณใช้เงินไปแล้ว ${ratio.toFixed(0)}% ของรายรับ โปรดระมัดระวังการใช้จ่ายนะครับ`;
         } else if (ratio >= 50) {
-          statusText += `\n\n👀 MODERATE RISK: You've crossed 50% of your income this month.`;
+          statusText += `\n\n👀 แจ้งให้ทราบ: ตอนนี้คุณใช้เงินเกินครึ่ง (${ratio.toFixed(0)}%) ของรายรับเดือนนี้ไปแล้วนะครับ`;
         }
       }
     } catch (budgetError) {
@@ -128,9 +160,15 @@ export async function handleLineEvent(event: any) {
 
     return replyText(replyToken, statusText);
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error processing line event:", error);
-    return replyText(replyToken, "There was an internal error processing your data.");
+
+    const errorMsg = error?.message?.toLowerCase() || "";
+    if (error?.status === 429 || errorMsg.includes("429") || errorMsg.includes("quota") || errorMsg.includes("depleted") || errorMsg.includes("exhausted")) {
+       return replyText(replyToken, "❌ ไม่สามารถประมวลผลได้ เนื่องจากโควต้าระบบ AI (Gemini API) ของคุณหมดแล้ว กรุณาไปที่ Google AI Studio เพื่อจัดการการเรียกเก็บเงินครับ");
+    }
+
+    return replyText(replyToken, "เกิดข้อผิดพลาดในระบบเซิร์ฟเวอร์ ไม่สามารถบันทึกข้อมูลของคุณได้ในขณะนี้ครับ 🙏");
   }
 }
 

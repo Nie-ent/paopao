@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { signOut } from "@/features/auth/actions"
+import { TaxSettingsCard } from "@/components/settings/TaxSettingsCard"
 
 export default function SettingsPage() {
   const [isSignOutProcessing, setIsSignOutProcessing] = useState(false)
@@ -20,7 +21,7 @@ export default function SettingsPage() {
           <h2 className="text-3xl font-bold tracking-tight text-foreground/90 flex items-center gap-2">
             <Settings className="h-8 w-8 text-primary" /> Platform Settings
           </h2>
-          <p className="text-muted-foreground">Manage your Wealthness connections and preferences.</p>
+          <p className="text-muted-foreground">Manage your PaoPao connections and preferences.</p>
         </div>
       </div>
 
@@ -68,6 +69,9 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
         </motion.div>
+
+        {/* Automated Taxes & Deductions */}
+        <TaxSettingsCard />
 
         {/* Notifications Preference */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.1 }}>

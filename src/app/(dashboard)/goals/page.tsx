@@ -34,9 +34,14 @@ export default function GoalsPage() {
     setLoading(false)
   }
 
-  const handleCreate = async (formData: FormData) => {
+  const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    if (isSubmitLoading) return
+    
     setIsSubmitLoading(true)
+    const formData = new FormData(e.currentTarget)
     const res = await createGoal(formData)
+    
     if (res.success) {
       toast.success("Goal created!", { description: "Your new financial target has been set." })
       setIsSheetOpen(false)
@@ -93,12 +98,12 @@ export default function GoalsPage() {
           </AlertDialogContent>
         </AlertDialog>
         <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-          <SheetContent className="bg-background border-border overflow-y-auto">
+          <SheetContent className="bg-background border-border overflow-y-auto w-full sm:max-w-xl p-8 pt-14 md:p-12">
             <SheetHeader>
               <SheetTitle>Create Financial Goal</SheetTitle>
               <SheetDescription>Set a new target. The AI will monitor your pacing automatically.</SheetDescription>
             </SheetHeader>
-            <form action={handleCreate} className="space-y-6 mt-8">
+            <form onSubmit={onSubmit} className="space-y-6 mt-8">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Goal Title</label>
                 <Input name="title" required placeholder="e.g. New Car, Japan Trip" className="bg-muted/50" />

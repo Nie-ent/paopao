@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { ArrowLeftRight, ArrowDownRight, ArrowUpRight, Loader2, FileX2, Edit, Plus } from "lucide-react"
+import { ArrowLeftRight, ArrowDownRight, ArrowUpRight, Loader2, FileX2, Edit, Plus, Cat, Sparkle } from "lucide-react"
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -35,6 +35,7 @@ export default function TransactionsPage() {
   // Sheet States
   const [isSheetOpen, setIsSheetOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [showSuccessPaoPao, setShowSuccessPaoPao] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     amount: '',
@@ -117,6 +118,11 @@ export default function TransactionsPage() {
     }
 
     if (res.success) {
+      if (!editId) {
+        // Show PaoPao animation only on new additions for positive reinforcement!
+        setShowSuccessPaoPao(true)
+        setTimeout(() => setShowSuccessPaoPao(false), 2500)
+      }
       toast.success(t('transactions.action.save'), { description: "Action completed successfully." })
       setIsSheetOpen(false)
       fetchData()
@@ -381,6 +387,32 @@ export default function TransactionsPage() {
           </form>
         </SheetContent>
       </Sheet>
+
+      {/* PaoPao Success Micro-Interaction Overlay */}
+      <AnimatePresence>
+        {showSuccessPaoPao && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.5, y: 100 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.8, y: 50 }}
+            transition={{ type: "spring", bounce: 0.6, duration: 0.8 }}
+            className="fixed bottom-10 right-10 z-50 flex items-center justify-center pointer-events-none"
+          >
+            <div className="relative">
+              <div className="absolute -top-4 -right-4 text-yellow-400 animate-bounce delay-75">
+                <Sparkle className="w-8 h-8 fill-yellow-400" />
+              </div>
+              <div className="absolute -bottom-2 -left-4 text-emerald-400 animate-bounce delay-150">
+                <Sparkle className="w-6 h-6 fill-emerald-400" />
+              </div>
+              <div className="bg-primary text-primary-foreground p-6 rounded-t-full rounded-bl-full shadow-2xl flex flex-col items-center justify-center gap-2 border-4 border-white/20">
+                <Cat className="w-16 h-16 animate-pulse" />
+                <span className="font-heading font-bold text-lg text-white">เก่งมาก!</span>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

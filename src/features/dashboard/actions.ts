@@ -3,7 +3,7 @@
 import prisma from "@/lib/db"
 import { getUser } from "@/features/auth/actions"
 
-export async function getDashboardData(timeframe: 'YTD' | 'MONTH' | 'WEEK' = 'MONTH') {
+export async function getDashboardData(timeframe: 'ALL' | 'YTD' | 'MONTH' | 'WEEK' = 'MONTH') {
   const user = await getUser()
   
   if (!user) {
@@ -36,11 +36,13 @@ export async function getDashboardData(timeframe: 'YTD' | 'MONTH' | 'WEEK' = 'MO
     startDate.setHours(0, 0, 0, 0)
   }
 
+  const whereClause: any = { userId: prismaUser.id }
+  if (timeframe !== 'ALL') {
+    whereClause.date = { gte: startDate }
+  }
+
   const transactions = await prisma.transaction.findMany({
-    where: {
-      userId: prismaUser.id,
-      date: { gte: startDate }
-    },
+    where: whereClause,
     orderBy: { date: 'asc' }
   })
   
@@ -82,27 +84,36 @@ export async function getDashboardData(timeframe: 'YTD' | 'MONTH' | 'WEEK' = 'MO
       if (t.type === 'INCOME') chartDataMap[t.date.toDateString()].income += Number(t.amount)
       if (t.type === 'EXPENSE') chartDataMap[t.date.toDateString()].expense += Number(t.amount)
     }
+  } else if (timeframe === 'ALL') {
+    for (const t of transactions) {
+      const year = t.date.getFullYear();
+      const month = t.date.toLocaleString('en-US', { month: 'short' });
+      const key = `${month} ${year}`;
+      const sortKey = `${year}-${String(t.date.getMonth() + 1).padStart(2, '0')}`;
+      
+      if (!chartDataMap[key]) {
+        chartDataMap[key] = { name: key, income: 0, expense: 0, _sortKey: sortKey } as any;
+      }
+      
+      if (t.type === 'INCOME') chartDataMap[key].income += Number(t.amount);
+      if (t.type === 'EXPENSE') chartDataMap[key].expense += Number(t.amount);
+    }
   }
 
 
-  // All time Totals and Breakdown
-  const allTransactions = await prisma.transaction.findMany({
-    where: { userId: prismaUser.id },
-  })
-
-  let lifetimeIncome = 0
-  let lifetimeExpense = 0
+  // Totals and Breakdown using the Filtered Transactions!
+  let totalIncome = 0
+  let totalExpense = 0
   const incomeCategoryMap: Record<string, number> = {}
   const expenseCategoryMap: Record<string, number> = {}
 
-  for (const agg of allTransactions) {
+  for (const agg of transactions) {
     const amt = Number(agg.amount)
     if (agg.type === 'INCOME') {
-      lifetimeIncome += amt
+      totalIncome += amt
       incomeCategoryMap[agg.category || 'Other'] = (incomeCategoryMap[agg.category || 'Other'] || 0) + amt
-    }
-    if (agg.type === 'EXPENSE') {
-      lifetimeExpense += amt
+    } else if (agg.type === 'EXPENSE') {
+      totalExpense += amt
       expenseCategoryMap[agg.category || 'Other'] = (expenseCategoryMap[agg.category || 'Other'] || 0) + amt
     }
   }
@@ -110,14 +121,20 @@ export async function getDashboardData(timeframe: 'YTD' | 'MONTH' | 'WEEK' = 'MO
   const incomeByCategory = Object.entries(incomeCategoryMap).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value)
   const expenseByCategory = Object.entries(expenseCategoryMap).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value)
 
+  let chartDataValues: any[] = Object.values(chartDataMap);
+  if (timeframe === 'ALL') {
+    chartDataValues.sort((a, b) => a._sortKey.localeCompare(b._sortKey));
+    chartDataValues = chartDataValues.map(({ _sortKey, ...rest }) => rest);
+  }
+
   return {
-    chartData: Object.values(chartDataMap),
+    chartData: chartDataValues,
     incomeByCategory,
     expenseByCategory,
     stats: {
-      totalBalance: lifetimeIncome - lifetimeExpense,
-      totalIncome: lifetimeIncome,
-      totalExpense: lifetimeExpense,
+      totalBalance: totalIncome - totalExpense,
+      totalIncome: totalIncome,
+      totalExpense: totalExpense,
     }
   }
 }

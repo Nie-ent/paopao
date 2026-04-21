@@ -63,7 +63,7 @@ Rules for the message:
       
       try {
         const response = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
+          model: "gemini-flash-latest",
           contents: prompt,
           config: { temperature: 0.7 }
         });

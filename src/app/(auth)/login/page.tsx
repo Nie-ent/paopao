@@ -2,7 +2,7 @@
 
 import React, { useEffect, Suspense } from "react"
 import { motion } from "framer-motion"
-import { Wallet, MessageCircle, AlertCircle } from "lucide-react"
+import { Wallet, MessageCircle, AlertCircle, Cat } from "lucide-react"
 import { useSearchParams } from "next/navigation"
 import { toast } from "sonner"
 
@@ -47,13 +47,12 @@ export default function LoginPage() {
             initial={{ scale: 0.8 }}
             animate={{ scale: 1 }}
             transition={{ type: "spring", bounce: 0.5, delay: 0.2 }}
-            className="w-16 h-16 bg-primary text-primary-foreground rounded-2xl flex items-center justify-center shadow-lg shadow-primary/30"
+            className="flex justify-center w-full mb-4"
           >
-            <Wallet className="w-8 h-8" />
+            <img src="/paopao-logo.png" alt="PaoPao Logo" className="h-40 w-auto object-contain mix-blend-multiply dark:mix-blend-normal drop-shadow-sm" />
           </motion.div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Wealthness</h1>
-          <p className="text-muted-foreground text-sm">
-            Smart Financial Planner with AI Insights & LINE Integration
+          <p className="text-muted-foreground text-sm font-medium">
+            "เรื่องเงินปล่อยให้เป็นหน้าที่เรา คุณแค่ไปใช้ชีวิตให้มีความสุขก็พอ"
           </p>
         </div>
 
@@ -69,10 +68,10 @@ export default function LoginPage() {
                 className="h-12 bg-muted/50 border-border/50 focus-visible:ring-primary font-mono placeholder:font-sans"
               />
               <p className="text-xs text-muted-foreground mt-1 text-center font-medium">
-                💡 Type <strong className="text-primary">"login"</strong> in the Wealthness LINE Bot chat to securely get your token!
+                💡 พิมพ์ <strong className="text-primary">"login"</strong> ในแชท LINE เป๋าเป๋า เพื่อรับรหัสเข้าใช้งาน!
               </p>
             </div>
-            <Button type="submit" className="w-full h-12 text-base font-medium bg-[#00B900] hover:bg-[#009900] text-white shadow-lg shadow-[#00B900]/20 flex items-center gap-3">
+            <Button type="submit" className="w-full h-12 text-base font-medium bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20 flex items-center gap-3">
               <MessageCircle className="w-5 h-5 fill-current" />
               Secure Data Sync
             </Button>
