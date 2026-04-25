@@ -5,46 +5,82 @@ import { Bell, Search, Settings, LogOut, Globe } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
 import { signOut } from "@/features/auth/actions"
-import { getProfileData } from "@/features/user/actions"
+import { fetchProfileDataCached } from "@/lib/clientCache"
 import { useLanguage } from "@/contexts/LanguageContext"
 
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { useRouter, usePathname } from "next/navigation"
 
 export function DashboardHeader() {
   const { t, language, setLanguage } = useLanguage()
+  const router = useRouter()
+  const pathname = usePathname()
   const [avatarUrl, setAvatarUrl] = React.useState<string>("https://github.com/shadcn.png")
+  const [paoPoints, setPaoPoints] = React.useState<number>(0)
+  const [searchQuery, setSearchQuery] = React.useState<string>("")
   
   React.useEffect(() => {
-    getProfileData().then(user => {
-      if (user && user.avatarUrl) {
-        setAvatarUrl(user.avatarUrl)
-      }
-    })
+    const fetchUserData = (force = false) => {
+      fetchProfileDataCached(force).then(user => {
+        if (user) {
+          if (user.avatarUrl) setAvatarUrl(user.avatarUrl)
+          if (user.paoPoints !== undefined) setPaoPoints(user.paoPoints)
+        }
+      })
+    }
+    
+    fetchUserData()
+
+    const handlePointsUpdate = () => fetchUserData(true)
+    window.addEventListener('points_updated', handlePointsUpdate)
+    return () => window.removeEventListener('points_updated', handlePointsUpdate)
   }, [])
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!searchQuery.trim()) return;
+    router.push(`/chat?q=${encodeURIComponent(searchQuery.trim())}`)
+    setSearchQuery("")
+  }
+
+  // Only show the search bar if we are NOT on the /chat page.
+  const isChatPage = pathname === '/chat' || pathname?.startsWith('/chat/')
 
   return (
     <header className="sticky top-0 z-10 flex h-16 w-full items-center justify-between border-b border-border/40 bg-background/80 px-4 backdrop-blur-md">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 w-full">
         {/* Logo specifically for mobile screens to brand the Navbar */}
         <div className="md:hidden flex items-center">
-           <img src="/paopao-logo.png" alt="PaoPao Logo" className="h-9 min-w-[70px] w-auto mix-blend-multiply dark:mix-blend-normal object-contain drop-shadow-sm" />
+           <Link href="/">
+             <img src="/paopao-logo.png" alt="PaoPao Logo" className="h-9 min-w-[70px] w-auto mix-blend-multiply dark:mix-blend-normal object-contain drop-shadow-sm cursor-pointer hover:opacity-90 transition-opacity" />
+           </Link>
         </div>
         {/* Sidebar Trigger only visible on larger screens but generally we rely on permanent sidebar */}
         <SidebarTrigger className="hidden md:flex" />
 
-        <div className="relative hidden w-full max-w-sm sm:flex items-center">
-          <Search className="absolute left-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder={t('header.search')}
-            className="w-full rounded-full bg-muted/50 pl-9 border-none focus-visible:ring-1 focus-visible:ring-primary h-9"
-          />
-        </div>
+        {!isChatPage && (
+          <form onSubmit={handleSearch} className="relative hidden w-full max-w-sm sm:flex flex-1 items-center">
+            <Search className="absolute left-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="ปรึกษาการเงิน หรือสร้างแผนด้วย AI..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full rounded-full bg-muted/50 pl-9 border-none focus-visible:ring-1 focus-visible:ring-primary h-9 transition-all hover:bg-muted/70"
+            />
+          </form>
+        )}
       </div>
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3 shrink-0 ml-4">
+        <Link href="/rewards" className="flex">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-100 dark:bg-orange-950/30 text-orange-600 dark:text-orange-400 font-bold text-sm cursor-pointer hover:bg-orange-200 transition-colors border border-orange-200 dark:border-orange-900/50">
+            <span className="text-base">{paoPoints}</span>
+            <img src="/favicon.png" alt="PaoPao Point" className="w-5 h-5 rounded-full object-cover" />
+          </div>
+        </Link>
         <button 
           className="relative rounded-full p-2 text-muted-foreground hover:bg-muted/50 transition-colors"
           onClick={() => toast.info("No new alerts", { description: "You are fully caught up with the AI Digest." })}

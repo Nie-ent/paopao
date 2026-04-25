@@ -9,6 +9,9 @@ import {
   LogOut,
   Sparkles,
   Cat,
+  Gift,
+  MessageSquare,
+  Crown
 } from "lucide-react"
 import Link from "next/link"
 import { signOut } from "@/features/auth/actions"
@@ -42,14 +45,14 @@ const items = [
     icon: Target,
   },
   {
-    titleKey: "nav.ai_insights",
-    url: "/ai-insights",
-    icon: Sparkles,
+    titleKey: "Chat",
+    url: "/chat",
+    icon: MessageSquare,
   },
   {
-    titleKey: "nav.settings",
-    url: "/settings",
-    icon: Settings,
+    titleKey: "Subscription",
+    url: "/subscription",
+    icon: Crown,
   },
 ]
 
@@ -59,9 +62,9 @@ export function DashboardSidebar() {
   return (
     <Sidebar variant="inset" className="border-none bg-transparent">
       <SidebarHeader className="p-0 m-0 w-full flex items-center justify-center overflow-hidden">
-        <div className="flex justify-center items-center w-full">
-          <img src="/paopao-logo.png" alt="PaoPao Logo" className="w-full max-w-[240px] h-auto object-contain scale-[1.2] lg:scale-[1.3] origin-center mix-blend-multiply dark:mix-blend-normal" />
-        </div>
+        <Link href="/" className="flex justify-center items-center w-full">
+          <img src="/paopao-logo.png" alt="PaoPao Logo" className="w-full max-w-[240px] h-auto object-contain scale-[1.2] lg:scale-[1.3] origin-center mix-blend-multiply dark:mix-blend-normal cursor-pointer hover:opacity-90 transition-opacity" />
+        </Link>
       </SidebarHeader>
       <SidebarContent className="px-4">
         <SidebarMenu className="gap-2 mt-4">

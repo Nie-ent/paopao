@@ -35,6 +35,7 @@ export async function middleware(request: NextRequest) {
   const isDemoUser = request.cookies.get('demo_mode_bypass')?.value === 'true'
   const directLineSession = request.cookies.get('direct_line_session')?.value
   const isDirectLineSession = !!directLineSession
+  const hasAcceptedPDPA = request.cookies.get('pdpa_accepted')?.value === 'true'
 
   // Automatically refresh the session sliding window if a direct line token exists
   if (isDirectLineSession) {
@@ -48,6 +49,7 @@ export async function middleware(request: NextRequest) {
 
   // Protection logic
   const isAuthPage = request.nextUrl.pathname.startsWith('/login')
+  const isPdpaPage = request.nextUrl.pathname.startsWith('/pdpa')
   
   // If not logged in and not heading to login -> redirect to login
   if (!user && !isDemoUser && !isDirectLineSession && !isAuthPage && !request.nextUrl.pathname.startsWith('/api/')) {
@@ -56,11 +58,20 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // If already logged in and heading to login -> redirect to dashboard
-  if ((user || isDemoUser || isDirectLineSession) && isAuthPage) {
+  // If logged in, but hasn't accepted PDPA, and not on PDPA page -> redirect to PDPA
+  if ((user || isDemoUser || isDirectLineSession) && !hasAcceptedPDPA && !isPdpaPage && !request.nextUrl.pathname.startsWith('/api/')) {
     const url = request.nextUrl.clone()
-    url.pathname = '/'
+    url.pathname = '/pdpa'
     return NextResponse.redirect(url)
+  }
+
+  // If already logged in and heading to login or pdpa (when already accepted) -> redirect to dashboard
+  if ((user || isDemoUser || isDirectLineSession)) {
+    if (isAuthPage || (isPdpaPage && hasAcceptedPDPA)) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/'
+      return NextResponse.redirect(url)
+    }
   }
 
   return response

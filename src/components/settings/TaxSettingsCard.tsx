@@ -40,9 +40,9 @@ export function TaxSettingsCard() {
     
     setIsSaving(false)
     if (res.success) {
-      toast.success("Settings updated successfully")
+      toast.success("บันทึกการตั้งค่าสำเร็จ")
     } else {
-      toast.error("Failed to update settings")
+      toast.error("ไม่สามารถบันทึกการตั้งค่าได้")
     }
   }
 
@@ -53,9 +53,9 @@ export function TaxSettingsCard() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl">
               <Receipt className="h-5 w-5 text-primary" />
-              Automated Taxes & Deductions
+              การหักภาษีและการตั้งค่าอัตโนมัติ
             </CardTitle>
-            <CardDescription>Configure auto-deductions when logging Salary or Freelance income.</CardDescription>
+            <CardDescription>ตั้งค่าจำนวนเงินที่จะหักออกเมื่อมีรายรับเงินเดือน หรือหัก ณ ที่จ่ายสำหรับฟรีแลนซ์</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             {isLoading ? (
@@ -65,8 +65,8 @@ export function TaxSettingsCard() {
             ) : (
               <>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Salary Social Security (Baht)</label>
-                  <p className="text-xs text-muted-foreground mb-2">Used automatically when adding "Salary" transactions.</p>
+                  <label className="text-sm font-medium">หักประกันสังคมสำหรับเงินเดือน (บาท)</label>
+                  <p className="text-xs text-muted-foreground mb-2">หักออกโดยอัตโนมัติเมื่อเพิ่มรายการหมวดหมู่ "เงินเดือน" หรือ "Salary"</p>
                   <Input 
                     type="number" 
                     value={salaryDeduction} 
@@ -76,8 +76,8 @@ export function TaxSettingsCard() {
                 </div>
                 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Freelance Withholding Tax (%)</label>
-                  <p className="text-xs text-muted-foreground mb-2">Percentage deducted automatically when adding "Freelance" transactions.</p>
+                  <label className="text-sm font-medium">หักภาษี ณ ที่จ่ายสำหรับฟรีแลนซ์ (%)</label>
+                  <p className="text-xs text-muted-foreground mb-2">หักออกเป็นเปอร์เซ็นต์โดยอัตโนมัติเมื่อเพิ่มรายการหมวดหมู่ "ฟรีแลนซ์" หรือ "Freelance"</p>
                   <Input 
                     type="number" 
                     step="0.1"
@@ -92,7 +92,7 @@ export function TaxSettingsCard() {
           <CardFooter className="bg-muted/50 flex justify-end">
              <Button type="submit" disabled={isSaving || isLoading} className="gap-2">
                {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-               Save Preferences
+               บันทึกการตั้งค่า
              </Button>
           </CardFooter>
         </form>

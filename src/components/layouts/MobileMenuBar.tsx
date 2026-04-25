@@ -9,6 +9,8 @@ import {
   Target,
   Settings,
   Sparkles,
+  Gift,
+  MessageSquare,
 } from "lucide-react"
 import { useLanguage } from "@/contexts/LanguageContext"
 import { cn } from "@/lib/utils"
@@ -30,14 +32,9 @@ const items = [
     icon: Target,
   },
   {
-    titleKey: "nav.ai_insights",
-    url: "/ai-insights",
-    icon: Sparkles,
-  },
-  {
-    titleKey: "nav.settings",
-    url: "/settings",
-    icon: Settings,
+    titleKey: "Chat",
+    url: "/chat",
+    icon: MessageSquare,
   },
 ]
 

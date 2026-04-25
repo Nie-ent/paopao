@@ -135,6 +135,8 @@ export async function getDashboardData(timeframe: 'ALL' | 'YTD' | 'MONTH' | 'WEE
       totalBalance: totalIncome - totalExpense,
       totalIncome: totalIncome,
       totalExpense: totalExpense,
-    }
+    },
+    paoPoints: prismaUser.paoPoints,
+    lastDailyQuestAt: prismaUser.lastDailyQuestAt
   }
 }

@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { signOut } from "@/features/auth/actions"
 import { TaxSettingsCard } from "@/components/settings/TaxSettingsCard"
+import { CategorySettingsCard } from "@/components/settings/CategorySettingsCard"
 
 export default function SettingsPage() {
   const [isSignOutProcessing, setIsSignOutProcessing] = useState(false)
@@ -19,9 +20,9 @@ export default function SettingsPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight text-foreground/90 flex items-center gap-2">
-            <Settings className="h-8 w-8 text-primary" /> Platform Settings
+            <Settings className="h-8 w-8 text-primary" /> ตั้งค่าแพลตฟอร์ม
           </h2>
-          <p className="text-muted-foreground">Manage your PaoPao connections and preferences.</p>
+          <p className="text-muted-foreground">จัดการการเชื่อมต่อเครือข่ายและการตั้งค่าส่วนตัวของคุณ</p>
         </div>
       </div>
 
@@ -32,9 +33,9 @@ export default function SettingsPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-xl">
                 <Webhook className="h-5 w-5 text-primary" />
-                Integrations
+                การเชื่อมต่อระบบ (Integrations)
               </CardTitle>
-              <CardDescription>Your connected services providing data to the AI core.</CardDescription>
+              <CardDescription>บริการภายนอกที่กำลังเชื่อมต่อเพื่อส่งข้อมูลให้ PaoPao AI คิดวิเคราะห์</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between p-4 rounded-lg bg-background/50 border border-border/50 shadow-sm">
@@ -44,11 +45,11 @@ export default function SettingsPage() {
                   </div>
                   <div>
                     <h4 className="font-semibold text-foreground">LINE Official Account</h4>
-                    <p className="text-xs text-muted-foreground">Receiving slip images and text messages.</p>
+                    <p className="text-xs text-muted-foreground">รับรูปสลิปโอนเงินและข้อความแชทผ่าน LINE</p>
                   </div>
                 </div>
                 <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/30">
-                  <BadgeCheck className="w-3 h-3 mr-1" /> Active
+                  <BadgeCheck className="w-3 h-3 mr-1" /> ใช้งานอยู่
                 </Badge>
               </div>
               
@@ -59,11 +60,11 @@ export default function SettingsPage() {
                   </div>
                   <div>
                     <h4 className="font-semibold text-foreground">Supabase Identity</h4>
-                    <p className="text-xs text-muted-foreground">Securing web identity and session cookies.</p>
+                    <p className="text-xs text-muted-foreground">ระบบคุ้มครองความปลอดภัยและยืนยันตัวตน</p>
                   </div>
                 </div>
                 <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/30">
-                  <BadgeCheck className="w-3 h-3 mr-1" /> Linked
+                  <BadgeCheck className="w-3 h-3 mr-1" /> เชื่อมต่อแล้ว
                 </Badge>
               </div>
             </CardContent>
@@ -73,30 +74,35 @@ export default function SettingsPage() {
         {/* Automated Taxes & Deductions */}
         <TaxSettingsCard />
 
+        {/* Category Colors & Custom Categories */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.05 }}>
+          <CategorySettingsCard />
+        </motion.div>
+
         {/* Notifications Preference */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.1 }}>
           <Card className="glass-panel border-border/50">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-xl">
                 <BellRing className="h-5 w-5 text-primary" />
-                Preferences
+                การตั้งค่าการแจ้งเตือน
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h4 className="font-medium text-foreground">Morning Brief via LINE</h4>
-                  <p className="text-sm text-muted-foreground">Get a push message with your AI summary every morning at 8:00 AM.</p>
+                  <h4 className="font-medium text-foreground">Morning Brief รายงานรายวันผ่าน LINE</h4>
+                  <p className="text-sm text-muted-foreground">รับสรุปยอดใช้จ่ายยามเช้าพร้อมคำแนะนำจาก AI ตอน 08:00 น. ของทุกวัน</p>
                 </div>
-                <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/30">Active</Badge>
+                <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/30">เปิดใช้งาน</Badge>
               </div>
               <Separator className="bg-border/50" />
               <div className="flex items-center justify-between">
                 <div>
-                  <h4 className="font-medium text-foreground">Budget Alert Threshold</h4>
-                  <p className="text-sm text-muted-foreground">Notify instantly when spending exceeds 50%, 80%, 90% of monthly income.</p>
+                  <h4 className="font-medium text-foreground">แจ้งเตือนงบประมาณเกินกำหนด</h4>
+                  <p className="text-sm text-muted-foreground">แจ้งเตือนทันทีเมื่อมีการใช้จ่ายเกิน 50%, 80%, 90% ของรายรับต่อเดือน</p>
                 </div>
-                <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/30">Active</Badge>
+                <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/30">เปิดใช้งาน</Badge>
               </div>
             </CardContent>
           </Card>
@@ -106,11 +112,11 @@ export default function SettingsPage() {
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.2 }}>
           <Card className="border-destructive/30 bg-destructive/5">
             <CardHeader>
-              <CardTitle className="text-destructive text-lg">Danger Zone</CardTitle>
+              <CardTitle className="text-destructive text-lg">โซนอันตราย (Danger Zone)</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground mb-4">
-                Revoke your web session and drop system access immediately. This will NOT delete your LINE integration data.
+                ออกจากระบบและล้างเซสชันเว็บทันที (การกระทำนี้จะ **ไม่ใช่** การลบประวัติการเดินบัญชีในระบบ)
               </p>
               <form action={signOut}>
                 <Button 
@@ -121,7 +127,7 @@ export default function SettingsPage() {
                   className="shadow-lg shadow-destructive/20"
                 >
                   {isSignOutProcessing ? <div className="animate-spin w-4 h-4 mr-2 border-2 border-white/30 border-t-white rounded-full"/> : <LogOut className="h-4 w-4 mr-2" />}
-                  Sign Out Securely
+                  ล็อกเอาท์ออกจากระบบ
                 </Button>
               </form>
             </CardContent>

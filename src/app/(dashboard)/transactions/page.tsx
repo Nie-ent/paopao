@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useState } from "react"
+import React, { useEffect, useState, useRef, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { ArrowLeftRight, ArrowDownRight, ArrowUpRight, Loader2, FileX2, Edit, Plus, Cat, Sparkle } from "lucide-react"
 
@@ -10,7 +10,9 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet"
-import { getTransactions, createTransactionServer, updateTransactionServer } from "@/features/transactions/actions"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
+import { getTransactions, createTransactionServer, updateTransactionServer, deleteTransactionServer } from "@/features/transactions/actions"
+import { updateCategoryColors } from "@/features/settings/actions"
 import { useLanguage } from "@/contexts/LanguageContext"
 import { toast } from "sonner"
 
@@ -18,14 +20,38 @@ type TransactionType = 'ALL' | 'INCOME' | 'EXPENSE'
 type SortBy = 'DATE_DESC' | 'DATE_ASC' | 'CATEGORY'
 
 const INCOME_CATEGORIES = ['Salary', 'Freelance', 'Gift', 'Income', 'Transfer In', 'Other Income']
-const EXPENSE_CATEGORIES = ['Food', 'Transport', 'Housing', 'Utilities', 'Shopping', 'Entertainment', 'Transfer Out', 'Other Expense']
+const EXPENSE_CATEGORIES = ['Food', 'Transport', 'Housing', 'Utilities', 'Shopping', 'Entertainment', 'Transfer Out', 'Investment', 'Saving', 'Other Expense']
+
+const DEFAULT_CATEGORY_COLORS: Record<string, string> = {
+  // Income (based on dashboard INCOME_COLORS)
+  'Salary': '#10b981',      
+  'Freelance': '#3b82f6',   
+  'Gift': '#f59e0b',        
+  'Income': '#14b8a6',      
+  'Transfer In': '#8b5cf6', 
+  'Other Income': '#ec4899',
+  
+  // Expense (based on dashboard EXPENSE_COLORS)
+  'Food': '#ef4444',        
+  'Transport': '#f97316',   
+  'Housing': '#06b6d4',     
+  'Utilities': '#eab308',   
+  'Shopping': '#d946ef',    
+  'Entertainment': '#6366f1',
+  'Transfer Out': '#8b5cf6', 
+  'Investment': '#2dd4bf',  
+  'Saving': '#34d399',      
+  'Other Expense': '#64748b'
+}
 
 export default function TransactionsPage() {
   const { t, language } = useLanguage()
   const [data, setData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
+  const [categoryColors, setCategoryColors] = useState<Record<string, string>>({})
   const [filterType, setFilterType] = useState<TransactionType>('ALL')
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL')
   const [sortBy, setSortBy] = useState<SortBy>('DATE_DESC')
@@ -37,28 +63,62 @@ export default function TransactionsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showSuccessPaoPao, setShowSuccessPaoPao] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
+  const [isCustomCategory, setIsCustomCategory] = useState(false)
   const [formData, setFormData] = useState({
     amount: '',
     category: 'Other Expense',
     type: 'EXPENSE',
     date: new Date().toISOString().slice(0,10),
     paymentMethod: 'Cash',
-    notes: ''
+    notes: '',
+    color: '#64748b'
   })
+  
+  // AlertDialog states
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
 
   useEffect(() => {
-    fetchData()
-  }, [page, filterType, selectedMonth, selectedYear, sortBy, selectedCategory])
+    fetchInitialData()
+  }, [filterType, selectedMonth, selectedYear, sortBy, selectedCategory])
 
-  const fetchData = async () => {
+  const fetchInitialData = async () => {
     setLoading(true)
-    const res = await getTransactions({ page, limit: 10, type: filterType, month: selectedMonth, year: selectedYear, sortBy, filterCategory: selectedCategory })
+    setPage(1)
+    const res = await getTransactions({ page: 1, limit: 15, type: filterType, month: selectedMonth, year: selectedYear, sortBy, filterCategory: selectedCategory })
     if (res.data) {
       setData(res.data)
       setTotalPages(res.totalPages)
+      if (res.categoryColors) {
+        setCategoryColors(res.categoryColors)
+      }
     }
     setLoading(false)
   }
+
+  const loadMore = async () => {
+    if (page >= totalPages || loadingMore) return
+    setLoadingMore(true)
+    const nextPage = page + 1
+    const res = await getTransactions({ page: nextPage, limit: 15, type: filterType, month: selectedMonth, year: selectedYear, sortBy, filterCategory: selectedCategory })
+    if (res.data) {
+      setData(prev => [...prev, ...res.data])
+      setPage(nextPage)
+      setTotalPages(res.totalPages)
+    }
+    setLoadingMore(false)
+  }
+
+  const observer = useRef<IntersectionObserver | null>(null)
+  const lastElementRef = useCallback((node: HTMLDivElement | null) => {
+    if (loading || loadingMore || page >= totalPages) return
+    if (observer.current) observer.current.disconnect()
+    observer.current = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting) {
+        loadMore()
+      }
+    })
+    if (node) observer.current.observe(node)
+  }, [loading, loadingMore, page, totalPages, filterType, selectedMonth, selectedYear, sortBy, selectedCategory])
 
   const handleFilter = (type: TransactionType) => {
     if (filterType === type) return
@@ -77,26 +137,33 @@ export default function TransactionsPage() {
   // --- CRUD ACTION HANDLERS ---
   const openCreateSheet = () => {
     setEditId(null)
+    setIsCustomCategory(false)
     setFormData({
       amount: '',
       category: 'Other Expense',
       type: 'EXPENSE',
       date: new Date().toISOString().slice(0,10),
       paymentMethod: 'Cash',
-      notes: ''
+      notes: '',
+      color: categoryColors['Other Expense'] || DEFAULT_CATEGORY_COLORS['Other Expense'] || '#64748b'
     })
     setIsSheetOpen(true)
   }
 
   const openEditSheet = (tx: any) => {
     setEditId(tx.id)
+    const availableCategoriesForTx = tx.type === 'INCOME' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES
+    const c = tx.category || 'Other'
+    setIsCustomCategory(!availableCategoriesForTx.includes(c))
+    
     setFormData({
       amount: tx.amount.toString(),
-      category: tx.category || 'Other',
+      category: c,
       type: tx.type,
       date: new Date(tx.date).toISOString().slice(0, 10),
       paymentMethod: tx.paymentMethod || 'Cash',
-      notes: tx.note || ''
+      notes: tx.note || '',
+      color: categoryColors[c] || DEFAULT_CATEGORY_COLORS[c] || '#64748b'
     })
     setIsSheetOpen(true)
   }
@@ -117,6 +184,12 @@ export default function TransactionsPage() {
       res = await createTransactionServer(payload)
     }
 
+    if (res.success && formData.color) {
+      const newColors = { ...categoryColors, [formData.category]: formData.color }
+      setCategoryColors(newColors)
+      await updateCategoryColors(newColors)
+    }
+
     if (res.success) {
       if (!editId) {
         // Show PaoPao animation only on new additions for positive reinforcement!
@@ -125,14 +198,34 @@ export default function TransactionsPage() {
       }
       toast.success(t('transactions.action.save'), { description: "Action completed successfully." })
       setIsSheetOpen(false)
-      fetchData()
+      fetchInitialData()
     } else {
       toast.error("Error", { description: res.error || "Action failed." })
     }
     setIsSubmitting(false)
   }
 
+  const requestDeleteTx = () => {
+    setDeleteConfirmOpen(true)
+  }
+
+  const executeDeleteTx = async () => {
+    if (!editId) return
+    setDeleteConfirmOpen(false)
+    setIsSubmitting(true)
+    const res = await deleteTransactionServer(editId)
+    if (res.success) {
+       toast.success(language === 'th' ? "ลบรายการสำเร็จ" : "Deleted successfully")
+       setIsSheetOpen(false)
+       fetchInitialData()
+    } else {
+       toast.error("Error", { description: res.error || (language === 'th' ? "เกิดข้อผิดพลาดในการลบ" : "Error deleting transaction") })
+    }
+    setIsSubmitting(false)
+  }
+
   const availableCategories = formData.type === 'INCOME' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES
+  const customCategories = Object.keys(categoryColors).filter(c => !INCOME_CATEGORIES.includes(c) && !EXPENSE_CATEGORIES.includes(c))
 
   return (
     <div className="space-y-6">
@@ -192,6 +285,11 @@ export default function TransactionsPage() {
                     ? EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)
                     : Array.from(new Set([...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES])).map(c => <option key={c} value={c}>{c}</option>)
                 }
+                {customCategories.length > 0 && (
+                  <optgroup label="Custom">
+                    {customCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                  </optgroup>
+                )}
               </select>
             </CardDescription>
           </div>
@@ -226,9 +324,15 @@ export default function TransactionsPage() {
         <CardContent className="p-0">
           <div className="relative w-full overflow-auto">
             {loading ? (
-              <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
-                <Loader2 className="h-8 w-8 animate-spin mb-4 text-primary opacity-80" />
-                <p>Loading transactions...</p>
+              <div className="flex flex-col items-center justify-center py-24 text-muted-foreground animate-in fade-in">
+                <motion.img 
+                  src="/favicon.png" 
+                  alt="Loading..." 
+                  className="w-16 h-16 mb-4 drop-shadow-md"
+                  animate={{ y: [0, -20, 0] }}
+                  transition={{ repeat: Infinity, duration: 0.8, ease: "easeInOut" }}
+                />
+                <p className="font-medium animate-pulse">Loading transactions...</p>
               </div>
             ) : data.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
@@ -236,81 +340,64 @@ export default function TransactionsPage() {
                 <p>{t('transactions.empty')}</p>
               </div>
             ) : (
-              <Table>
-                <TableHeader className="bg-muted/30">
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead className="w-[180px]">{t('transactions.table.date')}</TableHead>
-                    <TableHead>{t('transactions.table.category')}</TableHead>
-                    <TableHead className="w-[300px]">{t('transactions.table.notes')}</TableHead>
-                    <TableHead className="text-right">{t('transactions.table.amount')}</TableHead>
-                    <TableHead className="w-[80px] text-center"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <AnimatePresence>
-                    {data.map((tx, idx) => (
-                      <motion.tr
-                        key={tx.id}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.95 }}
-                        transition={{ duration: 0.2, delay: idx * 0.05 }}
-                        className="border-b transition-colors hover:bg-muted/30 data-[state=selected]:bg-muted"
-                      >
-                        <TableCell className="font-medium text-muted-foreground whitespace-nowrap">
-                          {new Date(tx.date).toLocaleString('en-US', { 
-                            month: 'short', day: 'numeric', year: 'numeric',
-                            hour: '2-digit', minute: '2-digit'
-                          })}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <span className="px-2 py-1 rounded-md bg-secondary/50 text-secondary-foreground text-xs font-medium">
+              <div className="flex flex-col">
+                <AnimatePresence>
+                  {data.map((tx, idx) => (
+                    <motion.div
+                      key={tx.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.95 }}
+                      transition={{ duration: 0.2 }}
+                      className="flex flex-col gap-2 p-4 border-b border-border/50 hover:bg-muted/30 transition-colors"
+                    >
+                      <div className="flex justify-between items-start gap-4">
+                        <div className="flex flex-col flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                            <span 
+                              className="px-2 py-0.5 rounded text-white text-xs font-medium"
+                              style={{ backgroundColor: categoryColors[tx.category] || DEFAULT_CATEGORY_COLORS[tx.category] || '#64748b' }}
+                            >
                               {tx.category}
                             </span>
+                            <span className="text-xs text-muted-foreground whitespace-nowrap">
+                              {new Date(tx.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                            </span>
                           </div>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground line-clamp-1 max-w-[300px]">
-                          {tx.note || "-"}
-                        </TableCell>
-                        <TableCell className={`text-right font-bold \${tx.type === 'INCOME' ? 'text-[#00B900]' : 'text-foreground'}`}>
-                          {tx.type === 'INCOME' ? '+' : '-'}฿{Number(tx.amount).toLocaleString()}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Button variant="ghost" size="icon" onClick={() => openEditSheet(tx)} className="h-8 w-8 text-primary/70 hover:text-primary">
+                          <p className="font-medium text-foreground text-sm line-clamp-2 md:text-base">{tx.note || "ไม่มีบันทึกเพิ่มเติม"}</p>
+                        </div>
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          <span className={`font-bold text-lg md:text-xl ${tx.type === 'INCOME' ? 'text-[#00B900]' : 'text-foreground'}`}>
+                            {tx.type === 'INCOME' ? '+' : '-'}฿{Number(tx.amount).toLocaleString()}
+                          </span>
+                          <Button variant="ghost" size="icon" onClick={() => openEditSheet(tx)} className="h-6 w-6 mt-1 text-muted-foreground hover:text-primary">
                             <Edit className="h-4 w-4" />
                           </Button>
-                        </TableCell>
-                      </motion.tr>
-                    ))}
-                  </AnimatePresence>
-                </TableBody>
-              </Table>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </div>
             )}
           </div>
-          <div className="flex items-center justify-between px-4 py-4 border-t border-border/50">
-            <div className="text-sm text-muted-foreground">
-              Page {page} of {totalPages}
+          
+          {page < totalPages && (
+            <div ref={lastElementRef} className="flex justify-center px-4 py-8 border-t border-border/50">
+              <motion.img 
+                src="/favicon.png" 
+                alt="Loading..." 
+                className="w-10 h-10 drop-shadow-md"
+                animate={{ y: [0, -15, 0] }}
+                transition={{ repeat: Infinity, duration: 0.6, ease: "easeInOut" }}
+              />
             </div>
-            <div className="flex items-center gap-2">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={handlePrevPage} 
-                disabled={page === 1}
-              >
-                {t('transactions.pagination.prev')}
-              </Button>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={handleNextPage} 
-                disabled={page === totalPages}
-              >
-                {t('transactions.pagination.next')}
-              </Button>
+          )}
+          {data.length > 0 && page === totalPages && (
+            <div className="text-center p-6 text-xs text-muted-foreground border-t border-border/50">
+              {language === 'th' ? "โหลดรายการทั้งหมดแล้ว" : "All transactions loaded."}
             </div>
-          </div>
+          )}
         </CardContent>
       </Card>
 
@@ -349,13 +436,50 @@ export default function TransactionsPage() {
               <label className="text-sm font-medium">{t('transactions.table.category')}</label>
               <select 
                 className="w-full bg-muted/50 border border-border rounded p-2 text-sm text-foreground"
-                value={formData.category}
-                onChange={(e) => setFormData({...formData, category: e.target.value})}
+                value={isCustomCategory ? 'CUSTOM' : formData.category}
+                onChange={(e) => {
+                  if (e.target.value === 'CUSTOM') {
+                    setIsCustomCategory(true)
+                    setFormData({...formData, category: '', color: '#64748b'})
+                  } else {
+                    setIsCustomCategory(false)
+                    setFormData({...formData, category: e.target.value, color: categoryColors[e.target.value] || DEFAULT_CATEGORY_COLORS[e.target.value] || '#64748b'})
+                  }
+                }}
               >
                 {availableCategories.map(cat => (
                   <option key={cat} value={cat}>{cat}</option>
                 ))}
+                {customCategories.length > 0 && (
+                  <optgroup label={language === 'th' ? "หมวดหมู่เพิ่มเติม (Custom)" : "Custom Categories"}>
+                    {customCategories.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </optgroup>
+                )}
+                <option value="CUSTOM">+ {language === 'th' ? 'พิมพ์หมวดหมู่ใหม่...' : 'New Custom Category...'}</option>
               </select>
+              <div className="mt-2 flex items-center gap-3">
+                <input 
+                  type="color" 
+                  value={formData.color} 
+                  onChange={(e) => setFormData({...formData, color: e.target.value})}
+                  className="w-10 h-10 p-1 rounded cursor-pointer border border-border"
+                />
+                <span className="text-xs text-muted-foreground">{language === 'th' ? 'เลือกสีสำหรับหมวดหมู่นี้' : 'Pick a color for this category'}</span>
+              </div>
+              {isCustomCategory && (
+                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
+                  <Input 
+                    autoFocus
+                    placeholder={language === 'th' ? 'ชื่อหมวดหมู่ของคุณ' : 'Your category name'}
+                    className="mt-2 bg-muted/50" 
+                    value={formData.category}
+                    onChange={(e) => setFormData({...formData, category: e.target.value})}
+                    required
+                  />
+                </motion.div>
+              )}
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">{t('transactions.table.date')}</label>
@@ -378,7 +502,12 @@ export default function TransactionsPage() {
                 onChange={(e) => setFormData({...formData, notes: e.target.value})}
               />
             </div>
-            <SheetFooter className="mt-8">
+            <SheetFooter className="mt-8 flex flex-col sm:flex-row gap-3">
+              {editId && (
+                <Button type="button" variant="destructive" disabled={isSubmitting} className="w-full sm:w-auto" onClick={requestDeleteTx}>
+                  ลบรายการ (Delete)
+                </Button>
+              )}
               <Button type="submit" disabled={isSubmitting} className="w-full">
                 {isSubmitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
                 {t('transactions.action.save')}
@@ -387,6 +516,29 @@ export default function TransactionsPage() {
           </form>
         </SheetContent>
       </Sheet>
+
+      {/* Alert Dialog for Deletion */}
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent className="glass-panel border-destructive/20 border max-w-sm rounded-[1.5rem]">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-destructive flex items-center gap-2 text-xl">
+              <FileX2 className="w-6 h-6"/>
+              {language === 'th' ? "คุณแน่ใจหรือไม่?" : "Are you sure?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-base pt-2 text-foreground/80">
+              {language === 'th' ? "การดำเนินการนี้ไม่สามารถย้อนกลับได้ คุณต้องการลบรายการธุรกรรมนี้ออกจากบัญชีใช่หรือไม่?" : "This action cannot be undone. Are you sure you want to delete this transaction?"}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="mt-4 gap-2 border-t border-border/50 pt-4">
+            <AlertDialogCancel disabled={isSubmitting} className="rounded-xl h-11 w-full mt-0">
+              {language === 'th' ? "ยกเลิก" : "Cancel"}
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={executeDeleteTx} disabled={isSubmitting} className="rounded-xl h-11 w-full bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+              {language === 'th' ? "ยืนยันการลบ" : "Confirm Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* PaoPao Success Micro-Interaction Overlay */}
       <AnimatePresence>

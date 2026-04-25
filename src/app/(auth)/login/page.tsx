@@ -101,21 +101,23 @@ export default function LoginPage() {
         <div className="space-y-6">
           <form action={signInWithLineDirect} className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Secure Dashboard Token</label>
+              <label className="text-sm font-medium text-foreground">รหัสเข้าใช้งาน (OTP Code)</label>
               <Input 
-                name="lineId" 
-                placeholder="Paste the token sent by the bot (e.g., U123...)" 
+                name="otp" 
+                placeholder="กรอกรหัส 6 หลักที่ได้รับจาก LINE" 
                 required 
-                type="password"
-                className="h-12 bg-muted/50 border-border/50 focus-visible:ring-primary font-mono placeholder:font-sans"
+                type="text"
+                pattern="[0-9]*"
+                maxLength={6}
+                className="h-12 text-center text-lg tracking-widest bg-muted/50 border-border/50 focus-visible:ring-primary font-mono placeholder:font-sans placeholder:tracking-normal placeholder:text-sm"
               />
-              <p className="text-xs text-muted-foreground mt-1 text-center font-medium">
+              <p className="text-xs text-muted-foreground mt-2 text-center font-medium">
                 💡 พิมพ์ <strong className="text-primary">"login"</strong> ในแชท LINE เป๋าเป๋า เพื่อรับรหัสเข้าใช้งาน!
               </p>
             </div>
             <Button type="submit" className="w-full h-12 text-base font-medium bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20 flex items-center gap-3">
               <MessageCircle className="w-5 h-5 fill-current" />
-              Secure Data Sync
+              เข้าสู่ระบบด้วยรหัส OTP
             </Button>
           </form>
           

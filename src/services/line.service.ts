@@ -26,6 +26,24 @@ async function getOrCreateUser(lineId: string) {
   return user;
 }
 
+/**
+ * Checks and resets AI quota if a new month has started.
+ */
+async function checkAndResetAiQuota(user: any) {
+  const now = new Date();
+  if (!user.aiQuotaResetDate || now >= user.aiQuotaResetDate) {
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    return await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        aiSlipsUsed: 0,
+        aiQuotaResetDate: nextMonth
+      }
+    });
+  }
+  return user;
+}
+
 interface BatchQueue {
   buffers: Buffer[];
   replyToken: string;
@@ -46,7 +64,8 @@ export async function handleLineEvent(event: any) {
   let actualReplyToken = messageEvent.replyToken;
 
   try {
-    const user = await getOrCreateUser(userId);
+    const baseUser = await getOrCreateUser(userId);
+    const user = await checkAndResetAiQuota(baseUser);
     let extractedDataArray: ExtractedTransaction[] = [];
 
     if (messageEvent.message.type === "text") {
@@ -58,18 +77,28 @@ export async function handleLineEvent(event: any) {
           ? `https://liff.line.me/${process.env.NEXT_PUBLIC_LIFF_ID}` 
           : "https://paopao-wealthness.vercel.app/login";
 
+        // Generate 6-digit OTP
+        const otp = Math.floor(100000 + Math.random() * 900000).toString()
+        const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000)
+
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { otp, otpExpiresAt }
+        })
+
         await lineClient.replyMessage({
           replyToken: actualReplyToken,
           messages: [
             { type: "text", text: `✨ เข้าสู่แดชบอร์ดแบบไม่ต้องใช้รหัสผ่านผ่าน LINE LIFF ได้เลยครับ:\n${liffUrl}` },
-            { type: "text", text: "🔐 หรือถ้านำไปเปิดในคอมพิวเตอร์ ใช้รหัส (LINE Token) ด้านล่างนี้เพื่อล็อกอินครับ 👇" },
-            { type: "text", text: user.lineId }
+            { type: "text", text: `🔐 หรือถ้านำไปเปิดในเว็บเบราว์เซอร์ ใช้รหัส OTP ด้านล่างนี้เพื่อเข้าสู่ระบบ (รหัสมีอายุ 5 นาที) 👇` },
+            { type: "text", text: otp }
           ]
         });
         return;
       }
 
-      const extracted = await extractTransactionFromText(textMessage.text);
+      const cleanText = textMessage.text.replace(/\n/g, ' ');
+      const extracted = await extractTransactionFromText(cleanText);
       if (extracted) extractedDataArray.push(extracted);
     } 
     else if (messageEvent.message.type === "image") {
@@ -105,14 +134,49 @@ export async function handleLineEvent(event: any) {
       actualReplyToken = userQueue.replyToken; // use the latest replyToken
       imageQueue.delete(userId);
 
+      // --- QUOTA CHECK (Hard Block at 25 to prevent abuse, but allow grace period for upgrade slips) ---
+      if (user.subscriptionTier === "FREE" && user.aiSlipsUsed >= 25) {
+        const upgradeUrl = process.env.NEXT_PUBLIC_LIFF_ID 
+          ? `https://liff.line.me/${process.env.NEXT_PUBLIC_LIFF_ID}/subscription` 
+          : "https://paopao-wealthness.vercel.app/subscription";
+        return replyText(actualReplyToken, `⚠️ โควต้าสแกนสลิปของคุณเกินกำหนดแล้ว กรุณาอัปเกรดเป็น Pro เพื่อใช้งานต่อครับ:\n${upgradeUrl}`);
+      }
+
       if (buffersToProcess.length === 1) {
         const extracted = await extractTransactionFromImage(buffersToProcess[0]);
-        if (extracted) extractedDataArray.push(extracted);
+        if (extracted) {
+          if (extracted.isSubscriptionPayment) {
+            await prisma.user.update({ where: { id: user.id }, data: { subscriptionTier: "PRO" } });
+            return replyText(actualReplyToken, "✅ ตรวจสอบสลิปสำเร็จ! บัญชีของคุณได้รับการอัปเกรดเป็น PaoPao PRO เรียบร้อยแล้ว ขอบคุณที่สนับสนุนครับ 🎉");
+          }
+          extractedDataArray.push(extracted);
+        }
       } else {
         const mappedImages = buffersToProcess.map(b => ({ buffer: b, mimeType: "image/jpeg" }));
         const extractedBatch = await extractTransactionsFromImages(mappedImages);
         if (extractedBatch && extractedBatch.length > 0) {
+          const subPayment = extractedBatch.find(e => e.isSubscriptionPayment);
+          if (subPayment) {
+            await prisma.user.update({ where: { id: user.id }, data: { subscriptionTier: "PRO" } });
+            return replyText(actualReplyToken, "✅ ตรวจสอบสลิปสำเร็จ! บัญชีของคุณได้รับการอัปเกรดเป็น PaoPao PRO เรียบร้อยแล้ว ขอบคุณที่สนับสนุนครับ 🎉");
+          }
           extractedDataArray.push(...extractedBatch);
+        }
+      }
+
+      // Update quota usage
+      if (extractedDataArray.length > 0) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { aiSlipsUsed: { increment: buffersToProcess.length } }
+        });
+        
+        // Soft block if they just exceeded 20 (and it wasn't an upgrade slip)
+        if (user.subscriptionTier === "FREE" && user.aiSlipsUsed + buffersToProcess.length > 20) {
+           const upgradeUrl = process.env.NEXT_PUBLIC_LIFF_ID 
+             ? `https://liff.line.me/${process.env.NEXT_PUBLIC_LIFF_ID}/subscription` 
+             : "https://paopao-wealthness.vercel.app/subscription";
+           return replyText(actualReplyToken, `⚠️ โควต้าสแกนสลิปฟรีของคุณเดือนนี้เต็มแล้ว (${user.aiSlipsUsed + buffersToProcess.length}/20)\nข้อมูลนี้จะไม่ถูกบันทึก\n\nอัปเกรดเป็น Pro (เพียง ฿59/เดือน) ถ่ายรูปสลิปโอนเงิน 59 บาทส่งมาที่นี่ได้เลยครับ หรือดูรายละเอียด:\n${upgradeUrl}`);
         }
       }
     } 
@@ -120,8 +184,11 @@ export async function handleLineEvent(event: any) {
       return replyText(actualReplyToken, "ขออภัยครับ ตอนนี้ผมเข้าใจเฉพาะข้อความและภาพสลิปธนาคารเท่านั้นครับ 😅");
     }
 
+    // Filter out logically invalid transactions (like 0 THB or negative) parsed by AI
+    extractedDataArray = extractedDataArray.filter(d => d && d.amount > 0);
+
     if (extractedDataArray.length === 0) {
-      return replyText(actualReplyToken, "ผมไม่สามารถอ่านข้อมูลรายการจากข้อความ/รูปภาพของคุณได้ รบกวนพิมพ์ให้ชัดเจนขึ้นหรือส่งสลิปมาอีกครั้งนะครับ! 🙏");
+      return replyText(actualReplyToken, "ผมไม่สามารถอ่านจำนวนเงินที่ชัดเจนจากข้อความ/รูปภาพของคุณได้ รบกวนพิมพ์ให้ชัดเจนขึ้นหรือส่งสลิปมาอีกครั้งนะครับ! 🙏");
     }
 
     const newTransactionsData: any[] = [];

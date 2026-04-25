@@ -13,8 +13,20 @@ model User {
   avatarUrl             String?
   salaryDeduction       Float         @default(875)
   freelanceTaxRate      Float         @default(3.0)
+  categoryColors        String?       @default("{}")
+  otp                   String?
+  otpExpiresAt          DateTime?
+  hasAcceptedPDPA       Boolean       @default(false)
+  subscriptionTier      String        @default("FREE") // "FREE", "PRO", "BUSINESS"
+  aiSlipsUsed           Int           @default(0)
+  aiQuotaResetDate      DateTime?
   transactions          Transaction[]
   goals                 Goal[]
+  paoPoints             Int           @default(0)
+  lastDailyQuestAt      DateTime?
+  chatSessions          ChatSession[]
+  rewardClaims          RewardClaim[]
+  questClaims           QuestClaim[]
 }
 
 model Transaction {
@@ -32,8 +44,69 @@ model Goal {
   id            String    @id @default(uuid())
   userId        String
   user          User      @relation(fields: [userId], references: [id])
-  targetAmount  Float
+  type          String    @default("FINANCIAL") // "FINANCIAL" or "TODO"
+  targetAmount  Float     @default(0)
   currentAmount Float     @default(0)
-  title         String    // เช่น "DCA Portfolio", "Emergency Fund"
-  deadline      DateTime?
+  trackCategory String?   // Linked transaction category
+  title         String    // e.g. "DCA Portfolio", "Buy Milk"
+  description   String?   // Additional details for the task
+  deadline      DateTime? // Date and time for completion
+  isCompleted   Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @default(now()) @updatedAt
+}
+
+model ChatSession {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  title       String    @default("New Conversation")
+  messages    String    // Stored as JSON string
+  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime  @default(now())
+}
+
+model Reward {
+  id          String        @id @default(uuid())
+  name        String
+  description String?
+  points      Int
+  iconString  String        @default("🎁")
+  status      String        @default("AVAILABLE") // "AVAILABLE", "OUT_OF_STOCK", "HIDDEN"
+  claims      RewardClaim[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model RewardClaim {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  rewardId  String
+  reward    Reward   @relation(fields: [rewardId], references: [id])
+  status    String   @default("PENDING") // "PENDING", "SHIPPED", "REJECTED"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Quest {
+  id          String        @id @default(uuid())
+  title       String
+  description String?
+  points      Int
+  type        String        @default("ONETIME") // "ONETIME", "DAILY"
+  condition   String        @default("NONE") // "NONE", "LOG_TRANSACTION_TODAY"
+  status      String        @default("ACTIVE") // "ACTIVE", "INACTIVE"
+  claims      QuestClaim[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model QuestClaim {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  questId   String
+  quest     Quest    @relation(fields: [questId], references: [id])
+  createdAt DateTime @default(now())
 }

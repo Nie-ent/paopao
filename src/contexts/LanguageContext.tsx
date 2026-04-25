@@ -14,7 +14,7 @@ const translations: Record<Language, Record<string, string>> = {
   en: {
     'nav.dashboard': 'Dashboard',
     'nav.transactions': 'Transactions',
-    'nav.ai_insights': 'AI Insights',
+    'nav.ai_insights': 'PaoPao Insights',
     'nav.goals': 'Goals',
     'nav.settings': 'Settings',
     'header.search': 'Search transactions...',
@@ -31,7 +31,7 @@ const translations: Record<Language, Record<string, string>> = {
     'dashboard.total_expense': 'Total Expense',
     'dashboard.live': 'Live',
     'dashboard.from_last_month': 'from last month',
-    'dashboard.gemini_insight': 'Personal Assistant Insight',
+    'dashboard.gemini_insight': 'PaoPao Insight',
     'dashboard.time.ytd': 'YTD',
     'dashboard.time.month': 'Month',
     'dashboard.time.week': 'Week',
@@ -63,18 +63,18 @@ const translations: Record<Language, Record<string, string>> = {
     'goals.card.target': 'Target:',
     'goals.card.saved': 'Saved',
     'goals.card.deadline': 'Deadline:',
-    'ai.title': 'AI Insights',
-    'ai.subtitle': 'Personalized financial advice generated mathematically by Gemini 2.5',
+    'ai.title': 'PaoPao Insights',
+    'ai.subtitle': 'Personalized financial advice generated mathematically by PaoPao',
     'ai.card.title': 'Cash Flow Analysis',
-    'ai.card.desc': 'Gemini reads your last 30 days of transactions to deliver targeted advice.',
-    'ai.loading': 'Synthesizing neural pathways...',
+    'ai.card.desc': 'PaoPao reads your last 30 days of transactions to deliver targeted advice.',
+    'ai.loading': 'Synthesizing PaoPao wisdom...',
     'ai.footer.anonymous': 'Data is strictly anonymous before processing.',
     'ai.btn.regenerate': 'Regenerate',
   },
   th: {
     'nav.dashboard': 'ภาพรวม',
     'nav.transactions': 'รายการธุรกรรม',
-    'nav.ai_insights': 'วิเคราะห์ด้วย AI',
+    'nav.ai_insights': 'วิเคราะห์ด้วย PaoPao',
     'nav.goals': 'เป้าหมาย',
     'nav.settings': 'การตั้งค่า',
     'header.search': 'ค้นหารายการ...',
@@ -91,7 +91,7 @@ const translations: Record<Language, Record<string, string>> = {
     'dashboard.total_expense': 'รายจ่ายรวม',
     'dashboard.live': 'อัปเดตล่าสุด',
     'dashboard.from_last_month': 'จากเดือนที่แล้ว',
-    'dashboard.gemini_insight': 'คำแนะนำจาก Personal Assistant',
+    'dashboard.gemini_insight': 'คำแนะนำจาก PaoPao',
     'dashboard.time.ytd': 'จนถึงปัจจุบัน',
     'dashboard.time.month': 'เดือนนี้',
     'dashboard.time.week': 'สัปดาห์นี้',
@@ -123,11 +123,11 @@ const translations: Record<Language, Record<string, string>> = {
     'goals.card.target': 'เป้าหมาย:',
     'goals.card.saved': 'ออมแล้ว',
     'goals.card.deadline': 'กำหนดเวลา:',
-    'ai.title': 'ผู้ช่วยวิเคราะห์ AI',
-    'ai.subtitle': 'ผลประมวลผลคำแนะนำทางการเงินส่วนบุคคลผ่านขุมพลังคำนวณ Gemini 2.5',
+    'ai.title': 'คำแนะนำจาก PaoPao',
+    'ai.subtitle': 'ผลประมวลผลคำแนะนำทางการเงินส่วนบุคคลผ่านขุมพลังการคำนวณของ PaoPao',
     'ai.card.title': 'วิเคราะห์กระแสเงินสด',
-    'ai.card.desc': 'Gemini จะอ่านประวัติย้อนหลัง 30 วันเพื่อส่งมอบคำแนะนำที่ตรงเป้าที่สุดสำหรับคุณ',
-    'ai.loading': 'กำลังสังเคราะห์โครงข่ายประสาททางการเงิน...',
+    'ai.card.desc': 'PaoPao จะทบทวนประวัติย้อนหลัง 30 วันเพื่อส่งมอบคำแนะนำที่ตรงเป้าที่สุดสำหรับคุณ',
+    'ai.loading': 'PaoPao กำลังคิดวิเคราะห์แผนการเงินให้คุณ...',
     'ai.footer.anonymous': 'ข้อมูลทั้งหมดถูกปิดบังตัวตนอย่างเคร่งครัดตามมาตรฐาน PII ก่อนส่งประมวลผล',
     'ai.btn.regenerate': 'ประมวลผลใหม่',
   }
@@ -136,7 +136,7 @@ const translations: Record<Language, Record<string, string>> = {
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined)
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  const [language, setLanguageState] = useState<Language>('en')
+  const [language, setLanguageState] = useState<Language>('th')
 
   useEffect(() => {
     // Load from local storage

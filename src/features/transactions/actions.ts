@@ -30,7 +30,7 @@ export async function getTransactions(options: {
   })
 
   if (!prismaUser) {
-    return { error: 'User not found', data: [], totalPages: 0, totalItems: 0 }
+    return { error: 'User not found', data: [], totalPages: 0, totalItems: 0, categoryColors: {} }
   }
 
   const skip = (page - 1) * limit
@@ -75,12 +75,20 @@ export async function getTransactions(options: {
   ])
 
   const totalPages = Math.ceil(totalItems / limit)
+  
+  let parsedColors = {}
+  try {
+    if (prismaUser.categoryColors) {
+      parsedColors = JSON.parse(prismaUser.categoryColors)
+    }
+  } catch (e) {}
 
   return {
     data: transactions,
     totalItems,
     totalPages,
-    currentPage: page
+    currentPage: page,
+    categoryColors: parsedColors
   }
 }
 
@@ -150,6 +158,29 @@ export async function updateTransactionServer(id: string, formData: FormData) {
         amount,
         note: formData.get('notes')?.toString() || ''
       }
+    })
+    return { success: true }
+  } catch (error) {
+    console.error(error)
+    return { success: false, error: 'Database Error' }
+  }
+}
+
+export async function deleteTransactionServer(id: string) {
+  const user = await getUser()
+  if (!user) return { success: false, error: 'Unauthorized' }
+
+  let lineId = "U9f4477a859862ce8589b09e879ec068c"
+  if (user.app_metadata?.provider === "line") {
+    lineId = (user as any).user_metadata.provider_id
+  }
+
+  const prismaUser = await prisma.user.findUnique({ where: { lineId } })
+  if (!prismaUser) return { success: false, error: 'User not found' }
+
+  try {
+    await prisma.transaction.delete({
+      where: { id, userId: prismaUser.id }
     })
     return { success: true }
   } catch (error) {

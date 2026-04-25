@@ -41,6 +41,10 @@ const transactionSchema = {
     note: { 
       type: Type.STRING, 
       description: "A short, concise description. (e.g., 'ข้าวผัดกะเพรา', 'ค่าช้อปปิ้ง')" 
+    },
+    isSubscriptionPayment: {
+      type: Type.BOOLEAN,
+      description: "True ONLY IF this is a transfer of exactly 59 THB to the receiver named 'ณภัทร สุวรรณจินดา' (Napat Suwanjinda). Otherwise, false."
     }
   },
   required: ["type", "amount", "category", "note"]
@@ -51,6 +55,7 @@ export interface ExtractedTransaction {
   amount: number;
   category: string;
   note: string;
+  isSubscriptionPayment?: boolean;
 }
 
 const CATEGORY_DEFINITIONS = `
@@ -71,15 +76,17 @@ Strictly use these definitions to prevent overlap:
 - "Other": Use ONLY if it absolutely does not fit anywhere else.
 `;
 
-const SYSTEM_INSTRUCTION = \`You are an expert financial assistant AI. 
+const SYSTEM_INSTRUCTION = `You are an expert financial assistant AI. 
 Your goal is to parse Thai and English inputs (messages or bank slips) and rigidly extract the exact transaction details into JSON. 
-\${CATEGORY_DEFINITIONS}
+${CATEGORY_DEFINITIONS}
 If an image is provided, parse the transfer amount, infer if it's an expense (user paid someone) or income (someone paid user), and categorize it based on the memo/receiver context. Use standard timezone for 'Today'.
-IMPORTANT: You MUST write the 'note' value entirely in the Thai language.\`;
+IMPORTANT RULES: 
+1. You MUST write the 'note' value entirely in the Thai language.
+2. If the slip is a transfer of EXACTLY 59.00 THB to the account name "ณภัทร สุวรรณจินดา" (or Napat Suwanjinda), you MUST set 'isSubscriptionPayment' to true.`;
 
 export async function extractTransactionFromText(text: string): Promise<ExtractedTransaction | null> {
   const response = await ai.models.generateContent({
-    model: "gemini-flash-latest",
+    model: "gemini-2.5-flash",
       contents: text,
       config: {
         systemInstruction: SYSTEM_INSTRUCTION,
@@ -90,14 +97,19 @@ export async function extractTransactionFromText(text: string): Promise<Extracte
     });
 
   if (response.text) {
-    return JSON.parse(response.text) as ExtractedTransaction;
+    try {
+      return JSON.parse(response.text) as ExtractedTransaction;
+    } catch (e) {
+      console.error("Failed to parse AI JSON:", response.text);
+      return null;
+    }
   }
   return null;
 }
 
 export async function extractTransactionFromImage(imageBuffer: Buffer, mimeType: string = "image/jpeg"): Promise<ExtractedTransaction | null> {
   const response = await ai.models.generateContent({
-    model: "gemini-flash-latest",
+    model: "gemini-2.5-flash",
       contents: [
         "Please extract the transaction details from this bank slip.",
         {
@@ -116,7 +128,12 @@ export async function extractTransactionFromImage(imageBuffer: Buffer, mimeType:
     });
 
   if (response.text) {
-    return JSON.parse(response.text) as ExtractedTransaction;
+    try {
+      return JSON.parse(response.text) as ExtractedTransaction;
+    } catch (e) {
+      console.error("Failed to parse AI JSON from image:", response.text);
+      return null;
+    }
   }
   return null;
 }
@@ -136,7 +153,7 @@ export async function extractTransactionsFromImages(images: {buffer: Buffer, mim
   }
 
   const response = await ai.models.generateContent({
-    model: "gemini-flash-latest",
+    model: "gemini-2.5-flash",
     contents,
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,
@@ -150,7 +167,12 @@ export async function extractTransactionsFromImages(images: {buffer: Buffer, mim
   });
 
   if (response.text) {
-    return JSON.parse(response.text) as ExtractedTransaction[];
+    try {
+      return JSON.parse(response.text) as ExtractedTransaction[];
+    } catch (e) {
+      console.error("Failed to parse AI JSON from array:", response.text);
+      return [];
+    }
   }
   return [];
 }

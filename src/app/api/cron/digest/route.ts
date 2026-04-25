@@ -12,21 +12,31 @@ export async function GET(req: Request) {
     //   return new NextResponse("Unauthorized", { status: 401 });
     // }
 
-    const twentyFourHoursAgo = new Date();
-    twentyFourHoursAgo.setDate(twentyFourHoursAgo.getDate() - 1);
+    // We calculate "Yesterday" strictly in Thailand Time (UTC+7) bounds.
+    const now = new Date();
+    const bkkTime = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+    
+    // Start of yesterday BKK (00:00:00)
+    const yesterdayStartBkk = new Date(Date.UTC(bkkTime.getUTCFullYear(), bkkTime.getUTCMonth(), bkkTime.getUTCDate() - 1, 0, 0, 0, 0));
+    // End of yesterday BKK (23:59:59)
+    const yesterdayEndBkk = new Date(Date.UTC(bkkTime.getUTCFullYear(), bkkTime.getUTCMonth(), bkkTime.getUTCDate() - 1, 23, 59, 59, 999));
 
-    // 2. Find all users who had activity yesterday to avoid sending empty messages
+    // Convert BKK midnight boundaries back to UTC for database comparison
+    const startOfYesterdayUtc = new Date(yesterdayStartBkk.getTime() - 7 * 60 * 60 * 1000);
+    const endOfYesterdayUtc = new Date(yesterdayEndBkk.getTime() - 7 * 60 * 60 * 1000);
+
+    // 2. Find all users who had activity exactly yesterday (Thailand bounds)
     const activeUsers = await prisma.user.findMany({
       where: {
         transactions: {
           some: {
-            date: { gte: twentyFourHoursAgo }
+            date: { gte: startOfYesterdayUtc, lte: endOfYesterdayUtc }
           }
         }
       },
       include: {
         transactions: {
-          where: { date: { gte: twentyFourHoursAgo } }
+          where: { date: { gte: startOfYesterdayUtc, lte: endOfYesterdayUtc } }
         }
       }
     });
@@ -42,29 +52,30 @@ export async function GET(req: Request) {
     for (const user of activeUsers) {
       if (!user.lineId || user.lineId === "demo" || user.lineId === "demo_line_id") continue; // Skip demo/unlinked users
 
-      const totalSpent = user.transactions.filter(t => t.type === 'EXPENSE').reduce((sum, t) => sum + t.amount, 0);
+      const expenses = user.transactions.filter(t => t.type === 'EXPENSE');
+      const totalSpent = expenses.reduce((sum, t) => sum + t.amount, 0);
       const totalIncome = user.transactions.filter(t => t.type === 'INCOME').reduce((sum, t) => sum + t.amount, 0);
       
-      const transactionDetails = user.transactions.map(t => `- [${t.type}] ${t.category}: ฿${t.amount} (${t.note})`).join('\n');
+      // Optimize: Instead of sending all transactions, group them by category to reduce token usage
+      const categoryTotals = expenses.reduce((acc, t) => {
+        acc[t.category] = (acc[t.category] || 0) + t.amount;
+        return acc;
+      }, {} as Record<string, number>);
+      const topCategory = Object.entries(categoryTotals).sort((a,b) => b[1] - a[1])[0]?.[0] || 'N/A';
 
       const prompt = `
-You are an energetic and helpful Financial Assistant AI. 
-Write a short, punchy 'Morning Brief' for your client to read on their phone via LINE.
-They spent ฿${totalSpent} yesterday and earned ฿${totalIncome}.
-Here are the raw transaction details:
-${transactionDetails}
-
-Rules for the message:
-1. Start with a cheerful morning greeting "🌅 สวัสดีตอนเช้า สรุปยอดเงินเมื่อวานมาแล้ว!"
-2. Give a 1-sentence summary of yesterday's cashflow.
-3. Add a 1-sentence tip or warning based strictly on their categories.
-4. Keep it VERY short (mobile friendly) and use emojis. Do not output markdown asterisks(**) because LINE text doesn't render them gracefully.
-5. You MUST reply entirely in the Thai language.
+Write a short 3-line Thai morning brief for LINE.
+Spent: ฿${totalSpent}, Earned: ฿${totalIncome}. Top Expense Category: ${topCategory}.
+Rules:
+1. Start with "🌅 สวัสดีตอนเช้า สรุปยอดเงินเมื่อวานมาแล้ว!"
+2. 1-sentence summary.
+3. 1 short tip based on the top expense category.
+4. No markdown asterisks(**). Use emojis.
 `;
       
       try {
         const response = await ai.models.generateContent({
-          model: "gemini-flash-latest",
+          model: "gemini-2.5-flash",
           contents: prompt,
           config: { temperature: 0.7 }
         });
