@@ -25,18 +25,17 @@ export async function GET(req: Request) {
     const startOfYesterdayUtc = new Date(yesterdayStartBkk.getTime() - 7 * 60 * 60 * 1000);
     const endOfYesterdayUtc = new Date(yesterdayEndBkk.getTime() - 7 * 60 * 60 * 1000);
 
-    // 2. Find all users who had activity exactly yesterday (Thailand bounds)
+    // 2. Find all users who have a valid LINE ID
     const activeUsers = await prisma.user.findMany({
       where: {
-        transactions: {
-          some: {
-            date: { gte: startOfYesterdayUtc, lte: endOfYesterdayUtc }
-          }
+        lineId: {
+          notIn: ["", "demo", "demo_line_id"]
         }
       },
       include: {
         transactions: {
-          where: { date: { gte: startOfYesterdayUtc, lte: endOfYesterdayUtc } }
+          where: { date: { gte: startOfYesterdayUtc, lte: endOfYesterdayUtc } },
+          include: { category: true }
         }
       }
     });
@@ -56,14 +55,35 @@ export async function GET(req: Request) {
       const totalSpent = expenses.reduce((sum, t) => sum + t.amount, 0);
       const totalIncome = user.transactions.filter(t => t.type === 'INCOME').reduce((sum, t) => sum + t.amount, 0);
       
-      // Optimize: Instead of sending all transactions, group them by category to reduce token usage
-      const categoryTotals = expenses.reduce((acc, t) => {
-        acc[t.category] = (acc[t.category] || 0) + t.amount;
-        return acc;
-      }, {} as Record<string, number>);
-      const topCategory = Object.entries(categoryTotals).sort((a,b) => b[1] - a[1])[0]?.[0] || 'N/A';
+      let prompt = "";
 
-      const prompt = `
+      if (totalSpent === 0 && totalIncome === 0) {
+        prompt = `
+Write a short 3-line Thai morning brief for LINE.
+Rules:
+1. Start with "🌅 สวัสดีตอนเช้า สรุปยอดเงินเมื่อวานมาแล้ว!"
+2. Congratulate the user enthusiastically for having 0 expenses yesterday (ไม่มียอดใช้จ่ายเลย). Encourage them to keep saving.
+3. No markdown asterisks(**). Use emojis.
+`;
+      } else if (totalSpent === 0 && totalIncome > 0) {
+        prompt = `
+Write a short 3-line Thai morning brief for LINE.
+Earned: ฿${totalIncome}.
+Rules:
+1. Start with "🌅 สวัสดีตอนเช้า สรุปยอดเงินเมื่อวานมาแล้ว!"
+2. Congratulate the user for having 0 expenses yesterday and earning ฿${totalIncome}. It's a perfect day for saving!
+3. No markdown asterisks(**). Use emojis.
+`;
+      } else {
+        // Optimize: Instead of sending all transactions, group them by category to reduce token usage
+        const categoryTotals = expenses.reduce((acc, t) => {
+          const catName = (t as any).category?.name || 'Other Expense';
+          acc[catName] = (acc[catName] || 0) + t.amount;
+          return acc;
+        }, {} as Record<string, number>);
+        const topCategory = Object.entries(categoryTotals).sort((a,b) => b[1] - a[1])[0]?.[0] || 'N/A';
+
+        prompt = `
 Write a short 3-line Thai morning brief for LINE.
 Spent: ฿${totalSpent}, Earned: ฿${totalIncome}. Top Expense Category: ${topCategory}.
 Rules:
@@ -72,6 +92,7 @@ Rules:
 3. 1 short tip based on the top expense category.
 4. No markdown asterisks(**). Use emojis.
 `;
+      }
       
       try {
         const response = await ai.models.generateContent({
@@ -80,7 +101,7 @@ Rules:
           config: { temperature: 0.7 }
         });
 
-        const replyText = response.text || `🌅 สวัสดีตอนเช้า: เมื่อวานคุณใช้จ่ายไป ฿${totalSpent} ขอให้วันนี้เป็นวันที่ดีนะ!`;
+        const replyText = response.text || `🌅 สวัสดีตอนเช้า: เมื่อวานคุณไม่มีค่าใช้จ่ายเลย เก่งมากครับ ขอให้วันนี้เป็นวันที่ดีนะ!`;
         
         // Push message via LINE Official Account
         await lineClient.pushMessage({
