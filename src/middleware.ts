@@ -48,6 +48,9 @@ export async function middleware(request: NextRequest) {
   }
 
   // Protection logic
+  // The admin area has its own password login, enforced in its server layout and actions
+  if (request.nextUrl.pathname.startsWith('/admin')) return response
+
   const isAuthPage = request.nextUrl.pathname.startsWith('/login')
   const isPdpaPage = request.nextUrl.pathname.startsWith('/pdpa')
   

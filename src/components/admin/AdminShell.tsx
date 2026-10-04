@@ -1,38 +1,12 @@
 "use client"
 import Link from "next/link"
-import { useRouter, usePathname } from "next/navigation"
-import { useState, useEffect } from "react"
-import { isAdmin, logoutAdmin } from "@/features/admin/actions"
+import { usePathname } from "next/navigation"
+import { logoutAdmin } from "@/features/admin/actions"
 import { LogOut, Package, ListChecks, LayoutDashboard, Users } from "lucide-react"
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const router = useRouter()
+/** Navigation chrome for signed-in admins. Access is enforced by the server layout and actions. */
+export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const [authed, setAuthed] = useState<boolean | null>(null)
-
-  useEffect(() => {
-    isAdmin()
-      .then(is => {
-        setAuthed(is)
-        if (!is && !pathname?.includes("/login")) {
-          router.push("/admin/login")
-        } else if (is && pathname?.includes("/login")) {
-          router.push("/admin")
-        }
-      })
-      .catch(err => {
-        console.error("Auth check failed:", err)
-        setAuthed(false)
-        if (!pathname?.includes("/login")) router.push("/admin/login")
-      })
-  }, [pathname, router])
-
-  if (authed === null) return <div className="flex h-screen items-center justify-center">Loading admin panel...</div>
-
-  // If not authed and on login page, just show children
-  if (!authed) {
-    return <div className="min-h-screen bg-slate-100 flex flex-col">{children}</div>
-  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-900 border-t-4 border-slate-900">
