@@ -1,12 +1,6 @@
 import { Type, Schema } from "@google/genai";
 import { generateContent } from "@/lib/ai";
-
-
-export const DEFAULT_TRANSACTION_CATEGORIES = [
-  'Salary', 'Freelance', 'Gift', 'Income', 'Transfer In', 'Other Income',
-  'Food', 'Transport', 'Housing', 'Utilities', 'Shopping', 'Entertainment',
-  'Transfer Out', 'Investment', 'Saving', 'Other Expense'
-];
+import { CATEGORIES, CATEGORY_NAMES } from "@/lib/categories";
 
 export interface ExtractedTransaction {
   type: "INCOME" | "EXPENSE";
@@ -17,7 +11,7 @@ export interface ExtractedTransaction {
 }
 
 function buildAIConfig(userCategories: string[] = []) {
-  const allCategories = Array.from(new Set([...DEFAULT_TRANSACTION_CATEGORIES, ...userCategories]));
+  const allCategories = Array.from(new Set([...CATEGORY_NAMES, ...userCategories]));
 
   const transactionSchema: Schema = {
     type: Type.OBJECT,
@@ -50,22 +44,7 @@ function buildAIConfig(userCategories: string[] = []) {
 
   const CATEGORY_DEFINITIONS = `
 Strictly use these definitions to prevent overlap:
-- "Food": Edible items (meals, snacks, coffee, dining out, grocery/supermarket food).
-- "Transport": Moving around (BTS, MRT, grab, taxi, gas, flights).
-- "Housing": Home related (Rent, home repairs).
-- "Utilities": electricity, water, internet, phone bills.
-- "Shopping": Physical goods not for eating (Clothes, cosmetics, gadgets, haircuts, Shopee/Lazada items).
-- "Entertainment": Leisure (Movies, concerts, games, parties, digital subscriptions like Netflix).
-- "Investment": Outbound or inbound cash related to assets, DCA, crypto, gold, funds.
-- "Saving": Moving money to savings accounts.
-- "Salary": Inbound cash from regular monthly employment/payroll.
-- "Freelance": Inbound cash from side-hustles, contract work, odds jobs.
-- "Gift": Inbound free money from birthdays, gifts.
-- "Transfer In": Money moved between own accounts or refund from friends.
-- "Transfer Out": Money moved to other accounts without specific purpose.
-- "Income": General inbound cash that does not fit other income types.
-- "Other Income": Inbound cash that is not salary/freelance/gift/transfer.
-- "Other Expense": Outbound cash that absolutely does not fit anywhere else.
+${CATEGORIES.map(c => `- "${c.name}" (${c.type}): ${c.aiHint}.`).join('\n')}
 ${userCategories.length > 0 ? `\nUser Custom Categories (Prioritize these if the transaction context matches):\n- ${userCategories.join('\n- ')}` : ''}
 `;
 

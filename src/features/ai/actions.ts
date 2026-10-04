@@ -1,8 +1,7 @@
 "use server"
 
 import prisma from "@/lib/db"
-import { resolveLineId } from "@/lib/auth-user"
-import { getUser } from "@/features/auth/actions"
+import { getCurrentUser } from "@/lib/current-user"
 import { generateContent, isQuotaError } from "@/lib/ai"
 import { unstable_cache } from "next/cache"
 
@@ -26,20 +25,9 @@ const getCachedFinancialAdvice = unstable_cache(
 )
 
 export async function generateFinancialAdvice(language: string = 'en') {
-  const user = await getUser()
-  if (!user) {
-    return { error: 'Unauthorized', advice: null }
-  }
-
-  // Determine LINE ID to match with Prisma
-  const lineId = resolveLineId(user)
-
-  const prismaUser = await prisma.user.findUnique({
-    where: { lineId }
-  })
-
+  const prismaUser = await getCurrentUser()
   if (!prismaUser) {
-    return { error: 'User not found', advice: null }
+    return { error: 'ai.error.failed', advice: null }
   }
 
   // Fetch all transactions for the last 30 days
@@ -127,15 +115,7 @@ Reply entirely in English.
 }
 
 export async function generateDashboardInsight(language: string = 'en', timeframe: 'ALL' | 'YTD' | 'MONTH' | 'WEEK' = 'MONTH') {
-  const user = await getUser()
-  if (!user) return { advice: null }
-
-  const lineId = resolveLineId(user)
-
-  const prismaUser = await prisma.user.findUnique({
-    where: { lineId }
-  })
-
+  const prismaUser = await getCurrentUser()
   if (!prismaUser) return { advice: null }
 
   const now = new Date()

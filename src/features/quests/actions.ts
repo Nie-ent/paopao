@@ -1,7 +1,6 @@
 "use server"
 
 import prisma from "@/lib/db"
-import { getUser } from "@/features/auth/actions"
 import { getProfileData } from "@/features/user/actions"
 
 export async function claimDynamicQuest(questId: string) {

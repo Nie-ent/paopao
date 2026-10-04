@@ -1,16 +1,10 @@
 "use server"
 
 import prisma from "@/lib/db"
-import { resolveLineId } from "@/lib/auth-user"
-import { getUser } from "@/features/auth/actions"
+import { getCurrentUser } from "@/lib/current-user"
 
 export async function getGoals() {
-  const user = await getUser()
-  if (!user) return { error: 'Unauthorized', data: [] }
-
-  const lineId = resolveLineId(user)
-
-  const prismaUser = await prisma.user.findUnique({ where: { lineId } })
+  const prismaUser = await getCurrentUser()
   if (!prismaUser) return { error: 'User not found', data: [] }
 
   const goals = await prisma.goal.findMany({
@@ -68,12 +62,7 @@ export async function getGoals() {
 }
 
 export async function createGoal(formData: FormData) {
-  const user = await getUser()
-  if (!user) return { error: 'Unauthorized' }
-
-  const lineId = resolveLineId(user)
-
-  const prismaUser = await prisma.user.findUnique({ where: { lineId } })
+  const prismaUser = await getCurrentUser()
   if (!prismaUser) return { error: 'User not found' }
 
   const type = (formData.get('type') as string) || "FINANCIAL"
@@ -102,10 +91,7 @@ export async function createGoal(formData: FormData) {
 }
 
 export async function deleteGoal(goalId: string) {
-  const user = await getUser()
-  if (!user) return { error: 'Unauthorized' }
-
-  const prismaUser = await prisma.user.findUnique({ where: { lineId: resolveLineId(user) } })
+  const prismaUser = await getCurrentUser()
   if (!prismaUser) return { error: 'User not found' }
 
   const { count } = await prisma.goal.deleteMany({
@@ -116,10 +102,7 @@ export async function deleteGoal(goalId: string) {
 }
 
 export async function toggleGoalCompletion(goalId: string, isCompleted: boolean) {
-  const user = await getUser()
-  if (!user) return { error: 'Unauthorized' }
-
-  const prismaUser = await prisma.user.findUnique({ where: { lineId: resolveLineId(user) } })
+  const prismaUser = await getCurrentUser()
   if (!prismaUser) return { error: 'User not found' }
 
   const { count } = await prisma.goal.updateMany({
@@ -131,12 +114,7 @@ export async function toggleGoalCompletion(goalId: string, isCompleted: boolean)
 }
 
 export async function updateGoal(goalId: string, formData: FormData) {
-  const user = await getUser()
-  if (!user) return { error: 'Unauthorized' }
-
-  const lineId = resolveLineId(user)
-
-  const prismaUser = await prisma.user.findUnique({ where: { lineId } })
+  const prismaUser = await getCurrentUser()
   if (!prismaUser) return { error: 'User not found' }
 
   const type = (formData.get('type') as string) || "FINANCIAL"

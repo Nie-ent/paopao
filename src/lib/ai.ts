@@ -6,7 +6,7 @@ export const ai = new GoogleGenAI({ apiKey: process.env.AI_API_KEY || "dummy_key
  * Models tried in order. Gemini models get overloaded (503) or retired for new API keys (404),
  * so every call falls through to the next one. Override with AI_MODELS="model-a,model-b".
  */
-export const AI_MODELS = (process.env.AI_MODELS || "gemini-3.8-flash,gemini-flash-latest")
+export const AI_MODELS = (process.env.AI_MODELS || "gemini-3.8-flash,gemini-flash-latest,gemini-3.5-flash")
   .split(",")
   .map(m => m.trim())
   .filter(Boolean)

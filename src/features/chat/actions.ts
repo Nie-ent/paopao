@@ -5,6 +5,7 @@ import { getProfileData } from "@/features/user/actions"
 import { Type } from "@google/genai"
 import { generateContent, startChat, isQuotaError } from "@/lib/ai"
 import { DEMO_LINE_ID } from "@/lib/auth-user"
+import { startOfBangkokDay } from "@/lib/dates"
 
 
 const SYSTEM_INSTRUCTION = `You are PaoPao, a friendly and expert financial assistant.
@@ -16,11 +17,6 @@ If you and the user agree on a clear action plan, you can use the 'createTaskOrG
 const DAILY_CHAT_LIMITS = { DEMO: 30, FREE: 10, PRO: 100, BUSINESS: 100 } as const
 const MAX_REPLY_TOKENS = 800
 
-function startOfBangkokDay(now = new Date()) {
-  const offset = 7 * 60 * 60 * 1000
-  const bkk = new Date(now.getTime() + offset)
-  return new Date(Date.UTC(bkk.getUTCFullYear(), bkk.getUTCMonth(), bkk.getUTCDate()) - offset)
-}
 
 /** Counts the user's chat messages sent today, using the `at` timestamp stored on each message. */
 async function countMessagesToday(userId: string) {

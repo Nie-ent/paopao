@@ -1,25 +1,11 @@
 "use server"
 
 import prisma from "@/lib/db"
-import { resolveLineId } from "@/lib/auth-user"
-import { getUser } from "@/features/auth/actions"
+import { getCurrentUser } from "@/lib/current-user"
 
 export async function getDashboardData(timeframe: 'ALL' | 'YTD' | 'MONTH' | 'WEEK' = 'MONTH', selectedMonth?: number, selectedYear?: number, locale: 'th-TH' | 'en-US' = 'en-US') {
-  const user = await getUser()
-  
-  if (!user) {
-    return null
-  }
-
-  const lineId = resolveLineId(user)
-
-  const prismaUser = await prisma.user.findUnique({
-    where: { lineId }
-  })
-
-  if (!prismaUser) {
-    return { error: "User not found in DB" }
-  }
+  const prismaUser = await getCurrentUser()
+  if (!prismaUser) return { error: "User not found" }
 
   const now = new Date()
   let startDate = new Date()

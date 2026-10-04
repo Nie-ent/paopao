@@ -2,6 +2,7 @@ import { lineClient, lineBlobClient } from "@/config/line";
 import { extractTransactionsFromText, extractTransactionFromImage, extractTransactionsFromImages, ExtractedTransaction } from "@/services/ai.service";
 import prisma from "@/lib/db";
 import { quickParseTransaction } from "@/services/quick-parse";
+import { FALLBACK_CATEGORY } from "@/lib/categories";
 
 /**
  * Prepares the user entry in the DB.
@@ -68,16 +69,8 @@ export async function handleLineEvent(event: any) {
     const baseUser = await getOrCreateUser(userId);
     const user = await checkAndResetAiQuota(baseUser);
     
-    // Extract custom categories from user settings
-    let userCategories: string[] = [];
-    if (user.categoryColors) {
-      try {
-        const parsedColors = typeof user.categoryColors === 'string' ? JSON.parse(user.categoryColors) : user.categoryColors;
-        userCategories = Object.keys(parsedColors);
-      } catch (e) {
-        console.error("Failed to parse user category colors", e);
-      }
-    }
+    // The user's own categories, offered to the AI alongside the built-in ones
+    const userCategories = (await prisma.category.findMany({ where: { userId: user.id }, select: { name: true } })).map(c => c.name);
 
     let extractedDataArray: ExtractedTransaction[] = [];
 
@@ -225,7 +218,7 @@ export async function handleLineEvent(event: any) {
     const getCategoryId = (name: string, type: 'INCOME' | 'EXPENSE') => {
       const match = categories.find(c => c.name.toLowerCase() === name.toLowerCase());
       if (match) return match.id;
-      const fallbackName = type === 'INCOME' ? 'Other Income' : 'Other Expense';
+      const fallbackName = FALLBACK_CATEGORY[type];
       const fallback = categories.find(c => c.name === fallbackName);
       return fallback?.id || categories[0].id;
     };
