@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
+import { createSessionToken, verifySessionToken, SESSION_COOKIE, sessionCookieOptions } from '@/lib/session'
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
@@ -33,18 +34,27 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser()
   const isDemoUser = request.cookies.get('demo_mode_bypass')?.value === 'true'
-  const directLineSession = request.cookies.get('direct_line_session')?.value
-  const isDirectLineSession = !!directLineSession
+  // Only a correctly signed, unexpired cookie counts as a LINE session
+  const sessionLineId = await verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value)
+  const isDirectLineSession = !!sessionLineId
   const hasAcceptedPDPA = request.cookies.get('pdpa_accepted')?.value === 'true'
 
-  // Automatically refresh the session sliding window if a direct line token exists
-  if (isDirectLineSession) {
-    const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-    response.cookies.set('direct_line_session', directLineSession, {
-      expires,
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production"
-    })
+  // An old unsigned, forged or expired cookie is removed from every response, redirects included
+  const hasStaleSession = !sessionLineId && request.cookies.has(SESSION_COOKIE)
+  const redirectTo = (pathname: string) => {
+    const url = request.nextUrl.clone()
+    url.pathname = pathname
+    const redirect = NextResponse.redirect(url)
+    if (hasStaleSession) redirect.cookies.delete(SESSION_COOKIE)
+    return redirect
+  }
+
+  if (sessionLineId) {
+    // Sliding 30-day window: re-issue the signed cookie with a fresh expiry
+    const token = await createSessionToken(sessionLineId)
+    if (token) response.cookies.set(SESSION_COOKIE, token, sessionCookieOptions)
+  } else if (hasStaleSession) {
+    response.cookies.delete(SESSION_COOKIE)
   }
 
   // Protection logic
@@ -56,24 +66,18 @@ export async function middleware(request: NextRequest) {
   
   // If not logged in and not heading to login -> redirect to login
   if (!user && !isDemoUser && !isDirectLineSession && !isAuthPage && !request.nextUrl.pathname.startsWith('/api/')) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/login'
-    return NextResponse.redirect(url)
+    return redirectTo('/login')
   }
 
   // If logged in, but hasn't accepted PDPA, and not on PDPA page -> redirect to PDPA
   if ((user || isDemoUser || isDirectLineSession) && !hasAcceptedPDPA && !isPdpaPage && !request.nextUrl.pathname.startsWith('/api/')) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/pdpa'
-    return NextResponse.redirect(url)
+    return redirectTo('/pdpa')
   }
 
   // If already logged in and heading to login or pdpa (when already accepted) -> redirect to dashboard
   if ((user || isDemoUser || isDirectLineSession)) {
     if (isAuthPage || (isPdpaPage && hasAcceptedPDPA)) {
-      const url = request.nextUrl.clone()
-      url.pathname = '/'
-      return NextResponse.redirect(url)
+      return redirectTo('/')
     }
   }
 

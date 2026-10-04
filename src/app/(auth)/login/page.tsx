@@ -49,10 +49,12 @@ export default function LoginPage() {
             }
             
             setIsLiffLoading(true);
-            const profile = await liff.getProfile();
-            
+            // Send the LIFF access token, not the profile: the server asks LINE whose token it is
+            const accessToken = liff.getAccessToken();
+            if (!accessToken) { setIsLiffLoading(false); return; }
+
             startTransition(() => {
-              signInWithLiffAction(profile.userId, profile.displayName, profile.pictureUrl || "");
+              signInWithLiffAction(accessToken);
             });
           }
         } catch (err) {
