@@ -3,6 +3,8 @@ import { extractTransactionsFromText, extractTransactionFromImage, extractTransa
 import prisma from "@/lib/db";
 import { quickParseTransaction } from "@/services/quick-parse";
 import { FALLBACK_CATEGORY } from "@/lib/categories";
+import { hashImage, normalizeReference } from "@/lib/slip";
+import { Prisma } from "@prisma/client";
 
 /**
  * Prepares the user entry in the DB.
@@ -72,7 +74,8 @@ export async function handleLineEvent(event: any) {
     // The user's own categories, offered to the AI alongside the built-in ones
     const userCategories = (await prisma.category.findMany({ where: { userId: user.id }, select: { name: true } })).map(c => c.name);
 
-    let extractedDataArray: ExtractedTransaction[] = [];
+    let extractedDataArray: SlipTransaction[] = [];
+    let duplicateNotice = "";
 
     if (messageEvent.message.type === "text") {
       const textMessage = messageEvent.message as any;
@@ -159,27 +162,31 @@ export async function handleLineEvent(event: any) {
         return replyText(actualReplyToken, `⚠️ โควต้าสแกนสลิปของคุณเกินกำหนดแล้ว กรุณาอัปเกรดเป็น Pro เพื่อใช้งานต่อครับ:\n${upgradeUrl}`);
       }
 
+      const hashes = buffersToProcess.map(hashImage);
+      let slips: SlipTransaction[] = [];
       if (buffersToProcess.length === 1) {
         const extracted = await extractTransactionFromImage(buffersToProcess[0], "image/jpeg", userCategories);
-        if (extracted) {
-          if (extracted.isSubscriptionPayment) {
-            await prisma.user.update({ where: { id: user.id }, data: { subscriptionTier: "PRO" } });
-            return replyText(actualReplyToken, "✅ ตรวจสอบสลิปสำเร็จ! บัญชีของคุณได้รับการอัปเกรดเป็น PaoPao PRO เรียบร้อยแล้ว ขอบคุณที่สนับสนุนครับ 🎉");
-          }
-          extractedDataArray.push(extracted);
-        }
+        if (extracted) slips = [{ ...extracted, reference: normalizeReference(extracted.referenceNo), slipHash: hashes[0] }];
       } else {
         const mappedImages = buffersToProcess.map(b => ({ buffer: b, mimeType: "image/jpeg" }));
         const extractedBatch = await extractTransactionsFromImages(mappedImages, userCategories);
-        if (extractedBatch && extractedBatch.length > 0) {
-          const subPayment = extractedBatch.find(e => e.isSubscriptionPayment);
-          if (subPayment) {
-            await prisma.user.update({ where: { id: user.id }, data: { subscriptionTier: "PRO" } });
-            return replyText(actualReplyToken, "✅ ตรวจสอบสลิปสำเร็จ! บัญชีของคุณได้รับการอัปเกรดเป็น PaoPao PRO เรียบร้อยแล้ว ขอบคุณที่สนับสนุนครับ 🎉");
-          }
-          extractedDataArray.push(...extractedBatch);
-        }
+        // The model returns slips in image order; only trust the image hash when the counts line up
+        const aligned = extractedBatch.length === hashes.length;
+        slips = extractedBatch.map((e, i) => ({ ...e, reference: normalizeReference(e.referenceNo), slipHash: aligned ? hashes[i] : null }));
       }
+
+      const subscriptionSlip = slips.find(s => s.isSubscriptionPayment);
+      if (subscriptionSlip) {
+        return replyText(actualReplyToken, await redeemSubscriptionSlip(user.id, subscriptionSlip));
+      }
+
+      const { fresh, duplicates } = await splitDuplicateSlips(user.id, slips);
+      if (slips.length > 0 && fresh.length === 0) {
+        // Nothing new: don't charge slip quota for re-sent slips
+        return replyText(actualReplyToken, duplicateSlipMessage(duplicates));
+      }
+      duplicateNotice = duplicates.length > 0 ? duplicateSlipMessage(duplicates) : "";
+      extractedDataArray.push(...fresh);
 
       // Update quota usage
       if (extractedDataArray.length > 0) {
@@ -231,6 +238,8 @@ export async function handleLineEvent(event: any) {
         amount: data.amount,
         categoryId: getCategoryId(data.category, data.type),
         note: data.note,
+        reference: data.reference ?? null,
+        slipHash: data.slipHash ?? null,
         // We temporarily keep data.category on the object just for the statusText builder below
         _categoryName: data.category
       });
@@ -263,7 +272,12 @@ export async function handleLineEvent(event: any) {
     // Save to Database
     for (const tData of newTransactionsData) {
       const { _categoryName, ...dbData } = tData;
-      await prisma.transaction.create({ data: dbData });
+      try {
+        await prisma.transaction.create({ data: dbData });
+      } catch (error) {
+        // Same slip arriving twice at once: the unique index on reference/slipHash rejects the second
+        if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")) throw error;
+      }
     }
 
     // Build status response msg
@@ -281,6 +295,8 @@ export async function handleLineEvent(event: any) {
       });
     }
     
+    if (duplicateNotice) statusText += `\n\n${duplicateNotice}`;
+
     // Budget evaluation logic
     try {
       const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
@@ -343,4 +359,61 @@ export async function replyText(replyToken: string, text: string) {
   } catch (error) {
     console.error("Error replying to LINE:", error);
   }
+}
+
+type SlipTransaction = ExtractedTransaction & { reference?: string | null; slipHash?: string | null };
+
+const bahtText = (n: number) => `฿${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+const bkkDate = (d: Date) => d.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit", timeZone: "Asia/Bangkok" });
+
+/** Splits slips into new ones and ones this user already recorded (same bank reference or same image). */
+async function splitDuplicateSlips(userId: string, slips: SlipTransaction[]) {
+  const refs = slips.map(s => s.reference).filter((r): r is string => !!r);
+  const hashes = slips.map(s => s.slipHash).filter((h): h is string => !!h);
+  if (refs.length === 0 && hashes.length === 0) return { fresh: slips, duplicates: [] };
+
+  const existing = await prisma.transaction.findMany({
+    where: { userId, OR: [{ reference: { in: refs } }, { slipHash: { in: hashes } }] },
+    select: { reference: true, slipHash: true, date: true, amount: true },
+  });
+  const fresh: SlipTransaction[] = [];
+  const duplicates: { date: Date; amount: number }[] = [];
+  for (const slip of slips) {
+    const match = existing.find(e => (slip.reference && e.reference === slip.reference) || (slip.slipHash && e.slipHash === slip.slipHash));
+    if (match) duplicates.push({ date: match.date, amount: match.amount });
+    else fresh.push(slip);
+  }
+  return { fresh, duplicates };
+}
+
+function duplicateSlipMessage(duplicates: { date: Date; amount: number }[]) {
+  const lines = duplicates.map(d => `• ${bahtText(d.amount)} (บันทึกไว้เมื่อ ${bkkDate(d.date)})`).join("\n");
+  return `⚠️ สลิปนี้เคยบันทึกไปแล้ว จึงไม่บันทึกซ้ำครับ\n${lines}`;
+}
+
+/**
+ * Upgrades the user to PRO from a payment slip. The bank reference must be readable and unused
+ * by anyone, so a slip (the user's own or someone else's) can only ever upgrade once.
+ */
+async function redeemSubscriptionSlip(userId: string, slip: SlipTransaction) {
+  if (!slip.reference) {
+    return "⚠️ อ่านเลขที่รายการบนสลิปไม่ชัด จึงยังอัปเกรดไม่ได้ รบกวนส่งสลิปที่เห็นเลขที่รายการชัดเจนอีกครั้งครับ";
+  }
+  const used = await prisma.subscriptionPayment.findFirst({
+    where: { OR: [{ reference: slip.reference }, ...(slip.slipHash ? [{ slipHash: slip.slipHash }] : [])] },
+  });
+  if (used) return "⚠️ สลิปนี้ถูกใช้อัปเกรดไปแล้ว ไม่สามารถใช้ซ้ำได้ครับ";
+
+  try {
+    await prisma.$transaction([
+      prisma.subscriptionPayment.create({ data: { userId, reference: slip.reference, slipHash: slip.slipHash ?? null, amount: slip.amount } }),
+      prisma.user.update({ where: { id: userId }, data: { subscriptionTier: "PRO" } }),
+    ]);
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return "⚠️ สลิปนี้ถูกใช้อัปเกรดไปแล้ว ไม่สามารถใช้ซ้ำได้ครับ";
+    }
+    throw error;
+  }
+  return "✅ ตรวจสอบสลิปสำเร็จ! บัญชีของคุณได้รับการอัปเกรดเป็น PaoPao PRO เรียบร้อยแล้ว ขอบคุณที่สนับสนุนครับ 🎉";
 }

@@ -71,6 +71,7 @@ model User {
   chatSessions     ChatSession[]
   rewardClaims     RewardClaim[]
   questClaims      QuestClaim[]
+  subscriptionPayments SubscriptionPayment[]
 
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @default(now()) @updatedAt
@@ -103,12 +104,32 @@ model Transaction {
   category  Category        @relation(fields: [categoryId], references: [id])
   note      String?
   date      DateTime        @default(now())
+  /// Bank reference printed on a slip or statement row, used to detect duplicates
+  reference String?
+  /// SHA-256 of the slip image the transaction was read from
+  slipHash  String?
   
   createdAt DateTime        @default(now())
   updatedAt DateTime        @default(now()) @updatedAt
 
+  @@unique([userId, reference])
+  @@unique([userId, slipHash])
   @@index([userId, date])
   @@index([userId, type])
+}
+
+/// A PRO upgrade paid by transfer slip. The reference is unique across all users so a slip
+/// can't be reused (by its owner or anyone else) to upgrade again.
+model SubscriptionPayment {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  reference String   @unique
+  slipHash  String?  @unique
+  amount    Float
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 model Goal {

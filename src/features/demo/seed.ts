@@ -89,6 +89,7 @@ async function wipeDemoUser(userId: string) {
   await prisma.$transaction([
     prisma.questClaim.deleteMany({ where: { userId } }),
     prisma.rewardClaim.deleteMany({ where: { userId } }),
+    prisma.subscriptionPayment.deleteMany({ where: { userId } }),
     prisma.chatSession.deleteMany({ where: { userId } }),
     prisma.goal.deleteMany({ where: { userId } }),
     prisma.transaction.deleteMany({ where: { userId } }),
