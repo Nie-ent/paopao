@@ -5,6 +5,7 @@ import { quickParseTransaction } from "@/services/quick-parse";
 import { FALLBACK_CATEGORY } from "@/lib/categories";
 import { hashImage, normalizeReference } from "@/lib/slip";
 import { Prisma } from "@prisma/client";
+import { generateOtp, hashOtp, OTP_TTL_MS } from "@/lib/otp";
 
 /**
  * Prepares the user entry in the DB.
@@ -86,13 +87,13 @@ export async function handleLineEvent(event: any) {
           ? `https://liff.line.me/${process.env.NEXT_PUBLIC_LIFF_ID}` 
           : "https://paopao-wealthness.vercel.app/login";
 
-        // Generate 6-digit OTP
-        const otp = Math.floor(100000 + Math.random() * 900000).toString()
-        const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000)
+        // Random 8-digit code; only its HMAC is stored
+        const otp = generateOtp()
+        const otpExpiresAt = new Date(Date.now() + OTP_TTL_MS)
 
         await prisma.user.update({
           where: { id: user.id },
-          data: { otp, otpExpiresAt }
+          data: { otp: hashOtp(otp), otpExpiresAt }
         })
 
         try {

@@ -19,8 +19,11 @@ function ErrorMessageHandler() {
 
   useEffect(() => {
     if (errorMsg) {
-      toast.error(t('login.failed'), { 
-        description: decodeURIComponent(errorMsg)
+      // Known error codes are translated; anything else is shown as sent
+      const key = `login.error.${errorMsg}`
+      const translated = t(key)
+      toast.error(t('login.failed'), {
+        description: translated === key ? decodeURIComponent(errorMsg) : translated
       })
     }
   }, [errorMsg, t])
@@ -116,7 +119,9 @@ export default function LoginPage() {
                 required 
                 type="text"
                 pattern="[0-9]*"
-                maxLength={6}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={8}
                 className="h-12 text-center text-lg tracking-widest bg-muted/50 border-border/50 focus-visible:ring-primary font-mono placeholder:font-sans placeholder:tracking-normal placeholder:text-sm"
               />
               <p className="text-xs text-muted-foreground mt-2 text-center font-medium">

@@ -56,6 +56,7 @@ model User {
   avatarUrl        String?
   salaryDeduction  Float            @default(875)
   freelanceTaxRate Float            @default(3.0)
+  /// HMAC of the current sign-in code (never the code itself)
   otp              String?
   otpExpiresAt     DateTime?
   hasAcceptedPDPA  Boolean          @default(false)
@@ -218,4 +219,15 @@ model QuestClaim {
   updatedAt DateTime @default(now()) @updatedAt
 
   @@index([userId])
+}
+
+/// One OTP sign-in attempt, used to rate-limit guessing (per IP and across the whole system)
+model LoginAttempt {
+  id        String   @id @default(uuid())
+  ip        String
+  success   Boolean
+  createdAt DateTime @default(now())
+
+  @@index([ip, createdAt])
+  @@index([createdAt])
 }
