@@ -19,7 +19,7 @@ import { useLanguage } from "@/contexts/LanguageContext"
 import { cn } from "@/lib/utils"
 
 export default function GoalsPage() {
-  const { t } = useLanguage()
+  const { t, tc, locale } = useLanguage()
   const [goals, setGoals] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [isSubmitLoading, setIsSubmitLoading] = useState(false)
@@ -94,7 +94,7 @@ export default function GoalsPage() {
               origin: { y: 0.6 },
               colors: ['#26ccff', '#a25afd', '#ff5e7e', '#88ff5a', '#fcff42', '#ffa62d', '#ff36ff']
             })
-            toast.success(`ยอดเยี่ยม! เป้าหมาย "${goal.title}" สำเร็จทะลุเป้าแล้ว! 🎊`, { duration: 8000 })
+            toast.success(t('goals.achieved_toast', { title: goal.title }), { duration: 8000 })
           }, 1000)
           
           // Auto complete in DB
@@ -111,11 +111,11 @@ export default function GoalsPage() {
       if (res?.data) {
         setGoals(res.data)
       } else {
-        toast.error('ไม่สามารถโหลดข้อมูลเป้าหมายได้ (อาจไม่มีสิทธิ์เข้าถึง)')
+        toast.error(t('goals.load_failed'))
       }
     } catch (err) {
       console.error(err)
-      toast.error('เกิดข้อผิดพลาดในการโหลดข้อมูลเป้าหมาย')
+      toast.error(t('goals.load_failed'))
     } finally {
       setLoading(false)
     }
@@ -145,13 +145,13 @@ export default function GoalsPage() {
       }
       
       if (res.success) {
-        toast.success(editId ? "อัปเดตสำเร็จ!" : (sheetType === "FINANCIAL" || sheetType === "DAILY" ? "สร้างเป้าหมายสำเร็จแล้ว!" : "เพิ่มรายการสำเร็จ!"), { 
-          description: "ระบบได้รับการอัปเดตข้อมูลของคุณเรียบร้อย."
+        toast.success(editId ? t('goals.toast.updated') : (sheetType === "FINANCIAL" || sheetType === "DAILY" ? t('goals.toast.created') : t('goals.toast.task_added')), {
+          description: t('goals.toast.saved_desc')
         })
         setIsSheetOpen(false)
         fetchGoals()
       } else {
-        toast.error("Error", { description: res.error || "เกิดข้อผิดพลาด" })
+        toast.error(t('common.error'), { description: res.error || t('common.something_wrong') })
       }
     } finally {
       setIsSubmitLoading(false)
@@ -163,10 +163,10 @@ export default function GoalsPage() {
     if (!goalToDelete) return;
     const res = await deleteGoal(goalToDelete)
     if (res.success) {
-      toast.success("Deleted", { description: "The item has been permanently removed." })
+      toast.success(t('goals.toast.deleted'), { description: t('goals.toast.deleted_desc') })
       fetchGoals()
     } else {
-      toast.error("Error", { description: "Failed to delete." })
+      toast.error(t('common.error'), { description: t('goals.toast.delete_failed') })
     }
     setGoalToDelete(null)
   }
@@ -177,7 +177,7 @@ export default function GoalsPage() {
     
     const res = await toggleGoalCompletion(id, !isCompleted)
     if (!res.success) {
-      toast.error("Failed to update status")
+      toast.error(t('goals.toast.status_failed'))
       fetchGoals() // revert
     }
   }
@@ -186,12 +186,12 @@ export default function GoalsPage() {
   const todoTasks = goals.filter(g => g.type === "TODO" && !g.isCompleted)
 
   const formatDate = (dateStr: string, includeTime: boolean = false) => {
-    if (!dateStr) return "No deadline"
+    if (!dateStr) return t('common.no_deadline')
     const d = new Date(dateStr)
     if (includeTime) {
-      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+      return d.toLocaleDateString(locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
     }
-    return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+    return d.toLocaleDateString(locale, { month: 'long', year: 'numeric' })
   }
 
   return (
@@ -199,21 +199,21 @@ export default function GoalsPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight text-foreground/90 flex items-center gap-2">
-            <Target className="h-8 w-8 text-primary" /> {t('goals.title') || "Goals & Tasks"}
+            <Target className="h-8 w-8 text-primary" /> {t('goals.title')}
           </h2>
-          <p className="text-muted-foreground">{t('goals.subtitle') || "Track finances and stay on top of your tasks."}</p>
+          <p className="text-muted-foreground">{t('goals.subtitle')}</p>
         </div>
         
         <Button className="shrink-0 shadow-lg shadow-primary/20" onClick={openCreateSheet}>
-          <Plus className="h-4 w-4 mr-2" /> {t('goals.btn.add') || "New Item"}
+          <Plus className="h-4 w-4 mr-2" /> {t('goals.btn.add')}
         </Button>
       </div>
 
       <Tabs defaultValue="all" className="w-full">
         <TabsList className="mb-4">
-          <TabsTrigger value="all">ทั้งหมด</TabsTrigger>
-          <TabsTrigger value="financial">เป้าหมายการเงิน</TabsTrigger>
-          <TabsTrigger value="todo">รายการที่ต้องทำ</TabsTrigger>
+          <TabsTrigger value="all">{t('goals.tab.all')}</TabsTrigger>
+          <TabsTrigger value="financial">{t('goals.tab.financial')}</TabsTrigger>
+          <TabsTrigger value="todo">{t('goals.tab.todo')}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="all" className="space-y-6 mt-0">
@@ -221,14 +221,14 @@ export default function GoalsPage() {
             {/* Mix both lists but maybe visually we can separate them or just list as is */}
             {financialGoals.length > 0 && (
               <div className="col-span-full mb-2 flex items-center gap-2 text-lg font-semibold text-primary">
-                <TrendingUp className="w-5 h-5" /> เป้าหมายทางการเงิน
+                <TrendingUp className="w-5 h-5" /> {t('goals.tab.financial')}
               </div>
             )}
             <RenderFinancial goals={financialGoals} setGoalToDelete={setGoalToDelete} openEditSheet={openEditSheet} formatDate={formatDate} loading={loading} />
 
             {todoTasks.length > 0 && (
               <div className="col-span-full mt-6 mb-2 flex items-center gap-2 text-lg font-semibold text-primary">
-                <ListTodo className="w-5 h-5" /> รายการที่ต้องทำ
+                <ListTodo className="w-5 h-5" /> {t('goals.tab.todo')}
               </div>
             )}
             <RenderTodos todos={todoTasks} setGoalToDelete={setGoalToDelete} openEditSheet={openEditSheet} toggleCompletion={handleToggleCompletion} formatDate={formatDate} loading={loading} />
@@ -236,8 +236,8 @@ export default function GoalsPage() {
             {!loading && goals.length === 0 && (
               <div className="col-span-full flex flex-col items-center justify-center py-24 glass-panel rounded-xl text-muted-foreground">
                 <Trophy className="h-12 w-12 mb-4 opacity-20" />
-                <p className="text-lg font-medium text-foreground">ยังไม่มีเป้าหมายในตอนนี้</p>
-                <p className="max-w-sm text-center mt-2">สร้างเป้าหมายทางการเงิน หรือสิ่งที่คุณต้องตั้งการทำได้เลย.</p>
+                <p className="text-lg font-medium text-foreground">{t('goals.empty.title')}</p>
+                <p className="max-w-sm text-center mt-2">{t('goals.empty.desc')}</p>
               </div>
             )}
           </div>
@@ -261,17 +261,16 @@ export default function GoalsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle className="text-destructive flex items-center gap-2">
               <Trash2 className="w-5 h-5"/>
-              คำเตือนการลบ
+              {t('goals.delete.title')}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              คุณแน่ใจหรือไม่ว่าต้องการลบเป้าหมายนี้? 
-              การลบจะไม่สามารถกู้ข้อมูลกลับมาได้
+              {t('goals.delete.desc')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction onClick={executeDelete} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
-              ยืนยันการลบ
+              {t('common.confirm_delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -281,45 +280,45 @@ export default function GoalsPage() {
       <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
         <SheetContent className="bg-background border-border overflow-y-auto w-full sm:max-w-xl p-8 pt-14 md:p-12">
           <SheetHeader>
-            <SheetTitle>สร้างเป้าหมายใหม่</SheetTitle>
-            <SheetDescription>ตั้งเป้าหมายทางการเงิน หรือรายการสิ่งต้องทำ.</SheetDescription>
+            <SheetTitle>{editId ? t('goals.sheet.title_edit') : t('goals.sheet.title_new')}</SheetTitle>
+            <SheetDescription>{t('goals.sheet.desc')}</SheetDescription>
           </SheetHeader>
           
           <div className="mt-6">
             <Tabs value={sheetType} onValueChange={(val: any) => setSheetType(val)} className="w-full">
               <TabsList className="w-full grid border-border bg-muted/50 p-1 rounded-xl" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
-                <TabsTrigger value="FINANCIAL" className="rounded-lg">เป้าหมายเงิน</TabsTrigger>
-                <TabsTrigger value="DAILY" className="rounded-lg">รายวัน</TabsTrigger>
-                <TabsTrigger value="TODO" className="rounded-lg">To-Do</TabsTrigger>
+                <TabsTrigger value="FINANCIAL" className="rounded-lg">{t('goals.sheet.type_financial')}</TabsTrigger>
+                <TabsTrigger value="DAILY" className="rounded-lg">{t('goals.sheet.type_daily')}</TabsTrigger>
+                <TabsTrigger value="TODO" className="rounded-lg">{t('goals.sheet.type_todo')}</TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
 
           <form onSubmit={onSubmit} className="space-y-6 mt-8">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Title</label>
-              <Input name="title" required value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder={sheetType === "FINANCIAL" ? "e.g. New Car, Japan Trip" : (sheetType === "DAILY" ? "e.g. เก็บเงินวันละ 50" : "e.g. Pay Internet Bill")} className="bg-muted/50" />
+              <label className="text-sm font-medium">{t('goals.form.title')}</label>
+              <Input name="title" required value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder={sheetType === "FINANCIAL" ? t('goals.form.title_ph_financial') : (sheetType === "DAILY" ? t('goals.form.title_ph_daily') : t('goals.form.title_ph_todo'))} className="bg-muted/50" />
             </div>
             
             {(sheetType === "FINANCIAL" || sheetType === "DAILY") && (
               <>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Target Amount (฿)</label>
+                  <label className="text-sm font-medium">{t('goals.form.target')}</label>
                   <Input name="targetAmount" type="number" value={formData.targetAmount} onChange={e => setFormData({...formData, targetAmount: e.target.value})} required placeholder="50000" className="bg-muted/50" />
                 </div>
                 {sheetType === "FINANCIAL" && (
                   <div className="space-y-2">
                     <label className="text-sm font-medium flex items-center gap-2">
-                      <LinkIcon className="w-4 h-4 text-orange-500" /> Auto-Sync with Category
+                      <LinkIcon className="w-4 h-4 text-orange-500" /> {t('goals.form.sync')}
                     </label>
-                    <p className="text-xs text-muted-foreground mb-2">Automagically calculate your progress from transactions with this category.</p>
+                    <p className="text-xs text-muted-foreground mb-2">{t('goals.form.sync_desc')}</p>
                     <select name="trackCategory" value={formData.trackCategory} onChange={e => setFormData({...formData, trackCategory: e.target.value})} className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-muted/50 px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
-                      <option value="">-- No Auto Sync (Manual Tracking) --</option>
-                      <option value="DAILY_BALANCE">⚖️ Daily Balance (เงินคงเหลือรายวัน)</option>
-                      <option value="Investment">📈 Investment (ลงทุน)</option>
-                      <option value="Saving">💰 Saving (ออมเงิน)</option>
-                      <option value="Income">💸 Income (รายรับ / เงินเดือน)</option>
-                      <option value="Expense">🛒 Expense (ค่าใช้จ่ายรวม)</option>
+                      <option value="">{t('goals.form.sync_none')}</option>
+                      <option value="DAILY_BALANCE">{t('goals.form.sync_daily')}</option>
+                      <option value="Investment">{t('goals.form.sync_investment')}</option>
+                      <option value="Saving">{t('goals.form.sync_saving')}</option>
+                      <option value="Income">{t('goals.form.sync_income')}</option>
+                      <option value="Expense">{t('goals.form.sync_expense')}</option>
                     </select>
                   </div>
                 )}
@@ -328,19 +327,19 @@ export default function GoalsPage() {
 
             {sheetType === "TODO" && (
               <div className="space-y-2">
-                <label className="text-sm font-medium">รายละเอียดเพิ่มเติม (Optional)</label>
+                <label className="text-sm font-medium">{t('goals.form.details')}</label>
                 <textarea 
                   name="description" 
                   value={formData.description}
                   onChange={e => setFormData({...formData, description: e.target.value})}
-                  placeholder="Note รายละเอียดของสิ่งที่ต้องทำ..." 
+                  placeholder={t('goals.form.details_ph')} 
                   className="flex min-h-[80px] w-full rounded-md border border-input bg-muted/50 px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 />
               </div>
             )}
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">{sheetType === "TODO" ? "เส้นตาย (Deadline)" : (sheetType === "DAILY" ? "เป้าหมายรายวันใช้สำหรับวันนี้ (ระบุสิ้นสุดถ้ามี)" : "วันที่เป้าหมายสิ้นสุด")}</label>
+              <label className="text-sm font-medium">{sheetType === "TODO" ? t('goals.form.deadline_todo') : (sheetType === "DAILY" ? t('goals.form.deadline_daily') : t('goals.form.deadline_financial'))}</label>
               <Input 
                 name="deadline" 
                 type={sheetType === "TODO" ? "datetime-local" : "date"} 
@@ -354,7 +353,7 @@ export default function GoalsPage() {
             <SheetFooter className="mt-8">
               <Button type="submit" disabled={isSubmitLoading} className="w-full">
                 {isSubmitLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                บันทึกเป้าหมาย
+                {t('goals.form.submit')}
               </Button>
             </SheetFooter>
           </form>
@@ -365,6 +364,7 @@ export default function GoalsPage() {
 }
 
 function RenderFinancial({ goals, setGoalToDelete, openEditSheet, formatDate, loading }: any) {
+  const { t, tc } = useLanguage()
   if (loading) return <LoadingPlaceholder />
   return (
     <AnimatePresence>
@@ -383,12 +383,12 @@ function RenderFinancial({ goals, setGoalToDelete, openEditSheet, formatDate, lo
                     </CardTitle>
                     {goal.trackCategory && (
                       <Badge variant="outline" className="mt-2 text-xs font-normal border-orange-200 text-orange-600 dark:border-orange-900 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/30">
-                        <LinkIcon className="w-3 h-3 mr-1" /> Syncs: {goal.trackCategory}
+                        <LinkIcon className="w-3 h-3 mr-1" /> {t('goals.card.syncs', { category: goal.trackCategory === 'DAILY_BALANCE' ? t('goals.form.sync_daily') : tc(goal.trackCategory) })}
                       </Badge>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
-                    {isCompleted && <Badge className="bg-emerald-500 text-white border-none shadow-sm">Achieved</Badge>}
+                    {isCompleted && <Badge className="bg-emerald-500 text-white border-none shadow-sm">{t('goals.card.achieved')}</Badge>}
                     <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0" onClick={(e) => { e.stopPropagation(); setGoalToDelete(goal.id); }}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -402,7 +402,7 @@ function RenderFinancial({ goals, setGoalToDelete, openEditSheet, formatDate, lo
               <CardContent className="pt-4 space-y-4">
                 <div>
                   <div className="flex justify-between text-xs mb-1.5 font-medium text-muted-foreground">
-                    <span>Progress</span>
+                    <span>{t('goals.card.progress')}</span>
                     <span className={cn("font-bold", progressPercentage >= 100 ? "text-emerald-500" : "text-primary")}>
                       {((goal.currentAmount / goal.targetAmount) * 100).toFixed(1)}%
                     </span>
@@ -410,7 +410,7 @@ function RenderFinancial({ goals, setGoalToDelete, openEditSheet, formatDate, lo
                   <Progress value={progressPercentage} className={cn("h-2.5", progressPercentage >= 100 ? "[&>div]:bg-emerald-500" : "")} />
                 </div>
                 <div className="pt-2 text-xs text-muted-foreground border-t border-border/50">
-                  <span className="font-medium text-foreground/70">กำหนดวัน:</span> {formatDate(goal.deadline)}
+                  <span className="font-medium text-foreground/70">{t('goals.card.deadline')}</span> {formatDate(goal.deadline)}
                 </div>
               </CardContent>
             </Card>
@@ -467,6 +467,7 @@ function RenderTodos({ todos, setGoalToDelete, openEditSheet, toggleCompletion, 
 }
 
 function LoadingPlaceholder() {
+  const { t } = useLanguage()
   return (
      <div className="col-span-full flex flex-col items-center justify-center py-10 text-muted-foreground animate-in fade-in">
         <motion.img 
@@ -476,7 +477,7 @@ function LoadingPlaceholder() {
           animate={{ y: [0, -15, 0] }}
           transition={{ repeat: Infinity, duration: 0.8, ease: "easeInOut" }}
         />
-        <p className="font-medium animate-pulse text-sm">Loading...</p>
+        <p className="font-medium animate-pulse text-sm">{t('common.loading')}</p>
      </div>
   )
 }

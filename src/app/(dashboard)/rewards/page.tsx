@@ -9,8 +9,10 @@ import { Button } from "@/components/ui/button"
 import { fetchProfileDataCached } from "@/lib/clientCache"
 import { getAvailableRewards, redeemReward, getUserClaims } from "@/features/quests/actions"
 import { toast } from "sonner"
+import { useLanguage } from "@/contexts/LanguageContext"
 
 export default function RewardsPage() {
+  const { t, locale } = useLanguage()
   const [points, setPoints] = useState<number | null>(null)
   const [rewards, setRewards] = useState<any[]>([])
   const [claims, setClaims] = useState<any[]>([])
@@ -31,7 +33,7 @@ export default function RewardsPage() {
     if (loading || redeemLockRef.current) return
     if (points === null) return
     if (points < item.points) {
-      toast.error(`แต้มไม่พอ! คุณขาดอีก ${item.points - points} Pts`)
+      toast.error(t('rewards.not_enough', { points: item.points - points }))
       return
     }
     
@@ -40,12 +42,12 @@ export default function RewardsPage() {
     try {
       const res = await redeemReward(item.id)
       if (res.success) {
-        toast.success(`แลกของรางวัล "${item.name}" สำเร็จ!`, { description: "คุณสามารถติดตามสถานะสิทธิ์ได้ในเร็วๆ นี้" })
+        toast.success(t('rewards.redeemed', { name: item.name }), { description: t('rewards.redeemed_desc') })
         setPoints(prev => prev! - item.points)
         window.dispatchEvent(new Event('points_updated')) // Notify Header
         loadData() // Refresh list of claims
       } else {
-        toast.error(res.error || "ทำรายการไม่สำเร็จ")
+        toast.error(res.error || t('rewards.redeem_failed'))
       }
     } finally {
       setLoading(false)
@@ -57,8 +59,8 @@ export default function RewardsPage() {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight text-foreground/90">ร้านค้าแลกของรางวัล</h2>
-          <p className="text-muted-foreground">แลกของรางวัลพิเศษด้วย PaoPoints ของคุณ</p>
+          <h2 className="text-3xl font-bold tracking-tight text-foreground/90">{t('rewards.title')}</h2>
+          <p className="text-muted-foreground">{t('rewards.subtitle')}</p>
         </div>
         <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-orange-100 dark:bg-orange-950/30 text-orange-600 dark:text-orange-400 font-bold border border-orange-200 dark:border-orange-900/50">
           <Coins className="w-5 h-5" />
@@ -91,9 +93,9 @@ export default function RewardsPage() {
                 <Button 
                   onClick={() => handleRedeem(item)}
                   disabled={loading || item.status === 'OUT_OF_STOCK' || points === null || points < item.points} 
-                  className={`w-full \${item.status === 'OUT_OF_STOCK' ? 'bg-muted text-muted-foreground' : 'bg-orange-500 hover:bg-orange-600'}`}
+                  className={`w-full ${item.status === 'OUT_OF_STOCK' ? 'bg-muted text-muted-foreground' : 'bg-orange-500 hover:bg-orange-600'}`}
                 >
-                  {item.status === 'OUT_OF_STOCK' ? 'สินค้าหมด' : 'แลกรางวัล'}
+                  {item.status === 'OUT_OF_STOCK' ? t('rewards.out_of_stock') : t('rewards.redeem')}
                 </Button>
               </CardFooter>
             </Card>
@@ -102,7 +104,7 @@ export default function RewardsPage() {
         {rewards.length === 0 && (
           <div className="col-span-full text-center py-12 text-muted-foreground flex flex-col items-center">
             <Gift className="w-12 h-12 opacity-20 mb-4" />
-            <p>ยังไม่มีของรางวัลในระบบตอนนี้</p>
+            <p>{t('rewards.empty')}</p>
           </div>
         )}
       </div>
@@ -110,7 +112,7 @@ export default function RewardsPage() {
       <div className="mt-12 max-w-4xl mx-auto">
         <h3 className="text-xl font-bold tracking-tight mb-4 flex items-center gap-2">
           <ShoppingBag className="w-5 h-5 text-orange-500" />
-          ประวัติการแลกของรางวัล
+          {t('rewards.history')}
         </h3>
         <Card className="shadow-sm border-orange-200/50">
           <CardContent className="p-0">
@@ -123,26 +125,26 @@ export default function RewardsPage() {
                     </div>
                     <div>
                       <p className="font-bold text-slate-900 dark:text-slate-100">{claim.reward.name}</p>
-                      <p className="text-xs text-slate-500">{new Date(claim.createdAt).toLocaleString('th-TH')}</p>
+                      <p className="text-xs text-slate-500">{new Date(claim.createdAt).toLocaleString(locale)}</p>
                     </div>
                   </div>
                   <div className="flex items-center justify-between sm:justify-end gap-3 flex-1">
                     <span className="text-sm font-semibold text-orange-500 bg-orange-50 dark:bg-orange-950/30 px-2 py-1 rounded">
                       -{claim.reward.points} Pts
                     </span>
-                    <span className={`px-2.5 py-1 rounded-full text-xs font-semibold \${
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
                       claim.status === 'PENDING' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400' : 
                       claim.status === 'SHIPPED' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400' : 
                       'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400'
                     }`}>
-                      {claim.status === 'PENDING' ? 'รอการดำเนินการ' : claim.status === 'SHIPPED' ? 'จัดส่งแล้ว/สำเร็จ' : 'ถูกยกเลิก'}
+                      {claim.status === 'PENDING' ? t('rewards.status.pending') : claim.status === 'SHIPPED' ? t('rewards.status.shipped') : t('rewards.status.rejected')}
                     </span>
                   </div>
                 </div>
               ))}
               {claims.length === 0 && (
                 <div className="p-8 text-center text-slate-500 text-sm">
-                  คุณยังไม่เคยแลกของรางวัลเลย ลองสะสมแต้มไว้แลกดูสิ!
+                  {t('rewards.history_empty')}
                 </div>
               )}
             </div>

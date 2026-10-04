@@ -1,16 +1,14 @@
 "use server"
 
 import prisma from "@/lib/db"
+import { resolveLineId } from "@/lib/auth-user"
 import { getUser } from "@/features/auth/actions"
 
 export async function getGoals() {
   const user = await getUser()
   if (!user) return { error: 'Unauthorized', data: [] }
 
-  let lineId = "U9f4477a859862ce8589b09e879ec068c"
-  if (user.app_metadata?.provider === "line") {
-    lineId = (user as any).user_metadata.provider_id
-  }
+  const lineId = resolveLineId(user)
 
   const prismaUser = await prisma.user.findUnique({ where: { lineId } })
   if (!prismaUser) return { error: 'User not found', data: [] }
@@ -54,7 +52,7 @@ export async function getGoals() {
           _sum: { amount: true },
           where: {
             userId: prismaUser.id,
-            category: goal.trackCategory,
+            category: { name: goal.trackCategory },
             date: { 
               gte: startDate, 
               lte: goal.deadline ? new Date(goal.deadline.getTime() + 24 * 60 * 60 * 1000) : undefined // Include the entire deadline day
@@ -73,10 +71,7 @@ export async function createGoal(formData: FormData) {
   const user = await getUser()
   if (!user) return { error: 'Unauthorized' }
 
-  let lineId = "U9f4477a859862ce8589b09e879ec068c"
-  if (user.app_metadata?.provider === "line") {
-    lineId = (user as any).user_metadata.provider_id
-  }
+  const lineId = resolveLineId(user)
 
   const prismaUser = await prisma.user.findUnique({ where: { lineId } })
   if (!prismaUser) return { error: 'User not found' }
@@ -93,7 +88,7 @@ export async function createGoal(formData: FormData) {
   await prisma.goal.create({
     data: {
       userId: prismaUser.id,
-      type,
+      type: type as any,
       title,
       description: description || null,
       targetAmount,
@@ -110,33 +105,36 @@ export async function deleteGoal(goalId: string) {
   const user = await getUser()
   if (!user) return { error: 'Unauthorized' }
 
-  await prisma.goal.delete({
-    where: { id: goalId }
+  const prismaUser = await prisma.user.findUnique({ where: { lineId: resolveLineId(user) } })
+  if (!prismaUser) return { error: 'User not found' }
+
+  const { count } = await prisma.goal.deleteMany({
+    where: { id: goalId, userId: prismaUser.id }
   })
 
-  return { success: true }
+  return count ? { success: true } : { error: 'Goal not found' }
 }
 
 export async function toggleGoalCompletion(goalId: string, isCompleted: boolean) {
   const user = await getUser()
   if (!user) return { error: 'Unauthorized' }
 
-  await prisma.goal.update({
-    where: { id: goalId },
+  const prismaUser = await prisma.user.findUnique({ where: { lineId: resolveLineId(user) } })
+  if (!prismaUser) return { error: 'User not found' }
+
+  const { count } = await prisma.goal.updateMany({
+    where: { id: goalId, userId: prismaUser.id },
     data: { isCompleted }
   })
 
-  return { success: true }
+  return count ? { success: true } : { error: 'Goal not found' }
 }
 
 export async function updateGoal(goalId: string, formData: FormData) {
   const user = await getUser()
   if (!user) return { error: 'Unauthorized' }
 
-  let lineId = "U9f4477a859862ce8589b09e879ec068c"
-  if (user.app_metadata?.provider === "line") {
-    lineId = (user as any).user_metadata.provider_id
-  }
+  const lineId = resolveLineId(user)
 
   const prismaUser = await prisma.user.findUnique({ where: { lineId } })
   if (!prismaUser) return { error: 'User not found' }

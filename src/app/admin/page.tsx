@@ -114,7 +114,7 @@ export default function AdminDashboardPage() {
                     </span>
                   </div>
                   <div>
-                    <span className={`px-2 py-1 rounded text-xs font-semibold \${claim.status === 'PENDING' ? 'bg-orange-100 text-orange-700' : claim.status === 'SHIPPED' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                    <span className={`px-2 py-1 rounded text-xs font-semibold ${claim.status === 'PENDING' ? 'bg-orange-100 text-orange-700' : claim.status === 'SHIPPED' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
                       {claim.status}
                     </span>
                   </div>

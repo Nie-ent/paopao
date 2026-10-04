@@ -11,11 +11,17 @@ import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
 import { getChatSessions, getSession, sendChatMessage } from "@/features/chat/actions"
 import ReactMarkdown from "react-markdown"
+import { useLanguage } from "@/contexts/LanguageContext"
 
 type Message = { role: 'user' | 'model', content: string, action?: any }
 type ChatSession = { id: string, title: string, updatedAt: string }
 
+// Greeting placeholders, translated at render time so they follow the language toggle
+const WELCOME_MARKER = '__welcome__'
+const NEW_CHAT_MARKER = '__new_chat__'
+
 function ChatContent() {
+  const { t, language } = useLanguage()
   const searchParams = useSearchParams()
   const router = useRouter()
   const initialQuery = searchParams.get('q')
@@ -36,7 +42,8 @@ function ChatContent() {
 
   useEffect(() => {
     if (sessionParam) {
-      loadSession(sessionParam)
+      // The URL is updated to the session we just created; its messages are already on screen
+      if (sessionParam !== activeSessionId) loadSession(sessionParam)
     } else if (initialQuery && !initialQuerySent.current) {
       initialQuerySent.current = true
       handleSend(initialQuery)
@@ -45,7 +52,7 @@ function ChatContent() {
     } else if (!sessionParam && !initialQuery && messages.length === 0) {
       // Default welcome
       setMessages([
-        { role: 'model', content: "สวัสดีครับ! ผม PaoPao AI ผู้ช่วยทางการเงินส่วนตัวของคุณ 💰\n\nวันนี้มีอะไรให้ผมช่วยไหมครับ? เช่น\n- *ช่วยวางแผนปลดหนี้บัตรเครดิต*\n- *อยากเริ่มดอยคริปโต เอ้ย เริ่มลงทุน DCA*" }
+        { role: 'model', content: WELCOME_MARKER }
       ])
     }
   }, [sessionParam, initialQuery])
@@ -64,8 +71,8 @@ function ChatContent() {
     setIsTyping(true)
     const session = await getSession(id)
     if (session && session.messages) {
-      const parsed = JSON.parse(session.messages)
-      setMessages(parsed)
+      const parsed = typeof session.messages === 'string' ? JSON.parse(session.messages) : session.messages
+      setMessages(parsed as Message[])
     }
     setIsTyping(false)
   }
@@ -73,7 +80,7 @@ function ChatContent() {
   const handleCreateNew = () => {
     setActiveSessionId(null)
     setMessages([
-      { role: 'model', content: "เริ่มบทสนทนาใหม่แล้ว! มีอะไรให้ PaoPao ช่วยวางแผนบอกมาได้เลยครับ ✨" }
+      { role: 'model', content: NEW_CHAT_MARKER }
     ])
     window.history.replaceState(null, '', '/chat')
   }
@@ -87,21 +94,32 @@ function ChatContent() {
     setIsTyping(true)
 
     try {
-      const res = await sendChatMessage(activeSessionId, msg)
+      const res = await sendChatMessage(activeSessionId, msg, language)
       if (res.error) {
-        toast.error("มีปัญหากับ AI 🤖", { description: "ส่วนใหญ่อาจจะเกิดจากการจำกัดโควต้าฟรี (Rate Limit)" })
-        setMessages(prev => [...prev, { role: 'model', content: "ขออภัยครับ โควต้าการใช้งาน AI ชั่วคราวเต็มแล้ว (Quota Exceeded) กรุณาลองใหม่อีกครั้งในภายหลังครับ 🥺" }])
+        if (res.limitReached) {
+          toast.error(t('chat.limit_title'), { description: t('chat.limit_desc', { limit: res.limit ?? 0 }) })
+          setMessages(prev => [...prev, { role: 'model', content: t('chat.limit_msg', { limit: res.limit ?? 0 }) }])
+        } else if (res.isQuota) {
+          toast.error(t('chat.error_title'), { description: t('chat.error_quota_desc') })
+          setMessages(prev => [...prev, { role: 'model', content: t('chat.error_quota_msg') }])
+        } else {
+          toast.error(t('chat.error_title'), { description: t('chat.error_desc') })
+          setMessages(prev => [...prev, { role: 'model', content: t('chat.error_msg') }])
+        }
       } else {
         if (res.sessionId && !activeSessionId) {
           setActiveSessionId(res.sessionId)
           window.history.replaceState(null, '', `/chat?sessionId=${res.sessionId}`)
-          loadSessions() // refresh titles
+          if (res.newSessionTitle) {
+            const title = res.newSessionTitle
+            setSessions(prev => [{ id: res.sessionId!, title, updatedAt: new Date().toISOString() }, ...prev.filter(s => s.id !== res.sessionId)])
+          }
         }
         setMessages(prev => [...prev, { role: 'model', content: res.reply!, action: res.action }])
       }
     } catch (err) {
-      toast.error("เชื่อมต่อขัดข้อง", { description: "เซิร์ฟเวอร์ตอบกลับผิดพลาดระดับ 500" })
-      setMessages(prev => [...prev, { role: 'model', content: "ขออภัยอย่างยิ่งครับ ระบบควบคุมเซิร์ฟเวอร์ขัดข้อง กรุณาลองใหม่อีกครั้ง" }])
+      toast.error(t('chat.server_error_title'), { description: t('chat.server_error_desc') })
+      setMessages(prev => [...prev, { role: 'model', content: t('chat.server_error_msg') }])
     } finally {
       setIsTyping(false)
     }
@@ -112,15 +130,15 @@ function ChatContent() {
       {/* Sidebar (History) - Hidden on mobile unless opened */}
       <div className="hidden md:flex flex-col w-64 shrink-0 glass-panel border-r border-border/50 bg-background/50 overflow-y-auto p-4 rounded-xl">
         <Button onClick={handleCreateNew} className="w-full mb-4 shadow-sm bg-primary/10 text-primary hover:bg-primary/20 border-none">
-          <Plus className="w-4 h-4 mr-2" /> แชทใหม่
+          <Plus className="w-4 h-4 mr-2" /> {t('chat.new')}
         </Button>
-        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">ประวัติการสนทนา</span>
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">{t('chat.history')}</span>
         <div className="flex flex-col gap-2">
           {sessions.map(s => (
             <button
               key={s.id}
               onClick={() => { router.push(`/chat?sessionId=${s.id}`) }}
-              className={`text-left text-sm px-3 py-2.5 rounded-lg transition-colors truncate \${activeSessionId === s.id ? 'bg-primary/15 font-medium text-primary' : 'hover:bg-muted text-muted-foreground'}`}
+              className={`text-left text-sm px-3 py-2.5 rounded-lg transition-colors truncate ${activeSessionId === s.id ? 'bg-primary/15 font-medium text-primary' : 'hover:bg-muted text-muted-foreground'}`}
             >
               <MessageSquare className="w-3.5 h-3.5 inline mr-2 opacity-70" />
               {s.title}
@@ -138,10 +156,10 @@ function ChatContent() {
                 key={idx}
                 initial={{ opacity: 0, y: 10, scale: 0.98 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
-                className={`flex flex-col max-w-[85%] \${m.role === 'user' ? 'self-end items-end' : 'self-start items-start'}`}
+                className={`flex flex-col max-w-[85%] ${m.role === 'user' ? 'self-end items-end' : 'self-start items-start'}`}
               >
                 <div 
-                  className={`px-4 py-3 rounded-2xl shadow-sm \${
+                  className={`px-4 py-3 rounded-2xl shadow-sm ${
                     m.role === 'user' 
                       ? 'bg-orange-500 text-white rounded-tr-none' 
                       : 'bg-muted/60 text-foreground rounded-tl-none border border-border/50'
@@ -149,7 +167,7 @@ function ChatContent() {
                 >
                   {m.role === 'model' ? (
                     <div className="prose prose-sm dark:prose-invert max-w-none leading-relaxed prose-p:my-1">
-                      <ReactMarkdown>{m.content}</ReactMarkdown>
+                      <ReactMarkdown>{m.content === WELCOME_MARKER ? t('chat.welcome') : m.content === NEW_CHAT_MARKER ? t('chat.new_started') : m.content}</ReactMarkdown>
                     </div>
                   ) : (
                     <div className="whitespace-pre-wrap">{m.content}</div>
@@ -162,13 +180,13 @@ function ChatContent() {
                     <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 shadow-sm">
                       <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-semibold mb-2">
                         <Target className="w-4 h-4" /> 
-                        <span>สร้างรายการลงบนแอปแล้ว!</span>
+                        <span>{t('chat.goal_created')}</span>
                       </div>
                       <p className="text-sm font-medium text-foreground bg-background/50 p-2 rounded-lg border border-border/40">
                         {m.action.title}
                       </p>
                       <Button variant="outline" size="sm" className="w-full mt-3 bg-background/50" onClick={() => router.push('/goals')}>
-                        ดูเป้าหมายทั้งหมด
+                        {t('chat.view_goals')}
                       </Button>
                     </div>
                   </motion.div>
@@ -199,7 +217,7 @@ function ChatContent() {
             <Input
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              placeholder="ปรึกษา PaoPao เรื่องการเงิน..."
+              placeholder={t('chat.placeholder')}
               disabled={isTyping}
               className="pr-12 rounded-full bg-muted/50 border-border/50 focus-visible:ring-1 focus-visible:ring-primary h-12 text-base shadow-inner"
             />
@@ -214,7 +232,7 @@ function ChatContent() {
           </form>
           <div className="text-center mt-2.5">
             <span className="text-[10px] sm:text-xs text-muted-foreground opacity-70">
-              PaoPao AI สามารถสร้างเป้าหมายเก็บเงินและแจกแจงแผนการได้จากบทสนทนา
+              {t('chat.footer')}
             </span>
           </div>
         </div>
@@ -223,9 +241,14 @@ function ChatContent() {
   )
 }
 
+function ChatFallback() {
+  const { t } = useLanguage()
+  return <div className="w-full h-[60vh] flex flex-col items-center justify-center animate-in fade-in"><img src="/favicon.png" alt="Loading..." className="w-16 h-16 mb-4 drop-shadow-md animate-bounce" /><p className="font-medium animate-pulse text-muted-foreground">{t('chat.starting')}</p></div>
+}
+
 export default function ChatPage() {
   return (
-    <Suspense fallback={<div className="w-full h-[60vh] flex flex-col items-center justify-center animate-in fade-in"><img src="/favicon.png" alt="Loading..." className="w-16 h-16 mb-4 drop-shadow-md animate-bounce" /><p className="font-medium animate-pulse text-muted-foreground">กำลังเรียกใช้งาน PaoPao...</p></div>}>
+    <Suspense fallback={<ChatFallback />}>
       <ChatContent />
     </Suspense>
   )

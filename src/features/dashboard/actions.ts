@@ -1,19 +1,17 @@
 "use server"
 
 import prisma from "@/lib/db"
+import { resolveLineId } from "@/lib/auth-user"
 import { getUser } from "@/features/auth/actions"
 
-export async function getDashboardData(timeframe: 'ALL' | 'YTD' | 'MONTH' | 'WEEK' = 'MONTH') {
+export async function getDashboardData(timeframe: 'ALL' | 'YTD' | 'MONTH' | 'WEEK' = 'MONTH', selectedMonth?: number, selectedYear?: number, locale: 'th-TH' | 'en-US' = 'en-US') {
   const user = await getUser()
   
   if (!user) {
     return null
   }
 
-  let lineId = "U9f4477a859862ce8589b09e879ec068c"
-  if (user.app_metadata?.provider === "line") {
-    lineId = (user as any).user_metadata.provider_id
-  }
+  const lineId = resolveLineId(user)
 
   const prismaUser = await prisma.user.findUnique({
     where: { lineId }
@@ -25,11 +23,15 @@ export async function getDashboardData(timeframe: 'ALL' | 'YTD' | 'MONTH' | 'WEE
 
   const now = new Date()
   let startDate = new Date()
+  let endDate: Date | null = null
 
   if (timeframe === 'YTD') {
     startDate = new Date(now.getFullYear(), 0, 1)
   } else if (timeframe === 'MONTH') {
-    startDate = new Date(now.getFullYear(), now.getMonth(), 1)
+    const y = selectedYear || now.getFullYear()
+    const m = selectedMonth ? selectedMonth - 1 : now.getMonth()
+    startDate = new Date(y, m, 1)
+    endDate = new Date(y, m + 1, 0, 23, 59, 59, 999)
   } else if (timeframe === 'WEEK') {
     startDate = new Date(now)
     startDate.setDate(now.getDate() - 6)
@@ -39,11 +41,15 @@ export async function getDashboardData(timeframe: 'ALL' | 'YTD' | 'MONTH' | 'WEE
   const whereClause: any = { userId: prismaUser.id }
   if (timeframe !== 'ALL') {
     whereClause.date = { gte: startDate }
+    if (endDate) {
+      whereClause.date.lte = endDate
+    }
   }
 
   const transactions = await prisma.transaction.findMany({
     where: whereClause,
-    orderBy: { date: 'asc' }
+    orderBy: { date: 'asc' },
+    include: { category: true }
   })
   
   const chartDataMap: Record<string, { name: string, income: number, expense: number }> = {}
@@ -51,7 +57,7 @@ export async function getDashboardData(timeframe: 'ALL' | 'YTD' | 'MONTH' | 'WEE
   if (timeframe === 'YTD') {
     for (let i = 0; i <= now.getMonth(); i++) {
       const d = new Date(now.getFullYear(), i, 1)
-      const key = d.toLocaleString('en-US', { month: 'short' })
+      const key = d.toLocaleString(locale, { month: 'short' })
       chartDataMap[i.toString()] = { name: key, income: 0, expense: 0 }
     }
     for (const t of transactions) {
@@ -62,7 +68,10 @@ export async function getDashboardData(timeframe: 'ALL' | 'YTD' | 'MONTH' | 'WEE
       }
     }
   } else if (timeframe === 'MONTH') {
-    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+    const y = selectedYear || now.getFullYear()
+    const m = selectedMonth ? selectedMonth - 1 : now.getMonth()
+    const daysInMonth = new Date(y, m + 1, 0).getDate()
+    
     for (let i = 1; i <= daysInMonth; i++) {
       chartDataMap[i.toString()] = { name: i.toString(), income: 0, expense: 0 }
     }
@@ -77,7 +86,7 @@ export async function getDashboardData(timeframe: 'ALL' | 'YTD' | 'MONTH' | 'WEE
     for (let i = 6; i >= 0; i--) {
       const d = new Date()
       d.setDate(d.getDate() - i)
-      const dayName = d.toLocaleDateString('en-US', { weekday: 'short' })
+      const dayName = d.toLocaleDateString(locale, { weekday: 'short' })
       chartDataMap[d.toDateString()] = { name: dayName, income: 0, expense: 0 }
     }
     for (const t of transactions) {
@@ -87,8 +96,8 @@ export async function getDashboardData(timeframe: 'ALL' | 'YTD' | 'MONTH' | 'WEE
   } else if (timeframe === 'ALL') {
     for (const t of transactions) {
       const year = t.date.getFullYear();
-      const month = t.date.toLocaleString('en-US', { month: 'short' });
-      const key = `${month} ${year}`;
+      const month = t.date.toLocaleString(locale, { month: 'short' });
+      const key = `${month} ${locale === 'th-TH' ? year + 543 : year}`;
       const sortKey = `${year}-${String(t.date.getMonth() + 1).padStart(2, '0')}`;
       
       if (!chartDataMap[key]) {
@@ -104,22 +113,27 @@ export async function getDashboardData(timeframe: 'ALL' | 'YTD' | 'MONTH' | 'WEE
   // Totals and Breakdown using the Filtered Transactions!
   let totalIncome = 0
   let totalExpense = 0
-  const incomeCategoryMap: Record<string, number> = {}
-  const expenseCategoryMap: Record<string, number> = {}
+  const incomeCategoryMap: Record<string, { value: number, color: string }> = {}
+  const expenseCategoryMap: Record<string, { value: number, color: string }> = {}
 
   for (const agg of transactions) {
     const amt = Number(agg.amount)
+    const catName = agg.category?.name || 'Other'
+    const catColor = agg.category?.color || '#888'
+    
     if (agg.type === 'INCOME') {
       totalIncome += amt
-      incomeCategoryMap[agg.category || 'Other'] = (incomeCategoryMap[agg.category || 'Other'] || 0) + amt
+      if (!incomeCategoryMap[catName]) incomeCategoryMap[catName] = { value: 0, color: catColor }
+      incomeCategoryMap[catName].value += amt
     } else if (agg.type === 'EXPENSE') {
       totalExpense += amt
-      expenseCategoryMap[agg.category || 'Other'] = (expenseCategoryMap[agg.category || 'Other'] || 0) + amt
+      if (!expenseCategoryMap[catName]) expenseCategoryMap[catName] = { value: 0, color: catColor }
+      expenseCategoryMap[catName].value += amt
     }
   }
 
-  const incomeByCategory = Object.entries(incomeCategoryMap).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value)
-  const expenseByCategory = Object.entries(expenseCategoryMap).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value)
+  const incomeByCategory = Object.entries(incomeCategoryMap).map(([name, data]) => ({ name, value: data.value, color: data.color })).sort((a,b) => b.value - a.value)
+  const expenseByCategory = Object.entries(expenseCategoryMap).map(([name, data]) => ({ name, value: data.value, color: data.color })).sort((a,b) => b.value - a.value)
 
   let chartDataValues: any[] = Object.values(chartDataMap);
   if (timeframe === 'ALL') {

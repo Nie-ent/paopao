@@ -11,27 +11,36 @@ import { Input } from "@/components/ui/input"
 import { getCategoryColors, updateCategoryColors } from "@/features/settings/actions"
 import { useLanguage } from "@/contexts/LanguageContext"
 
+// Mirrors the global categories (and their default colors) in the DB
 const DEFAULT_CATEGORY_COLORS: Record<string, string> = {
-  'Salary': '#10b981',      
-  'Freelance': '#3b82f6',   
-  'Gift': '#f59e0b',        
-  'Income': '#14b8a6',      
-  'Transfer In': '#8b5cf6', 
+  'Salary': '#10b981',
+  'Freelance': '#3b82f6',
+  'Business': '#8b5cf6',
+  'Investment Income': '#2dd4bf',
+  'Gift': '#f59e0b',
+  'Transfer In': '#6366f1',
   'Other Income': '#ec4899',
-  'Food': '#ef4444',        
-  'Transport': '#f97316',   
-  'Housing': '#06b6d4',     
-  'Utilities': '#eab308',   
-  'Shopping': '#d946ef',    
+  'Food': '#ef4444',
+  'Groceries': '#84cc16',
+  'Transport': '#f97316',
+  'Housing': '#06b6d4',
+  'Utilities': '#eab308',
+  'Shopping': '#d946ef',
+  'Personal Care': '#ec4899',
   'Entertainment': '#6366f1',
-  'Transfer Out': '#8b5cf6', 
-  'Investment': '#2dd4bf',  
-  'Saving': '#34d399',      
+  'Education': '#3b82f6',
+  'Family & Pets': '#f43f5e',
+  'Health & Medical': '#14b8a6',
+  'Investment': '#2dd4bf',
+  'Saving': '#10b981',
+  'Transfer Out': '#8b5cf6',
+  'Debt Payment': '#ef4444',
+  'Gift & Donation': '#f59e0b',
   'Other Expense': '#64748b'
 }
 
 export function CategorySettingsCard() {
-  const { t, language } = useLanguage()
+  const { t, tc } = useLanguage()
   const [colors, setColors] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -56,9 +65,9 @@ export function CategorySettingsCard() {
     setSaving(true)
     const res = await updateCategoryColors(colors)
     if (res.success) {
-      toast.success(language === 'th' ? "บันทึกสีหมวดหมู่สำเร็จ" : "Category colors saved")
+      toast.success(t('settings.colors.saved'))
     } else {
-      toast.error(language === 'th' ? "บันทึกไม่สำเร็จ" : "Failed to save colors")
+      toast.error(t('settings.colors.save_failed'))
     }
     setSaving(false)
   }
@@ -67,7 +76,7 @@ export function CategorySettingsCard() {
     if (!newCategory.trim()) return
     const cat = newCategory.trim()
     if (colors[cat] || DEFAULT_CATEGORY_COLORS[cat]) {
-      toast.error(language === 'th' ? "มีหมวดหมู่นี้อยู่แล้ว" : "Category already exists")
+      toast.error(t('settings.colors.exists'))
       return
     }
     setColors(prev => ({ ...prev, [cat]: '#64748b' }))
@@ -86,7 +95,7 @@ export function CategorySettingsCard() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-xl">
             <Palette className="h-5 w-5 text-primary" />
-            สีหมวดหมู่ (Category Colors)
+            {t('settings.colors.title')}
           </CardTitle>
         </CardHeader>
         <CardContent className="flex justify-center p-8">
@@ -105,35 +114,33 @@ export function CategorySettingsCard() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-xl">
           <Palette className="h-5 w-5 text-primary" />
-          สีหมวดหมู่ (Category Colors)
+          {t('settings.colors.title')}
         </CardTitle>
         <CardDescription>
-          {language === 'th' 
-            ? "ตั้งค่าสีเริ่มต้นสำหรับแต่ละหมวดหมู่ รวมถึงจัดการหมวดหมู่ใหม่ที่คุณสร้างขึ้นเอง" 
-            : "Configure default colors for each category and manage your custom categories."}
+          {t('settings.colors.desc')}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         
         {/* Custom Categories Section */}
         <div className="space-y-4">
-          <h3 className="font-medium text-foreground text-sm border-b pb-2 border-border/50">หมวดหมู่เพิ่มเติม (Custom Categories)</h3>
+          <h3 className="font-medium text-foreground text-sm border-b pb-2 border-border/50">{t('settings.colors.custom')}</h3>
           
           <div className="flex gap-2">
             <Input 
-              placeholder={language === 'th' ? "พิมพ์ชื่อหมวดหมู่ใหม่..." : "New category name..."}
+              placeholder={t('settings.colors.custom_ph')}
               value={newCategory}
               onChange={(e) => setNewCategory(e.target.value)}
               className="bg-background/50"
               onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
             />
             <Button onClick={handleAddCategory} variant="secondary" className="shrink-0">
-              <Plus className="w-4 h-4 mr-1" /> Add
+              <Plus className="w-4 h-4 mr-1" /> {t('common.add')}
             </Button>
           </div>
 
           {customCats.length === 0 ? (
-            <p className="text-xs text-muted-foreground italic">ไม่มีหมวดหมู่เพิ่มเติม</p>
+            <p className="text-xs text-muted-foreground italic">{t('settings.colors.custom_empty')}</p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <AnimatePresence>
@@ -166,7 +173,7 @@ export function CategorySettingsCard() {
 
         {/* Default Categories Section */}
         <div className="space-y-4">
-          <h3 className="font-medium text-foreground text-sm border-b pb-2 border-border/50">หมวดหมู่พื้นฐาน (Default Categories)</h3>
+          <h3 className="font-medium text-foreground text-sm border-b pb-2 border-border/50">{t('settings.colors.default')}</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {defaultCats.map(cat => (
               <div key={cat} className="flex items-center justify-between p-2 rounded-lg bg-background/30 border border-border/30">
@@ -177,7 +184,7 @@ export function CategorySettingsCard() {
                     onChange={(e) => handleColorChange(cat, e.target.value)}
                     className="w-8 h-8 rounded cursor-pointer shrink-0 border-0 p-0 bg-transparent"
                   />
-                  <span className="text-sm font-medium truncate">{cat}</span>
+                  <span className="text-sm font-medium truncate">{tc(cat)}</span>
                 </div>
               </div>
             ))}
@@ -187,7 +194,7 @@ export function CategorySettingsCard() {
         <div className="pt-4 flex justify-end">
           <Button onClick={handleSave} disabled={saving} className="shadow-md">
             {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-            {language === 'th' ? "บันทึกการตั้งค่าสี" : "Save Colors"}
+            {t('settings.colors.save')}
           </Button>
         </div>
       </CardContent>

@@ -11,8 +11,10 @@ import { Separator } from "@/components/ui/separator"
 import { signOut } from "@/features/auth/actions"
 import { TaxSettingsCard } from "@/components/settings/TaxSettingsCard"
 import { CategorySettingsCard } from "@/components/settings/CategorySettingsCard"
+import { useLanguage } from "@/contexts/LanguageContext"
 
 export default function SettingsPage() {
+  const { t } = useLanguage()
   const [isSignOutProcessing, setIsSignOutProcessing] = useState(false)
 
   return (
@@ -20,9 +22,9 @@ export default function SettingsPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight text-foreground/90 flex items-center gap-2">
-            <Settings className="h-8 w-8 text-primary" /> ตั้งค่าแพลตฟอร์ม
+            <Settings className="h-8 w-8 text-primary" /> {t('settings.title')}
           </h2>
-          <p className="text-muted-foreground">จัดการการเชื่อมต่อเครือข่ายและการตั้งค่าส่วนตัวของคุณ</p>
+          <p className="text-muted-foreground">{t('settings.subtitle')}</p>
         </div>
       </div>
 
@@ -33,9 +35,9 @@ export default function SettingsPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-xl">
                 <Webhook className="h-5 w-5 text-primary" />
-                การเชื่อมต่อระบบ (Integrations)
+                {t('settings.integrations')}
               </CardTitle>
-              <CardDescription>บริการภายนอกที่กำลังเชื่อมต่อเพื่อส่งข้อมูลให้ PaoPao AI คิดวิเคราะห์</CardDescription>
+              <CardDescription>{t('settings.integrations_desc')}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between p-4 rounded-lg bg-background/50 border border-border/50 shadow-sm">
@@ -45,11 +47,11 @@ export default function SettingsPage() {
                   </div>
                   <div>
                     <h4 className="font-semibold text-foreground">LINE Official Account</h4>
-                    <p className="text-xs text-muted-foreground">รับรูปสลิปโอนเงินและข้อความแชทผ่าน LINE</p>
+                    <p className="text-xs text-muted-foreground">{t('settings.line_desc')}</p>
                   </div>
                 </div>
                 <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/30">
-                  <BadgeCheck className="w-3 h-3 mr-1" /> ใช้งานอยู่
+                  <BadgeCheck className="w-3 h-3 mr-1" /> {t('settings.active')}
                 </Badge>
               </div>
               
@@ -60,11 +62,11 @@ export default function SettingsPage() {
                   </div>
                   <div>
                     <h4 className="font-semibold text-foreground">Supabase Identity</h4>
-                    <p className="text-xs text-muted-foreground">ระบบคุ้มครองความปลอดภัยและยืนยันตัวตน</p>
+                    <p className="text-xs text-muted-foreground">{t('settings.supabase_desc')}</p>
                   </div>
                 </div>
                 <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/30">
-                  <BadgeCheck className="w-3 h-3 mr-1" /> เชื่อมต่อแล้ว
+                  <BadgeCheck className="w-3 h-3 mr-1" /> {t('settings.connected')}
                 </Badge>
               </div>
             </CardContent>
@@ -85,24 +87,24 @@ export default function SettingsPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-xl">
                 <BellRing className="h-5 w-5 text-primary" />
-                การตั้งค่าการแจ้งเตือน
+                {t('settings.notifications')}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h4 className="font-medium text-foreground">Morning Brief รายงานรายวันผ่าน LINE</h4>
-                  <p className="text-sm text-muted-foreground">รับสรุปยอดใช้จ่ายยามเช้าพร้อมคำแนะนำจาก AI ตอน 08:00 น. ของทุกวัน</p>
+                  <h4 className="font-medium text-foreground">{t('settings.brief_title')}</h4>
+                  <p className="text-sm text-muted-foreground">{t('settings.brief_desc')}</p>
                 </div>
-                <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/30">เปิดใช้งาน</Badge>
+                <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/30">{t('settings.enabled')}</Badge>
               </div>
               <Separator className="bg-border/50" />
               <div className="flex items-center justify-between">
                 <div>
-                  <h4 className="font-medium text-foreground">แจ้งเตือนงบประมาณเกินกำหนด</h4>
-                  <p className="text-sm text-muted-foreground">แจ้งเตือนทันทีเมื่อมีการใช้จ่ายเกิน 50%, 80%, 90% ของรายรับต่อเดือน</p>
+                  <h4 className="font-medium text-foreground">{t('settings.budget_title')}</h4>
+                  <p className="text-sm text-muted-foreground">{t('settings.budget_desc')}</p>
                 </div>
-                <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/30">เปิดใช้งาน</Badge>
+                <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/30">{t('settings.enabled')}</Badge>
               </div>
             </CardContent>
           </Card>
@@ -112,11 +114,11 @@ export default function SettingsPage() {
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.2 }}>
           <Card className="border-destructive/30 bg-destructive/5">
             <CardHeader>
-              <CardTitle className="text-destructive text-lg">โซนอันตราย (Danger Zone)</CardTitle>
+              <CardTitle className="text-destructive text-lg">{t('settings.danger')}</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground mb-4">
-                ออกจากระบบและล้างเซสชันเว็บทันที (การกระทำนี้จะ **ไม่ใช่** การลบประวัติการเดินบัญชีในระบบ)
+                {t('settings.danger_desc')}
               </p>
               <form action={signOut}>
                 <Button 
@@ -127,7 +129,7 @@ export default function SettingsPage() {
                   className="shadow-lg shadow-destructive/20"
                 >
                   {isSignOutProcessing ? <div className="animate-spin w-4 h-4 mr-2 border-2 border-white/30 border-t-white rounded-full"/> : <LogOut className="h-4 w-4 mr-2" />}
-                  ล็อกเอาท์ออกจากระบบ
+                  {t('settings.logout')}
                 </Button>
               </form>
             </CardContent>

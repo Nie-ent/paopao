@@ -4,6 +4,7 @@ import { createClient } from "@/utils/supabase/server"
 import { redirect } from "next/navigation"
 import { cookies } from "next/headers"
 import prisma from "@/lib/db"
+import { ensureDemoData } from "@/features/demo/seed"
 
 export async function signInWithLineDirect(formData: FormData) {
   const otpInput = formData.get("otp") as string
@@ -77,6 +78,7 @@ export async function signInWithLiffAction(lineId: string, displayName: string, 
 }
 
 export async function signInAsDemo() {
+  await ensureDemoData()
   const cookieStore = await cookies()
   cookieStore.set("demo_mode_bypass", "true", { maxAge: 60 * 60 * 24 * 7, path: '/' })
   cookieStore.set("pdpa_accepted", "true", { maxAge: 60 * 60 * 24 * 7, path: '/' })

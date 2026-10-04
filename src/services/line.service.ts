@@ -1,6 +1,7 @@
 import { lineClient, lineBlobClient } from "@/config/line";
-import { extractTransactionFromText, extractTransactionFromImage, extractTransactionsFromImages, ExtractedTransaction } from "@/services/ai.service";
+import { extractTransactionsFromText, extractTransactionFromImage, extractTransactionsFromImages, ExtractedTransaction } from "@/services/ai.service";
 import prisma from "@/lib/db";
+import { quickParseTransaction } from "@/services/quick-parse";
 
 /**
  * Prepares the user entry in the DB.
@@ -66,6 +67,18 @@ export async function handleLineEvent(event: any) {
   try {
     const baseUser = await getOrCreateUser(userId);
     const user = await checkAndResetAiQuota(baseUser);
+    
+    // Extract custom categories from user settings
+    let userCategories: string[] = [];
+    if (user.categoryColors) {
+      try {
+        const parsedColors = typeof user.categoryColors === 'string' ? JSON.parse(user.categoryColors) : user.categoryColors;
+        userCategories = Object.keys(parsedColors);
+      } catch (e) {
+        console.error("Failed to parse user category colors", e);
+      }
+    }
+
     let extractedDataArray: ExtractedTransaction[] = [];
 
     if (messageEvent.message.type === "text") {
@@ -86,20 +99,31 @@ export async function handleLineEvent(event: any) {
           data: { otp, otpExpiresAt }
         })
 
-        await lineClient.replyMessage({
-          replyToken: actualReplyToken,
-          messages: [
-            { type: "text", text: `✨ เข้าสู่แดชบอร์ดแบบไม่ต้องใช้รหัสผ่านผ่าน LINE LIFF ได้เลยครับ:\n${liffUrl}` },
-            { type: "text", text: `🔐 หรือถ้านำไปเปิดในเว็บเบราว์เซอร์ ใช้รหัส OTP ด้านล่างนี้เพื่อเข้าสู่ระบบ (รหัสมีอายุ 5 นาที) 👇` },
-            { type: "text", text: otp }
-          ]
-        });
+        try {
+          await lineClient.replyMessage({
+            replyToken: actualReplyToken,
+            messages: [
+              { type: "text", text: `✨ เข้าสู่แดชบอร์ดแบบไม่ต้องใช้รหัสผ่านผ่าน LINE LIFF ได้เลยครับ:\n${liffUrl}` },
+              { type: "text", text: `🔐 หรือถ้านำไปเปิดในเว็บเบราว์เซอร์ ใช้รหัส OTP ด้านล่างนี้เพื่อเข้าสู่ระบบ (รหัสมีอายุ 5 นาที) 👇` },
+              { type: "text", text: otp }
+            ]
+          });
+        } catch (error) {
+          console.error("Error replying OTP to LINE:", error);
+        }
         return;
       }
 
       const cleanText = textMessage.text.replace(/\n/g, ' ');
-      const extracted = await extractTransactionFromText(cleanText);
-      if (extracted) extractedDataArray.push(extracted);
+      // Simple single-item messages are parsed without AI; anything else goes to the LLM
+      const quick = await quickParseTransaction(cleanText.trim(), user.id);
+      if (quick) {
+        console.info("[line] parsed without AI:", quick.category, quick.amount);
+        extractedDataArray.push(quick);
+      } else {
+        const extracted = await extractTransactionsFromText(cleanText, userCategories);
+        extractedDataArray.push(...extracted);
+      }
     } 
     else if (messageEvent.message.type === "image") {
       const imageMessage = messageEvent.message as any;
@@ -143,7 +167,7 @@ export async function handleLineEvent(event: any) {
       }
 
       if (buffersToProcess.length === 1) {
-        const extracted = await extractTransactionFromImage(buffersToProcess[0]);
+        const extracted = await extractTransactionFromImage(buffersToProcess[0], "image/jpeg", userCategories);
         if (extracted) {
           if (extracted.isSubscriptionPayment) {
             await prisma.user.update({ where: { id: user.id }, data: { subscriptionTier: "PRO" } });
@@ -153,7 +177,7 @@ export async function handleLineEvent(event: any) {
         }
       } else {
         const mappedImages = buffersToProcess.map(b => ({ buffer: b, mimeType: "image/jpeg" }));
-        const extractedBatch = await extractTransactionsFromImages(mappedImages);
+        const extractedBatch = await extractTransactionsFromImages(mappedImages, userCategories);
         if (extractedBatch && extractedBatch.length > 0) {
           const subPayment = extractedBatch.find(e => e.isSubscriptionPayment);
           if (subPayment) {
@@ -193,14 +217,29 @@ export async function handleLineEvent(event: any) {
 
     const newTransactionsData: any[] = [];
 
+    // Fetch categories to map names to IDs
+    const categories = await prisma.category.findMany({
+      where: { OR: [{ userId: null }, { userId: user.id }] }
+    });
+
+    const getCategoryId = (name: string, type: 'INCOME' | 'EXPENSE') => {
+      const match = categories.find(c => c.name.toLowerCase() === name.toLowerCase());
+      if (match) return match.id;
+      const fallbackName = type === 'INCOME' ? 'Other Income' : 'Other Expense';
+      const fallback = categories.find(c => c.name === fallbackName);
+      return fallback?.id || categories[0].id;
+    };
+
     // Preparation for auto deductions and normal saving
     for (const data of extractedDataArray) {
       newTransactionsData.push({
         userId: user.id,
         type: data.type,
         amount: data.amount,
-        category: data.category,
+        categoryId: getCategoryId(data.category, data.type),
         note: data.note,
+        // We temporarily keep data.category on the object just for the statusText builder below
+        _categoryName: data.category
       });
 
       // Auto-Deductions Interception
@@ -210,8 +249,9 @@ export async function handleLineEvent(event: any) {
             userId: user.id,
             type: "EXPENSE",
             amount: user.salaryDeduction,
-            category: "Other Expense",
+            categoryId: getCategoryId("Other Expense", "EXPENSE"),
             note: "Social Security Auto-Deduction",
+            _categoryName: "Other Expense"
           });
         } else if (data.category === "Freelance" && user.freelanceTaxRate > 0) {
           const taxAmount = data.amount * (user.freelanceTaxRate / 100);
@@ -219,8 +259,9 @@ export async function handleLineEvent(event: any) {
             userId: user.id,
             type: "EXPENSE",
             amount: taxAmount,
-            category: "Other Expense",
+            categoryId: getCategoryId("Other Expense", "EXPENSE"),
             note: `Withholding Tax Auto-Deduction (${user.freelanceTaxRate}%)`,
+            _categoryName: "Other Expense"
           });
         }
       }
@@ -228,7 +269,8 @@ export async function handleLineEvent(event: any) {
 
     // Save to Database
     for (const tData of newTransactionsData) {
-      await prisma.transaction.create({ data: tData });
+      const { _categoryName, ...dbData } = tData;
+      await prisma.transaction.create({ data: dbData });
     }
 
     // Build status response msg

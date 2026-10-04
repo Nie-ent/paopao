@@ -1,16 +1,16 @@
 import { NextResponse } from 'next/server';
 import prisma from "@/lib/db";
 import { lineClient } from "@/config/line";
-import { GoogleGenAI } from "@google/genai";
+import { buildMorningBrief } from "@/lib/morning-brief";
+import { isAuthorizedCron } from "@/lib/cron-auth";
 
 // This endpoint should be triggered by Vercel Cron every morning (e.g. 08:00 AM)
 export async function GET(req: Request) {
   try {
-    // 1. Optional security check (uncomment and use in production)
-    // const authHeader = req.headers.get('Authorization');
-    // if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    //   return new NextResponse("Unauthorized", { status: 401 });
-    // }
+    // 1. Only Vercel Cron (which sends `Bearer ${CRON_SECRET}`) may trigger this
+    if (!isAuthorizedCron(req)) {
+      return new NextResponse("Unauthorized", { status: 401 });
+    }
 
     // We calculate "Yesterday" strictly in Thailand Time (UTC+7) bounds.
     const now = new Date();
@@ -25,12 +25,13 @@ export async function GET(req: Request) {
     const startOfYesterdayUtc = new Date(yesterdayStartBkk.getTime() - 7 * 60 * 60 * 1000);
     const endOfYesterdayUtc = new Date(yesterdayEndBkk.getTime() - 7 * 60 * 60 * 1000);
 
-    // 2. Find all users who have a valid LINE ID
+    // 2. Only users who logged something in the last 7 days. Push messages count against the
+    //    LINE OA quota, so inactive users are skipped.
+    const activeSince = new Date(startOfYesterdayUtc.getTime() - 6 * 24 * 60 * 60 * 1000);
     const activeUsers = await prisma.user.findMany({
       where: {
-        lineId: {
-          notIn: ["", "demo", "demo_line_id"]
-        }
+        lineId: { notIn: ["", "demo", "demo_line_id"] },
+        transactions: { some: { date: { gte: activeSince, lte: endOfYesterdayUtc } } }
       },
       include: {
         transactions: {
@@ -40,78 +41,17 @@ export async function GET(req: Request) {
       }
     });
 
-    if (activeUsers.length === 0) {
-      return NextResponse.json({ success: true, count: 0, message: "No active users today." }, { status: 200 });
-    }
-
-    const ai = new GoogleGenAI({ apiKey: process.env.AI_API_KEY || "dummy" });
-
-    // 3. Process and push message to each user
+    // 3. Build a templated brief per user (no AI call) and push it
     let sentCount = 0;
     for (const user of activeUsers) {
-      if (!user.lineId || user.lineId === "demo" || user.lineId === "demo_line_id") continue; // Skip demo/unlinked users
-
-      const expenses = user.transactions.filter(t => t.type === 'EXPENSE');
-      const totalSpent = expenses.reduce((sum, t) => sum + t.amount, 0);
-      const totalIncome = user.transactions.filter(t => t.type === 'INCOME').reduce((sum, t) => sum + t.amount, 0);
-      
-      let prompt = "";
-
-      if (totalSpent === 0 && totalIncome === 0) {
-        prompt = `
-Write a short 3-line Thai morning brief for LINE.
-Rules:
-1. Start with "🌅 สวัสดีตอนเช้า สรุปยอดเงินเมื่อวานมาแล้ว!"
-2. Congratulate the user enthusiastically for having 0 expenses yesterday (ไม่มียอดใช้จ่ายเลย). Encourage them to keep saving.
-3. No markdown asterisks(**). Use emojis.
-`;
-      } else if (totalSpent === 0 && totalIncome > 0) {
-        prompt = `
-Write a short 3-line Thai morning brief for LINE.
-Earned: ฿${totalIncome}.
-Rules:
-1. Start with "🌅 สวัสดีตอนเช้า สรุปยอดเงินเมื่อวานมาแล้ว!"
-2. Congratulate the user for having 0 expenses yesterday and earning ฿${totalIncome}. It's a perfect day for saving!
-3. No markdown asterisks(**). Use emojis.
-`;
-      } else {
-        // Optimize: Instead of sending all transactions, group them by category to reduce token usage
-        const categoryTotals = expenses.reduce((acc, t) => {
-          const catName = (t as any).category?.name || 'Other Expense';
-          acc[catName] = (acc[catName] || 0) + t.amount;
-          return acc;
-        }, {} as Record<string, number>);
-        const topCategory = Object.entries(categoryTotals).sort((a,b) => b[1] - a[1])[0]?.[0] || 'N/A';
-
-        prompt = `
-Write a short 3-line Thai morning brief for LINE.
-Spent: ฿${totalSpent}, Earned: ฿${totalIncome}. Top Expense Category: ${topCategory}.
-Rules:
-1. Start with "🌅 สวัสดีตอนเช้า สรุปยอดเงินเมื่อวานมาแล้ว!"
-2. 1-sentence summary.
-3. 1 short tip based on the top expense category.
-4. No markdown asterisks(**). Use emojis.
-`;
-      }
-      
       try {
-        const response = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: prompt,
-          config: { temperature: 0.7 }
-        });
-
-        const replyText = response.text || `🌅 สวัสดีตอนเช้า: เมื่อวานคุณไม่มีค่าใช้จ่ายเลย เก่งมากครับ ขอให้วันนี้เป็นวันที่ดีนะ!`;
-        
-        // Push message via LINE Official Account
         await lineClient.pushMessage({
           to: user.lineId,
-          messages: [{ type: "text", text: replyText.replace(/\*\*/g, '') }] // Strip bold markdown
+          messages: [{ type: "text", text: buildMorningBrief(user.transactions) }]
         });
-
         sentCount++;
-      } catch (aiError) {
-        console.error(`Failed to generate/push digest to user ${user.id}:`, aiError);
+      } catch (pushError) {
+        console.error(`Failed to push digest to user ${user.id}:`, pushError);
       }
     }
 
@@ -122,3 +62,4 @@ Rules:
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
+

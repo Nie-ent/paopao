@@ -17,10 +17,11 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "PaoPao (เป๋าเป๋า)",
-  description: "เรื่องเงินปล่อยให้เป็นหน้าที่เรา คุณแค่ไปใช้ชีวิตให้มีความสุขก็พอ",
+  description: "AI personal finance assistant on LINE: log expenses by chat or slip photo. | เรื่องเงินปล่อยให้เป็นหน้าที่เรา คุณแค่ไปใช้ชีวิตให้มีความสุขก็พอ",
 };
 
 import { Toaster } from "@/components/ui/sonner";
+import { LanguageProvider } from "@/contexts/LanguageContext";
 
 export default function RootLayout({
   children,
@@ -33,7 +34,7 @@ export default function RootLayout({
       className={`${kanit.variable} ${notoSansThai.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        {children}
+        <LanguageProvider>{children}</LanguageProvider>
         <Toaster position="top-right" richColors closeButton />
       </body>
     </html>
