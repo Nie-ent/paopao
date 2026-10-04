@@ -25,7 +25,7 @@ export default function AIInsightsPage() {
     setError(null)
     const res = await generateFinancialAdvice(language)
     if (res.error) {
-      setError(res.error)
+      setError(t(res.error))
     } else if (res.advice) {
       setAdvice(res.advice)
     }

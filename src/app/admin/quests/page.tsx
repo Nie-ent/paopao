@@ -170,7 +170,7 @@ export default function AdminQuestsPage() {
                 <td className="px-6 py-4"><span className="bg-slate-100 text-slate-700 px-2 py-1 rounded text-xs font-medium">{q.type}</span></td>
                 <td className="px-6 py-4 text-orange-600 font-bold">+{q.points}</td>
                 <td className="px-6 py-4">
-                  <span className={`px-2 py-1 rounded text-xs font-medium \${q.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+                  <span className={`px-2 py-1 rounded text-xs font-medium ${q.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
                     {q.status}
                   </span>
                 </td>

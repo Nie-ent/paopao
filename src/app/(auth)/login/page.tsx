@@ -9,23 +9,27 @@ import { toast } from "sonner"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { signInWithLineDirect, signInAsDemo, signInWithLiffAction } from "@/features/auth/actions"
+import { useLanguage } from "@/contexts/LanguageContext"
+import { LanguageToggle } from "@/components/layouts/LanguageToggle"
 
 function ErrorMessageHandler() {
+  const { t } = useLanguage()
   const searchParams = useSearchParams()
   const errorMsg = searchParams.get("error")
 
   useEffect(() => {
     if (errorMsg) {
-      toast.error("Authentication Failed", { 
+      toast.error(t('login.failed'), { 
         description: decodeURIComponent(errorMsg)
       })
     }
-  }, [errorMsg])
+  }, [errorMsg, t])
 
   return null
 }
 
 export default function LoginPage() {
+  const { t } = useLanguage()
   const [isLiffLoading, setIsLiffLoading] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -70,9 +74,11 @@ export default function LoginPage() {
       {(isLiffLoading || isPending) && (
         <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/80 backdrop-blur-md">
           <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4" />
-          <p className="text-primary font-medium animate-pulse text-lg">กำลังเชื่อมโยงบัญชี LINE...</p>
+          <p className="text-primary font-medium animate-pulse text-lg">{t('login.linking')}</p>
         </div>
       )}
+
+      <LanguageToggle className="absolute top-4 right-4 z-20" />
 
       {/* Decorative blurred backgrounds */}
       <div className="absolute top-10 left-10 w-72 h-72 bg-primary/20 rounded-full blur-3xl pointer-events-none" />
@@ -94,17 +100,17 @@ export default function LoginPage() {
             <img src="/paopao-logo.png" alt="PaoPao Logo" className="h-40 w-auto object-contain mix-blend-multiply dark:mix-blend-normal drop-shadow-sm" />
           </motion.div>
           <p className="text-muted-foreground text-sm font-medium">
-            "เรื่องเงินปล่อยให้เป็นหน้าที่เรา คุณแค่ไปใช้ชีวิตให้มีความสุขก็พอ"
+            {t('login.tagline')}
           </p>
         </div>
 
         <div className="space-y-6">
           <form action={signInWithLineDirect} className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">รหัสเข้าใช้งาน (OTP Code)</label>
+              <label className="text-sm font-medium text-foreground">{t('login.otp_label')}</label>
               <Input 
                 name="otp" 
-                placeholder="กรอกรหัส 6 หลักที่ได้รับจาก LINE" 
+                placeholder={t('login.otp_placeholder')} 
                 required 
                 type="text"
                 pattern="[0-9]*"
@@ -112,12 +118,12 @@ export default function LoginPage() {
                 className="h-12 text-center text-lg tracking-widest bg-muted/50 border-border/50 focus-visible:ring-primary font-mono placeholder:font-sans placeholder:tracking-normal placeholder:text-sm"
               />
               <p className="text-xs text-muted-foreground mt-2 text-center font-medium">
-                💡 พิมพ์ <strong className="text-primary">"login"</strong> ในแชท LINE เป๋าเป๋า เพื่อรับรหัสเข้าใช้งาน!
+                {t('login.otp_hint_before')}<strong className="text-primary">"login"</strong>{t('login.otp_hint_after')}
               </p>
             </div>
             <Button type="submit" className="w-full h-12 text-base font-medium bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20 flex items-center gap-3">
               <MessageCircle className="w-5 h-5 fill-current" />
-              เข้าสู่ระบบด้วยรหัส OTP
+              {t('login.otp_submit')}
             </Button>
           </form>
           
@@ -127,20 +133,21 @@ export default function LoginPage() {
             </div>
             <div className="relative flex justify-center text-xs uppercase">
               <span className="bg-background/80 backdrop-blur-md px-2 text-muted-foreground rounded-full">
-                Or
+                {t('login.or')}
               </span>
             </div>
           </div>
 
           <form action={signInAsDemo}>
             <Button type="submit" variant="outline" className="w-full h-12 text-base font-medium glass-card hover:bg-primary/5 transition-colors">
-              Sign in as Demo User
+              {t('login.demo')}
             </Button>
+            <p className="mt-2 text-center text-xs text-muted-foreground">{t('login.demo_hint')}</p>
           </form>
         </div>
 
         <p className="mt-8 text-center text-xs text-muted-foreground">
-          By continuing, you agree to our Terms of Service and Privacy Policy.
+          {t('login.terms')}
         </p>
       </motion.div>
     </div>

@@ -1,19 +1,37 @@
 "use server"
 
 import prisma from "@/lib/db"
+import { resolveLineId } from "@/lib/auth-user"
 import { getUser } from "@/features/auth/actions"
 import { GoogleGenAI } from "@google/genai"
 import { unstable_cache } from "next/cache"
 
+function isQuotaError(error: any) {
+  const msg = String(error?.message || "").toLowerCase()
+  return error?.status === 429 || msg.includes("429") || msg.includes("quota") || msg.includes("exhausted")
+}
+
+// Try the next model when one is overloaded (503) or rate-limited
+const ADVICE_MODELS = ["gemini-flash-latest", "gemini-2.5-flash"]
+
+async function generateWithFallback(prompt: string) {
+  const ai = new GoogleGenAI({ apiKey: process.env.AI_API_KEY || "dummy" })
+  let lastError: unknown
+  for (const model of ADVICE_MODELS) {
+    try {
+      const response = await ai.models.generateContent({ model, contents: prompt, config: { temperature: 0.7 } })
+      return response.text
+    } catch (error) {
+      lastError = error
+      console.warn(`AI model ${model} failed, trying next`, error)
+    }
+  }
+  throw lastError
+}
+
 const getCachedInsight = unstable_cache(
   async (prompt: string, cacheDateString: string) => {
-    const ai = new GoogleGenAI({ apiKey: process.env.AI_API_KEY || "dummy" })
-    const response = await ai.models.generateContent({
-      model: "gemini-flash-latest",
-      contents: prompt,
-      config: { temperature: 0.7 }
-    })
-    return response.text
+    return generateWithFallback(prompt)
   },
   ['gemini-dashboard-insight'],
   { revalidate: 86400 } // 24 hours
@@ -21,13 +39,7 @@ const getCachedInsight = unstable_cache(
 
 const getCachedFinancialAdvice = unstable_cache(
   async (prompt: string, cacheDateString: string) => {
-    const ai = new GoogleGenAI({ apiKey: process.env.AI_API_KEY || "dummy" })
-    const response = await ai.models.generateContent({
-      model: "gemini-flash-latest",
-      contents: prompt,
-      config: { temperature: 0.7 }
-    })
-    return response.text
+    return generateWithFallback(prompt)
   },
   ['gemini-financial-advice'],
   { revalidate: 86400 }
@@ -40,10 +52,7 @@ export async function generateFinancialAdvice(language: string = 'en') {
   }
 
   // Determine LINE ID to match with Prisma
-  let lineId = "U9f4477a859862ce8589b09e879ec068c"
-  if (user.app_metadata?.provider === "line") {
-    lineId = (user as any).user_metadata.provider_id
-  }
+  const lineId = resolveLineId(user)
 
   const prismaUser = await prisma.user.findUnique({
     where: { lineId }
@@ -62,11 +71,12 @@ export async function generateFinancialAdvice(language: string = 'en') {
       userId: prismaUser.id,
       date: { gte: thirtyDaysAgo }
     },
-    orderBy: { date: 'desc' }
+    orderBy: { date: 'desc' },
+    include: { category: true }
   })
 
   if (transactions.length === 0) {
-    return { error: 'Not enough data. Please log some transactions via LINE first.', advice: null }
+    return { error: 'ai.error.no_data', advice: null }
   }
 
   // Aggregate by category
@@ -79,13 +89,14 @@ export async function generateFinancialAdvice(language: string = 'en') {
       totalIncome += t.amount
     } else {
       totalExpense += t.amount
-      categoryTotals[t.category] = (categoryTotals[t.category] || 0) + t.amount
+      const catName = t.category?.name || 'Other'
+      categoryTotals[catName] = (categoryTotals[catName] || 0) + t.amount
     }
   })
 
   // Format data for AI natively in the localized tongue to avoid interpretation drift
   const expensesList = Object.entries(categoryTotals).map(([cat, amount]) => `- ${cat}: ฿${amount.toLocaleString()}`).join('\n')
-  const transactionsList = transactions.slice(0, 5).map(t => `- ${t.date.toISOString().split('T')[0]}: [${t.type === 'INCOME' ? 'รับ' : 'จ่าย'}] ${t.category} ฿${t.amount.toLocaleString()} (${t.note || '-'})`).join('\n')
+  const transactionsList = transactions.slice(0, 5).map(t => `- ${t.date.toISOString().split('T')[0]}: [${t.type === 'INCOME' ? 'รับ' : 'จ่าย'}] ${t.category?.name || 'Other'} ฿${t.amount.toLocaleString()} (${t.note || '-'})`).join('\n')
 
   const prompt = language === 'th' ? `
 คุณเป็นผู้เชี่ยวชาญการให้คำปรึกษาทางการเงินส่วนบุคคล หน้าที่ของคุณคือการวิเคราะห์ภาพรวมการเงินใน 30 วันที่ผ่านมาของลูกค้า
@@ -131,7 +142,7 @@ Reply entirely in English.
     return { advice: insightText, error: null }
   } catch (error) {
     console.error("AI Generation Error", error)
-    return { error: 'Failed to generate insights from Gemini API. Ensure API key is valid.', advice: null }
+    return { error: isQuotaError(error) ? 'ai.error.quota' : 'ai.error.failed', advice: null }
   }
 }
 
@@ -139,10 +150,7 @@ export async function generateDashboardInsight(language: string = 'en', timefram
   const user = await getUser()
   if (!user) return { advice: null }
 
-  let lineId = "U9f4477a859862ce8589b09e879ec068c"
-  if (user.app_metadata?.provider === "line") {
-    lineId = (user as any).user_metadata.provider_id
-  }
+  const lineId = resolveLineId(user)
 
   const prismaUser = await prisma.user.findUnique({
     where: { lineId }
@@ -183,7 +191,7 @@ export async function generateDashboardInsight(language: string = 'en', timefram
   })
 
   if (income === 0 && expense === 0) {
-    return { advice: null }
+    return { advice: null, reason: 'NO_DATA' as const }
   }
 
   const prompt = language === 'th'
@@ -204,8 +212,8 @@ Provide EXACTLY ONE short, friendly, punchy sentence (max 20 words) giving an in
     const today = new Date().toISOString().split('T')[0] // "2026-04-20"
     const adviceText = await getCachedInsight(prompt, today)
     return { advice: adviceText, error: null }
-  } catch (error) {
+  } catch (error: any) {
     console.error("AI Generation Error", error)
-    return { advice: null, error: "AI service failed" }
+    return { advice: null, error: "AI service failed", reason: isQuotaError(error) ? 'QUOTA' as const : 'AI_ERROR' as const }
   }
 }

@@ -23,9 +23,11 @@ const EXPENSE_COLORS = ['#ef4444', '#f97316', '#eab308', '#06b6d4', '#6366f1', '
 const DONUT_COLORS = ['#10b981', '#ef4444'] // Income, Expense
 
 export default function DashboardOverview() {
-  const { t, language } = useLanguage()
+  const { t, tc, language, locale } = useLanguage()
   const router = useRouter()
-  const [timeframe, setTimeframe] = useState<Timeframe>('ALL')
+  const [timeframe, setTimeframe] = useState<Timeframe>('MONTH')
+  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1)
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear())
   const [dbData, setDbData] = useState<any>(null)
   const [insight, setInsight] = useState<string | null>(null)
   const [modalConfig, setModalConfig] = useState<{isOpen: boolean, title: string, data: any[], colors: string[]}>({
@@ -42,7 +44,7 @@ export default function DashboardOverview() {
   // Fetch Data Payload
   useEffect(() => {
     setDbData(null)
-    getDashboardData(timeframe).then((data) => {
+    getDashboardData(timeframe, selectedMonth, selectedYear, locale).then((data) => {
       setDbData(data)
       if (data && data.lastDailyQuestAt) {
         // legacy daily quest check ignored
@@ -50,7 +52,7 @@ export default function DashboardOverview() {
     }).catch((err) => {
       setDbData({ error: "Failed to connect to AI Core." })
     })
-  }, [timeframe])
+  }, [timeframe, selectedMonth, selectedYear, locale])
 
   const handleClaimDynamicQuest = async (questId: string) => {
     if (claimingId) return; // Prevent double click
@@ -58,13 +60,13 @@ export default function DashboardOverview() {
     try {
       const res = await claimDynamicQuest(questId);
       if (res.success) {
-        toast.success(language === 'th' ? "รับ PaoPoints เรียบร้อยแล้ว!" : "Points claimed successfully!");
+        toast.success(t('dashboard.quests.claim_success'));
         loadQuests()
         // Refresh dbData locally without full page reload
-        getDashboardData(timeframe).then(setDbData);
+        getDashboardData(timeframe, selectedMonth, selectedYear, locale).then(setDbData);
         window.dispatchEvent(new Event('points_updated'));
       } else {
-        toast.error(res.error || "เกิดข้อผิดพลาด");
+        toast.error(res.error || t('common.something_wrong'));
       }
     } finally {
       setClaimingId(null);
@@ -76,15 +78,17 @@ export default function DashboardOverview() {
     generateDashboardInsight(language, 'MONTH').then(res => {
       if (res?.advice) {
         setInsight(res.advice)
-      } else if (res?.error) {
-        setInsight(res.error)
+      } else if (res?.reason === 'NO_DATA') {
+        setInsight(t('dashboard.insight.no_data'))
+      } else if (res?.reason === 'QUOTA') {
+        setInsight(t('dashboard.insight.quota'))
       } else {
-        setInsight(language === 'th' ? "❌ ไม่สามารถดึงคำแนะนำได้ (โควต้าระบบของ PaoPao อาจเต็มแล้ว)" : "❌ PaoPao service unavailable. Your quota may be exhausted.")
+        setInsight(t('dashboard.insight.error'))
       }
     }).catch(() => {
-      setInsight(language === 'th' ? "❌ การเชื่อมต่อล้มเหลว" : "❌ Connection failed.")
+      setInsight(t('dashboard.insight.connection'))
     })
-  }, [language])
+  }, [language, t])
 
   if (!dbData) {
     return (
@@ -110,10 +114,12 @@ export default function DashboardOverview() {
     )
   }
 
-  const { chartData, stats, incomeByCategory, expenseByCategory } = dbData
+  const { chartData, stats } = dbData
+  const incomeByCategory = dbData.incomeByCategory.map((c: any) => ({ ...c, name: tc(c.name) }))
+  const expenseByCategory = dbData.expenseByCategory.map((c: any) => ({ ...c, name: tc(c.name) }))
   const balanceData = [
-    { name: 'Income', value: stats.totalIncome },
-    { name: 'Expense', value: stats.totalExpense }
+    { name: t('common.income'), value: stats.totalIncome },
+    { name: t('common.expense'), value: stats.totalExpense }
   ]
 
   return (
@@ -130,7 +136,7 @@ export default function DashboardOverview() {
             onClick={() => setTimeframe('ALL')}
             className={timeframe === 'ALL' ? 'shadow-sm whitespace-nowrap' : 'whitespace-nowrap'}
           >
-            <Activity className="w-4 h-4 mr-2" /> ทั้งหมด
+            <Activity className="w-4 h-4 mr-2" /> {t('dashboard.time.all')}
           </Button>
           <Button 
             variant={timeframe === 'YTD' ? 'default' : 'ghost'} 
@@ -138,7 +144,7 @@ export default function DashboardOverview() {
             onClick={() => setTimeframe('YTD')}
             className={timeframe === 'YTD' ? 'shadow-sm whitespace-nowrap' : 'whitespace-nowrap'}
           >
-            <Calendar className="w-4 h-4 mr-2" /> รายปี
+            <Calendar className="w-4 h-4 mr-2" /> {t('dashboard.time.ytd')}
           </Button>
           <Button 
             variant={timeframe === 'MONTH' ? 'default' : 'ghost'} 
@@ -146,9 +152,33 @@ export default function DashboardOverview() {
             onClick={() => setTimeframe('MONTH')}
             className={timeframe === 'MONTH' ? 'shadow-sm whitespace-nowrap' : 'whitespace-nowrap'}
           >
-            <Activity className="w-4 h-4 mr-2" /> รายเดือน
+            <Activity className="w-4 h-4 mr-2" /> {t('dashboard.time.month')}
           </Button>
         </div>
+        {timeframe === 'MONTH' && (
+          <div className="flex gap-2 self-start sm:self-auto">
+            <select 
+              className="bg-background border border-border rounded-md text-sm p-1.5 px-3 text-foreground shadow-sm h-9"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(Number(e.target.value))}
+            >
+              {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                <option key={m} value={m}>
+                  {new Date(0, m - 1).toLocaleString(locale, { month: 'long' })}
+                </option>
+              ))}
+            </select>
+            <select 
+              className="bg-background border border-border rounded-md text-sm p-1.5 px-3 text-foreground shadow-sm h-9"
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(Number(e.target.value))}
+            >
+              {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(y => (
+                <option key={y} value={y}>{y + (language === 'th' ? 543 : 0)}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -170,7 +200,7 @@ export default function DashboardOverview() {
               ) : (
                 <span className="flex items-center gap-2 opacity-60">
                   <Loader2 className="h-4 w-4 animate-spin" /> 
-                  {language === 'th' ? "ผู้ช่วยกำลังคิดคำแนะนำให้คุณ..." : "Assistant is thinking..."}
+                  {t('dashboard.insight.thinking')}
                 </span>
               )}
             </AlertDescription>
@@ -184,7 +214,7 @@ export default function DashboardOverview() {
         >
           <Card className="glass-card shadow-sm h-full flex flex-col p-5 border-orange-200/50 bg-gradient-to-br from-orange-50 to-amber-50/50 dark:from-orange-950/20 dark:to-orange-900/10">
             <h3 className="font-bold flex items-center gap-2 mb-4 text-orange-600 dark:text-orange-400">
-              <span className="text-xl">🎯</span> {language === 'th' ? 'ภารกิจมาใหม่' : 'Active Quests'}
+              <span className="text-xl">🎯</span> {t('dashboard.quests.title')}
             </h3>
             <div className="flex-1 flex overflow-x-auto snap-x snap-mandatory gap-4 pb-2 no-scrollbar" style={{ minHeight: '120px' }}>
               {activeQuests.map(q => {
@@ -204,7 +234,7 @@ export default function DashboardOverview() {
                        <p className="text-[13px] text-muted-foreground line-clamp-2">{q.description}</p>
                        {q.condition === 'LOG_TRANSACTION_TODAY' && (
                          <span className="inline-block mt-2 px-2 py-0.5 rounded text-[11px] font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                           {language === 'th' ? 'ต้องบันทึกรายจ่ายวันนี้' : 'Log transaction today'}
+                           {t('dashboard.quests.log_today')}
                          </span>
                        )}
                      </div>
@@ -212,16 +242,16 @@ export default function DashboardOverview() {
                        size="sm"
                        disabled={isClaimed || claimingId !== null}
                        onClick={() => handleClaimDynamicQuest(q.id)}
-                       className={`w-full rounded-lg font-bold shadow-sm transition-all \${isClaimed ? 'bg-muted text-muted-foreground border border-border' : 'bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-orange-500/20 shadow-lg'}`}
+                       className={`w-full rounded-lg font-bold shadow-sm transition-all ${isClaimed ? 'bg-muted text-muted-foreground border border-border' : 'bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-orange-500/20 shadow-lg'}`}
                      >
-                       {claimingId === q.id ? <Loader2 className="w-4 h-4 animate-spin" /> : isClaimed ? (language === 'th' ? 'รับแล้ว ✅' : 'Claimed ✅') : `รับ ${q.points} Pts`}
+                       {claimingId === q.id ? <Loader2 className="w-4 h-4 animate-spin" /> : isClaimed ? t('dashboard.quests.claimed') : t('dashboard.quests.claim', { points: q.points })}
                      </Button>
                    </div>
                  )
               })}
               {activeQuests.length === 0 && (
                 <div className="text-center text-muted-foreground text-sm py-4">
-                  {language === 'th' ? 'ยังไม่มีภารกิจใหม่ในตอนนี้' : 'No quests available.'}
+                  {t('dashboard.quests.empty')}
                 </div>
               )}
             </div>
@@ -234,7 +264,7 @@ export default function DashboardOverview() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.0 }}>
           <Card 
             className="glass-panel overflow-hidden relative h-full flex flex-col cursor-pointer transition-all hover:ring-2 hover:ring-primary/50 hover:shadow-lg"
-            onClick={() => setModalConfig({ isOpen: true, title: t('dashboard.total_balance') || 'ยอดคงเหลือรวม', data: balanceData, colors: DONUT_COLORS })}
+            onClick={() => setModalConfig({ isOpen: true, title: t('dashboard.total_balance'), data: balanceData, colors: DONUT_COLORS })}
           >
             <div className="absolute right-0 top-0 w-24 h-24 bg-primary/5 rounded-full blur-2xl -mt-8 -mr-8 pointer-events-none" />
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -244,7 +274,7 @@ export default function DashboardOverview() {
             <CardContent className="flex-1 flex flex-col justify-between">
               <div>
                 <div className="text-2xl font-bold">฿{stats.totalBalance.toLocaleString()}</div>
-                <p className="text-xs text-muted-foreground mt-1">Overall Net Balance</p>
+                <p className="text-xs text-muted-foreground mt-1">{t('dashboard.net_balance')}</p>
               </div>
               <div className="h-[280px] w-full mt-2">
                 <ResponsiveContainer width="100%" height="100%">
@@ -265,7 +295,7 @@ export default function DashboardOverview() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.1 }}>
           <Card 
             className="glass-panel overflow-hidden relative h-full flex flex-col cursor-pointer transition-all hover:ring-2 hover:ring-emerald-500/50 hover:shadow-lg"
-            onClick={() => setModalConfig({ isOpen: true, title: t('dashboard.total_income'), data: incomeByCategory, colors: INCOME_COLORS })}
+            onClick={() => setModalConfig({ isOpen: true, title: t('dashboard.total_income'), data: incomeByCategory, colors: incomeByCategory.map((c: any) => c.color) })}
           >
             <div className="absolute right-0 top-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-2xl -mt-8 -mr-8 pointer-events-none" />
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -275,14 +305,14 @@ export default function DashboardOverview() {
             <CardContent className="flex-1 flex flex-col justify-between">
               <div>
                 <div className="text-2xl font-bold">฿{stats.totalIncome.toLocaleString()}</div>
-                <p className="text-xs text-muted-foreground mt-1">Lifetime Income</p>
+                <p className="text-xs text-muted-foreground mt-1">{t('dashboard.income_period')}</p>
               </div>
               <div className="h-[280px] w-full mt-2">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart margin={{ top: 10, right: 10, bottom: 20, left: 0 }}>
-                    <Pie data={incomeByCategory.length ? incomeByCategory : [{name: 'None', value: 1}]} innerRadius={55} outerRadius={75} paddingAngle={2} dataKey="value" stroke="none">
-                      {(incomeByCategory.length ? incomeByCategory : [{name: 'None', value: 1}]).map((entry: any, index: number) => (
-                        <Cell key={`cell-${index}`} fill={incomeByCategory.length ? INCOME_COLORS[index % INCOME_COLORS.length] : '#888'} />
+                    <Pie data={incomeByCategory.length ? incomeByCategory : [{name: t('dashboard.none'), value: 1}]} innerRadius={55} outerRadius={75} paddingAngle={2} dataKey="value" stroke="none">
+                      {(incomeByCategory.length ? incomeByCategory : [{name: t('dashboard.none'), value: 1, color: '#888'}]).map((entry: any, index: number) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
                     <Tooltip contentStyle={{ borderRadius: '8px', fontSize: '12px' }} formatter={(v: any) => `฿${Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 })}`} />
@@ -298,7 +328,7 @@ export default function DashboardOverview() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.2 }}>
           <Card 
             className="glass-panel overflow-hidden relative h-full flex flex-col cursor-pointer transition-all hover:ring-2 hover:ring-red-500/50 hover:shadow-lg"
-            onClick={() => setModalConfig({ isOpen: true, title: t('dashboard.total_expense'), data: expenseByCategory, colors: EXPENSE_COLORS })}
+            onClick={() => setModalConfig({ isOpen: true, title: t('dashboard.total_expense'), data: expenseByCategory, colors: expenseByCategory.map((c: any) => c.color) })}
           >
             <div className="absolute right-0 top-0 w-24 h-24 bg-red-500/5 rounded-full blur-2xl -mt-8 -mr-8 pointer-events-none" />
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -308,14 +338,14 @@ export default function DashboardOverview() {
             <CardContent className="flex-1 flex flex-col justify-between">
               <div>
                 <div className="text-2xl font-bold">฿{stats.totalExpense.toLocaleString()}</div>
-                <p className="text-xs text-muted-foreground mt-1">Lifetime Expense</p>
+                <p className="text-xs text-muted-foreground mt-1">{t('dashboard.expense_period')}</p>
               </div>
               <div className="h-[280px] w-full mt-2">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart margin={{ top: 10, right: 10, bottom: 20, left: 0 }}>
-                    <Pie data={expenseByCategory.length ? expenseByCategory : [{name: 'None', value: 1}]} innerRadius={55} outerRadius={75} paddingAngle={2} dataKey="value" stroke="none">
-                      {(expenseByCategory.length ? expenseByCategory : [{name: 'None', value: 1}]).map((entry: any, index: number) => (
-                        <Cell key={`cell-${index}`} fill={expenseByCategory.length ? EXPENSE_COLORS[index % EXPENSE_COLORS.length] : '#888'} />
+                    <Pie data={expenseByCategory.length ? expenseByCategory : [{name: t('dashboard.none'), value: 1}]} innerRadius={55} outerRadius={75} paddingAngle={2} dataKey="value" stroke="none">
+                      {(expenseByCategory.length ? expenseByCategory : [{name: t('dashboard.none'), value: 1, color: '#888'}]).map((entry: any, index: number) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
                     <Tooltip contentStyle={{ borderRadius: '8px', fontSize: '12px' }} formatter={(v: any) => `฿${Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 })}`} />
@@ -336,8 +366,8 @@ export default function DashboardOverview() {
         <Card className="glass-card">
           <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <CardTitle>Cash Flow Overview</CardTitle>
-              <CardDescription>Visualizing your cash flow across different timelines.</CardDescription>
+              <CardTitle>{t('dashboard.cashflow.title')}</CardTitle>
+              <CardDescription>{t('dashboard.cashflow.desc')}</CardDescription>
             </div>
             {/* The timeframe buttons have been moved to the top of the dashboard */}
           </CardHeader>
@@ -360,8 +390,8 @@ export default function DashboardOverview() {
                   <Tooltip 
                     contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                   />
-                  <Area type="monotone" dataKey="income" stroke="oklch(0.60 0.11 200)" fillOpacity={1} fill="url(#colorIncome)" />
-                  <Area type="monotone" dataKey="expense" stroke="oklch(0.60 0.15 20)" fillOpacity={1} fill="url(#colorExpense)" />
+                  <Area type="monotone" dataKey="income" name={t('common.income')} stroke="oklch(0.60 0.11 200)" fillOpacity={1} fill="url(#colorIncome)" />
+                  <Area type="monotone" dataKey="expense" name={t('common.expense')} stroke="oklch(0.60 0.15 20)" fillOpacity={1} fill="url(#colorExpense)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -373,7 +403,7 @@ export default function DashboardOverview() {
       <Dialog open={modalConfig.isOpen} onOpenChange={(open) => setModalConfig({ ...modalConfig, isOpen: open })}>
         <DialogContent className="sm:max-w-md max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>รายละเอียดหมวดหมู่ ({modalConfig.title})</DialogTitle>
+            <DialogTitle>{t('dashboard.category_detail', { title: modalConfig.title })}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-4">
             {modalConfig.data && modalConfig.data.length > 0 ? (
@@ -399,7 +429,7 @@ export default function DashboardOverview() {
                 });
               })()
             ) : (
-              <div className="text-center text-muted-foreground py-8">ไม่มีข้อมูลในหมวดหมู่นี้</div>
+              <div className="text-center text-muted-foreground py-8">{t('dashboard.category_empty')}</div>
             )}
           </div>
         </DialogContent>

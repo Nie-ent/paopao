@@ -85,7 +85,7 @@ export async function createReward(data: { name: string, points: number, iconStr
 
 export async function updateRewardStatus(id: string, status: string) {
   if (!await isAdmin()) return { error: "Unauthorized" }
-  await prisma.reward.update({ where: { id }, data: { status } })
+  await prisma.reward.update({ where: { id }, data: { status: status as any } })
   return { success: true }
 }
 
@@ -117,7 +117,7 @@ export async function updateClaimStatus(id: string, status: string) {
   
   const updated = await prisma.rewardClaim.update({ 
     where: { id }, 
-    data: { status },
+    data: { status: status as any },
     include: { user: true, reward: true }
   })
 
@@ -143,19 +143,19 @@ export async function getAdminQuests() {
 
 export async function createQuest(data: { title: string, description: string, points: number, type: string, condition?: string }) {
   if (!await isAdmin()) return { error: "Unauthorized" }
-  await prisma.quest.create({ data: { ...data, status: 'ACTIVE' } })
+  await prisma.quest.create({ data: { ...data, type: data.type as any, condition: (data.condition as any) || 'NONE', status: 'ACTIVE' } })
   return { success: true }
 }
 
 export async function updateQuestStatus(id: string, status: string) {
   if (!await isAdmin()) return { error: "Unauthorized" }
-  await prisma.quest.update({ where: { id }, data: { status } })
+  await prisma.quest.update({ where: { id }, data: { status: status as any } })
   return { success: true }
 }
 
 export async function updateQuest(id: string, data: { title: string, description: string, points: number, type: string, condition?: string }) {
   if (!await isAdmin()) return { error: "Unauthorized" }
-  await prisma.quest.update({ where: { id }, data })
+  await prisma.quest.update({ where: { id }, data: { ...data, type: data.type as any, condition: data.condition as any } })
   return { success: true }
 }
 

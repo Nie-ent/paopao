@@ -41,3 +41,9 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+
+# local secrets and one-off scripts
+.tmp.env
+scratch_*
+/.next */
+import_nie.ts

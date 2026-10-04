@@ -45,12 +45,12 @@ const items = [
     icon: Target,
   },
   {
-    titleKey: "Chat",
+    titleKey: "nav.chat",
     url: "/chat",
     icon: MessageSquare,
   },
   {
-    titleKey: "Subscription",
+    titleKey: "nav.subscription",
     url: "/subscription",
     icon: Crown,
   },

@@ -41,11 +41,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <h1 className="font-black text-xl tracking-tight">PaoPao<span className="text-orange-500">Admin</span></h1>
         </div>
         <nav className="flex-1 p-4 space-y-2">
-          <Link href="/admin" className={`flex items-center gap-3 p-3 rounded-lg hover:bg-slate-100 \${pathname === '/admin' ? 'bg-slate-100 font-semibold' : ''}`}><LayoutDashboard className="w-5 h-5"/> ภาพรวม</Link>
-          <Link href="/admin/users" className={`flex items-center gap-3 p-3 rounded-lg hover:bg-slate-100 \${pathname?.includes('/users') ? 'bg-slate-100 font-semibold' : ''}`}><Users className="w-5 h-5"/> จัดการบัญชีผู้เล่น</Link>
-          <Link href="/admin/rewards" className={`flex items-center gap-3 p-3 rounded-lg hover:bg-slate-100 \${pathname?.includes('/rewards') ? 'bg-slate-100 font-semibold' : ''}`}><Package className="w-5 h-5"/> จัดการของรางวัล</Link>
-          <Link href="/admin/quests" className={`flex items-center gap-3 p-3 rounded-lg hover:bg-slate-100 \${pathname?.includes('/quests') ? 'bg-slate-100 font-semibold' : ''}`}><ListChecks className="w-5 h-5"/> จัดการภารกิจ</Link>
-          <Link href="/admin/claims" className={`flex items-center gap-3 p-3 rounded-lg hover:bg-slate-100 \${pathname?.includes('/claims') ? 'bg-slate-100 font-semibold' : ''}`}><ListChecks className="w-5 h-5"/> ตรวจสอบการส่งของ</Link>
+          <Link href="/admin" className={`flex items-center gap-3 p-3 rounded-lg hover:bg-slate-100 ${pathname === '/admin' ? 'bg-slate-100 font-semibold' : ''}`}><LayoutDashboard className="w-5 h-5"/> ภาพรวม</Link>
+          <Link href="/admin/users" className={`flex items-center gap-3 p-3 rounded-lg hover:bg-slate-100 ${pathname?.includes('/users') ? 'bg-slate-100 font-semibold' : ''}`}><Users className="w-5 h-5"/> จัดการบัญชีผู้เล่น</Link>
+          <Link href="/admin/rewards" className={`flex items-center gap-3 p-3 rounded-lg hover:bg-slate-100 ${pathname?.includes('/rewards') ? 'bg-slate-100 font-semibold' : ''}`}><Package className="w-5 h-5"/> จัดการของรางวัล</Link>
+          <Link href="/admin/quests" className={`flex items-center gap-3 p-3 rounded-lg hover:bg-slate-100 ${pathname?.includes('/quests') ? 'bg-slate-100 font-semibold' : ''}`}><ListChecks className="w-5 h-5"/> จัดการภารกิจ</Link>
+          <Link href="/admin/claims" className={`flex items-center gap-3 p-3 rounded-lg hover:bg-slate-100 ${pathname?.includes('/claims') ? 'bg-slate-100 font-semibold' : ''}`}><ListChecks className="w-5 h-5"/> ตรวจสอบการส่งของ</Link>
         </nav>
         <div className="p-4 border-t">
           <button onClick={async () => { await logoutAdmin(); window.location.href = '/admin/login' }} className="flex items-center gap-3 p-3 w-full text-left text-red-600 rounded-lg hover:bg-red-50 transition-colors">

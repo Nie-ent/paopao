@@ -5,7 +5,6 @@ import { DashboardSidebar } from "@/components/layouts/DashboardSidebar"
 import { DashboardHeader } from "@/components/layouts/DashboardHeader"
 
 import { MobileMenuBar } from "@/components/layouts/MobileMenuBar"
-import { LanguageProvider } from "@/contexts/LanguageContext"
 
 export default function DashboardLayout({
   children,
@@ -13,7 +12,6 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   return (
-    <LanguageProvider>
       <SidebarProvider>
         <div className="flex min-h-screen w-full bg-background selection:bg-primary/20">
           <DashboardSidebar />
@@ -30,6 +28,5 @@ export default function DashboardLayout({
           <MobileMenuBar />
         </div>
       </SidebarProvider>
-    </LanguageProvider>
   )
 }

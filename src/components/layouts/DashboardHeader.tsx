@@ -7,6 +7,7 @@ import { toast } from "sonner"
 import { signOut } from "@/features/auth/actions"
 import { fetchProfileDataCached } from "@/lib/clientCache"
 import { useLanguage } from "@/contexts/LanguageContext"
+import { LanguageToggle } from "@/components/layouts/LanguageToggle"
 
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -20,6 +21,7 @@ export function DashboardHeader() {
   const pathname = usePathname()
   const [avatarUrl, setAvatarUrl] = React.useState<string>("https://github.com/shadcn.png")
   const [paoPoints, setPaoPoints] = React.useState<number>(0)
+  const [isDemo, setIsDemo] = React.useState(false)
   const [searchQuery, setSearchQuery] = React.useState<string>("")
   
   React.useEffect(() => {
@@ -28,6 +30,7 @@ export function DashboardHeader() {
         if (user) {
           if (user.avatarUrl) setAvatarUrl(user.avatarUrl)
           if (user.paoPoints !== undefined) setPaoPoints(user.paoPoints)
+          setIsDemo(user.lineId === 'demo')
         }
       })
     }
@@ -66,7 +69,7 @@ export function DashboardHeader() {
             <Search className="absolute left-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               type="search"
-              placeholder="ปรึกษาการเงิน หรือสร้างแผนด้วย AI..."
+              placeholder={t('header.search')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full rounded-full bg-muted/50 pl-9 border-none focus-visible:ring-1 focus-visible:ring-primary h-9 transition-all hover:bg-muted/70"
@@ -75,6 +78,12 @@ export function DashboardHeader() {
         )}
       </div>
       <div className="flex items-center gap-3 shrink-0 ml-4">
+        {isDemo && (
+          <span title={t('header.demo_banner')} className="hidden lg:inline-flex items-center rounded-full border border-amber-300/60 bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-400 whitespace-nowrap">
+            {t('header.demo_banner')}
+          </span>
+        )}
+        <LanguageToggle />
         <Link href="/rewards" className="flex">
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-100 dark:bg-orange-950/30 text-orange-600 dark:text-orange-400 font-bold text-sm cursor-pointer hover:bg-orange-200 transition-colors border border-orange-200 dark:border-orange-900/50">
             <span className="text-base">{paoPoints}</span>
@@ -83,7 +92,7 @@ export function DashboardHeader() {
         </Link>
         <button 
           className="relative rounded-full p-2 text-muted-foreground hover:bg-muted/50 transition-colors"
-          onClick={() => toast.info("No new alerts", { description: "You are fully caught up with the AI Digest." })}
+          onClick={() => toast.info(t('header.no_alerts'), { description: t('header.no_alerts_desc') })}
         >
           <Bell className="h-5 w-5" />
         </button>
@@ -117,7 +126,7 @@ export function DashboardHeader() {
               onClick={() => {
                 const newLang = language === 'en' ? 'th' : 'en';
                 setLanguage(newLang);
-                toast.success(newLang === 'th' ? "เปลี่ยนภาษาสำเร็จ" : "Language updated");
+                toast.success(newLang === 'th' ? 'เปลี่ยนภาษาสำเร็จ' : 'Language updated');
               }}
             >
               <Globe className="mr-2 h-4 w-4" />

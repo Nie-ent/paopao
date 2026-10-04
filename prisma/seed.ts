@@ -23,14 +23,14 @@ async function main() {
           {
             type: 'INCOME',
             amount: 50000,
-            category: 'Salary',
+            categoryId: 'dummy-id-for-typecheck-income',
             note: 'เดือนมกราคม',
             date: new Date(),
           },
           {
             type: 'EXPENSE',
             amount: 150,
-            category: 'Food',
+            categoryId: 'dummy-id-for-typecheck-expense',
             note: 'ข้าวผัดกะเพรา',
             date: new Date(),
           },

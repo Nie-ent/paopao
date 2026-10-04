@@ -9,8 +9,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { getUserSettings, updateDeductionSettings } from "@/features/settings/actions"
+import { useLanguage } from "@/contexts/LanguageContext"
 
 export function TaxSettingsCard() {
+  const { t } = useLanguage()
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [salaryDeduction, setSalaryDeduction] = useState("875")
@@ -40,9 +42,9 @@ export function TaxSettingsCard() {
     
     setIsSaving(false)
     if (res.success) {
-      toast.success("บันทึกการตั้งค่าสำเร็จ")
+      toast.success(t('settings.tax.saved'))
     } else {
-      toast.error("ไม่สามารถบันทึกการตั้งค่าได้")
+      toast.error(t('settings.tax.save_failed'))
     }
   }
 
@@ -53,9 +55,9 @@ export function TaxSettingsCard() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl">
               <Receipt className="h-5 w-5 text-primary" />
-              การหักภาษีและการตั้งค่าอัตโนมัติ
+              {t('settings.tax.title')}
             </CardTitle>
-            <CardDescription>ตั้งค่าจำนวนเงินที่จะหักออกเมื่อมีรายรับเงินเดือน หรือหัก ณ ที่จ่ายสำหรับฟรีแลนซ์</CardDescription>
+            <CardDescription>{t('settings.tax.desc')}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             {isLoading ? (
@@ -65,8 +67,8 @@ export function TaxSettingsCard() {
             ) : (
               <>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">หักประกันสังคมสำหรับเงินเดือน (บาท)</label>
-                  <p className="text-xs text-muted-foreground mb-2">หักออกโดยอัตโนมัติเมื่อเพิ่มรายการหมวดหมู่ "เงินเดือน" หรือ "Salary"</p>
+                  <label className="text-sm font-medium">{t('settings.tax.salary')}</label>
+                  <p className="text-xs text-muted-foreground mb-2">{t('settings.tax.salary_desc')}</p>
                   <Input 
                     type="number" 
                     value={salaryDeduction} 
@@ -76,8 +78,8 @@ export function TaxSettingsCard() {
                 </div>
                 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">หักภาษี ณ ที่จ่ายสำหรับฟรีแลนซ์ (%)</label>
-                  <p className="text-xs text-muted-foreground mb-2">หักออกเป็นเปอร์เซ็นต์โดยอัตโนมัติเมื่อเพิ่มรายการหมวดหมู่ "ฟรีแลนซ์" หรือ "Freelance"</p>
+                  <label className="text-sm font-medium">{t('settings.tax.freelance')}</label>
+                  <p className="text-xs text-muted-foreground mb-2">{t('settings.tax.freelance_desc')}</p>
                   <Input 
                     type="number" 
                     step="0.1"
@@ -92,7 +94,7 @@ export function TaxSettingsCard() {
           <CardFooter className="bg-muted/50 flex justify-end">
              <Button type="submit" disabled={isSaving || isLoading} className="gap-2">
                {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-               บันทึกการตั้งค่า
+               {t('settings.tax.save')}
              </Button>
           </CardFooter>
         </form>

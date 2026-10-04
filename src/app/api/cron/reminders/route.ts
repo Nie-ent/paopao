@@ -1,9 +1,14 @@
 import { NextResponse } from 'next/server';
 import prisma from "@/lib/db";
 import { lineClient } from "@/config/line";
+import { isAuthorizedCron } from "@/lib/cron-auth";
 
 // This endpoint is triggered by Vercel Cron every morning at 7:00 AM BKK (0 0 * * *)
 export async function GET(req: Request) {
+  if (!isAuthorizedCron(req)) {
+    return new NextResponse("Unauthorized", { status: 401 });
+  }
+
   try {
     const now = new Date();
     const bkkTime = new Date(now.getTime() + 7 * 60 * 60 * 1000);
@@ -63,7 +68,7 @@ export async function GET(req: Request) {
             _sum: { amount: true },
             where: {
               userId: user.id,
-              category: goal.trackCategory,
+              category: { name: goal.trackCategory },
               date: { 
                 gte: startDate, 
                 lte: goal.deadline ? new Date(goal.deadline.getTime() + 24 * 60 * 60 * 1000) : undefined

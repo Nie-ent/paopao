@@ -2,7 +2,8 @@
 
 import React, { useEffect, useState, useRef, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { ArrowLeftRight, ArrowDownRight, ArrowUpRight, Loader2, FileX2, Edit, Plus, Cat, Sparkle } from "lucide-react"
+import { ArrowLeftRight, ArrowDownRight, ArrowUpRight, Loader2, FileX2, Edit, Plus, Cat, Sparkle, Download } from "lucide-react"
+import * as XLSX from "xlsx"
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -17,10 +18,14 @@ import { useLanguage } from "@/contexts/LanguageContext"
 import { toast } from "sonner"
 
 type TransactionType = 'ALL' | 'INCOME' | 'EXPENSE'
+
+// YYYY-MM-DD in the viewer's local time (toISOString would shift to UTC)
+const toDateInput = (d: Date) => d.toLocaleDateString('en-CA')
 type SortBy = 'DATE_DESC' | 'DATE_ASC' | 'CATEGORY'
 
-const INCOME_CATEGORIES = ['Salary', 'Freelance', 'Gift', 'Income', 'Transfer In', 'Other Income']
-const EXPENSE_CATEGORIES = ['Food', 'Transport', 'Housing', 'Utilities', 'Shopping', 'Entertainment', 'Transfer Out', 'Investment', 'Saving', 'Other Expense']
+// Mirrors the global categories in the DB
+const INCOME_CATEGORIES = ['Salary', 'Freelance', 'Business', 'Investment Income', 'Gift', 'Transfer In', 'Other Income']
+const EXPENSE_CATEGORIES = ['Food', 'Groceries', 'Transport', 'Housing', 'Utilities', 'Shopping', 'Personal Care', 'Entertainment', 'Education', 'Family & Pets', 'Health & Medical', 'Investment', 'Saving', 'Transfer Out', 'Debt Payment', 'Gift & Donation', 'Other Expense']
 
 const DEFAULT_CATEGORY_COLORS: Record<string, string> = {
   // Income (based on dashboard INCOME_COLORS)
@@ -45,7 +50,7 @@ const DEFAULT_CATEGORY_COLORS: Record<string, string> = {
 }
 
 export default function TransactionsPage() {
-  const { t, language } = useLanguage()
+  const { t, tc, locale } = useLanguage()
   const [data, setData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -68,7 +73,7 @@ export default function TransactionsPage() {
     amount: '',
     category: 'Other Expense',
     type: 'EXPENSE',
-    date: new Date().toISOString().slice(0,10),
+    date: toDateInput(new Date()),
     paymentMethod: 'Cash',
     notes: '',
     color: '#64748b'
@@ -84,7 +89,7 @@ export default function TransactionsPage() {
   const fetchInitialData = async () => {
     setLoading(true)
     setPage(1)
-    const res = await getTransactions({ page: 1, limit: 15, type: filterType, month: selectedMonth, year: selectedYear, sortBy, filterCategory: selectedCategory })
+    const res = await getTransactions({ page: 1, limit: 15, type: filterType, month: selectedMonth, year: selectedYear, sortBy, filterCategoryId: selectedCategory })
     if (res.data) {
       setData(res.data)
       setTotalPages(res.totalPages)
@@ -99,7 +104,7 @@ export default function TransactionsPage() {
     if (page >= totalPages || loadingMore) return
     setLoadingMore(true)
     const nextPage = page + 1
-    const res = await getTransactions({ page: nextPage, limit: 15, type: filterType, month: selectedMonth, year: selectedYear, sortBy, filterCategory: selectedCategory })
+    const res = await getTransactions({ page: nextPage, limit: 15, type: filterType, month: selectedMonth, year: selectedYear, sortBy, filterCategoryId: selectedCategory })
     if (res.data) {
       setData(prev => [...prev, ...res.data])
       setPage(nextPage)
@@ -134,6 +139,30 @@ export default function TransactionsPage() {
     if (page > 1) setPage(p => p - 1)
   }
 
+  const exportToExcel = async () => {
+    toast.info(t('transactions.export.preparing'))
+    const res = await getTransactions({ page: 1, limit: 10000, type: filterType, month: selectedMonth, year: selectedYear, sortBy, filterCategoryId: selectedCategory })
+    if (res.data && res.data.length > 0) {
+      const exportData = res.data.map((tx: any) => ({
+        [t('transactions.table.date')]: new Date(tx.date).toLocaleDateString(locale),
+        [t('transactions.table.type')]: tx.type === 'INCOME' ? t('common.income') : t('common.expense'),
+        [t('transactions.table.category')]: tc(tx.category || 'Other Expense'),
+        [t('transactions.table.amount')]: tx.amount,
+        [t('transactions.table.notes')]: tx.note || ''
+      }))
+      
+      const worksheet = XLSX.utils.json_to_sheet(exportData)
+      const workbook = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Transactions")
+      
+      const fileName = `PaoPao_Transactions_${selectedYear}_${selectedMonth}.xlsx`
+      XLSX.writeFile(workbook, fileName)
+      toast.success(t('transactions.export.success'))
+    } else {
+      toast.error(t('transactions.export.empty'))
+    }
+  }
+
   // --- CRUD ACTION HANDLERS ---
   const openCreateSheet = () => {
     setEditId(null)
@@ -142,7 +171,7 @@ export default function TransactionsPage() {
       amount: '',
       category: 'Other Expense',
       type: 'EXPENSE',
-      date: new Date().toISOString().slice(0,10),
+      date: toDateInput(new Date()),
       paymentMethod: 'Cash',
       notes: '',
       color: categoryColors['Other Expense'] || DEFAULT_CATEGORY_COLORS['Other Expense'] || '#64748b'
@@ -160,7 +189,7 @@ export default function TransactionsPage() {
       amount: tx.amount.toString(),
       category: c,
       type: tx.type,
-      date: new Date(tx.date).toISOString().slice(0, 10),
+      date: toDateInput(new Date(tx.date)),
       paymentMethod: tx.paymentMethod || 'Cash',
       notes: tx.note || '',
       color: categoryColors[c] || DEFAULT_CATEGORY_COLORS[c] || '#64748b'
@@ -196,11 +225,11 @@ export default function TransactionsPage() {
         setShowSuccessPaoPao(true)
         setTimeout(() => setShowSuccessPaoPao(false), 2500)
       }
-      toast.success(t('transactions.action.save'), { description: "Action completed successfully." })
+      toast.success(t('transactions.action.save'), { description: t('transactions.action.saved_desc') })
       setIsSheetOpen(false)
       fetchInitialData()
     } else {
-      toast.error("Error", { description: res.error || "Action failed." })
+      toast.error(t('common.error'), { description: res.error || t('transactions.action.failed') })
     }
     setIsSubmitting(false)
   }
@@ -215,11 +244,11 @@ export default function TransactionsPage() {
     setIsSubmitting(true)
     const res = await deleteTransactionServer(editId)
     if (res.success) {
-       toast.success(language === 'th' ? "ลบรายการสำเร็จ" : "Deleted successfully")
+       toast.success(t('transactions.delete.success'))
        setIsSheetOpen(false)
        fetchInitialData()
     } else {
-       toast.error("Error", { description: res.error || (language === 'th' ? "เกิดข้อผิดพลาดในการลบ" : "Error deleting transaction") })
+       toast.error(t('common.error'), { description: res.error || t('transactions.delete.failed') })
     }
     setIsSubmitting(false)
   }
@@ -234,9 +263,14 @@ export default function TransactionsPage() {
           <h2 className="text-3xl font-bold tracking-tight text-foreground/90">{t('transactions.title')}</h2>
           <p className="text-muted-foreground">{t('transactions.subtitle')}</p>
         </div>
-        <Button className="shrink-0 shadow-lg" onClick={openCreateSheet}>
-          <Plus className="h-4 w-4 mr-2" /> {t('transactions.btn.add')}
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" className="shrink-0 bg-background/50 backdrop-blur" onClick={exportToExcel}>
+            <Download className="h-4 w-4 mr-2" /> {t('transactions.btn.export')}
+          </Button>
+          <Button className="shrink-0 shadow-lg" onClick={openCreateSheet}>
+            <Plus className="h-4 w-4 mr-2" /> {t('transactions.btn.add')}
+          </Button>
+        </div>
       </div>
 
       <Card className="glass-panel overflow-hidden border-border/50">
@@ -249,9 +283,10 @@ export default function TransactionsPage() {
                 value={selectedMonth}
                 onChange={(e) => { setPage(1); setSelectedMonth(Number(e.target.value)) }}
               >
+                <option value={0}>{t('transactions.filter.all_months')}</option>
                 {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
                   <option key={m} value={m}>
-                    {new Date(0, m - 1).toLocaleString(language === 'th' ? 'th-TH' : 'en-US', { month: 'long' })}
+                    {new Date(0, m - 1).toLocaleString(locale, { month: 'long' })}
                   </option>
                 ))}
               </select>
@@ -261,7 +296,7 @@ export default function TransactionsPage() {
                 onChange={(e) => { setPage(1); setSelectedYear(Number(e.target.value)) }}
               >
                 {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(y => (
-                  <option key={y} value={y}>{y + (language === 'th' ? 543 : 0)}</option>
+                  <option key={y} value={y}>{y + (locale === 'th-TH' ? 543 : 0)}</option>
                 ))}
               </select>
               <select 
@@ -278,15 +313,15 @@ export default function TransactionsPage() {
                 value={selectedCategory}
                 onChange={(e) => { setPage(1); setSelectedCategory(e.target.value) }}
               >
-                <option value="ALL">All Categories</option>
+                <option value="ALL">{t('transactions.filter.all_categories')}</option>
                 {filterType === 'INCOME' 
-                  ? INCOME_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)
+                  ? INCOME_CATEGORIES.map(c => <option key={c} value={c}>{tc(c)}</option>)
                   : filterType === 'EXPENSE'
-                    ? EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)
-                    : Array.from(new Set([...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES])).map(c => <option key={c} value={c}>{c}</option>)
+                    ? EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{tc(c)}</option>)
+                    : Array.from(new Set([...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES])).map(c => <option key={c} value={c}>{tc(c)}</option>)
                 }
                 {customCategories.length > 0 && (
-                  <optgroup label="Custom">
+                  <optgroup label={t('transactions.filter.custom')}>
                     {customCategories.map(c => <option key={c} value={c}>{c}</option>)}
                   </optgroup>
                 )}
@@ -332,7 +367,7 @@ export default function TransactionsPage() {
                   animate={{ y: [0, -20, 0] }}
                   transition={{ repeat: Infinity, duration: 0.8, ease: "easeInOut" }}
                 />
-                <p className="font-medium animate-pulse">Loading transactions...</p>
+                <p className="font-medium animate-pulse">{t('transactions.loading')}</p>
               </div>
             ) : data.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
@@ -358,13 +393,13 @@ export default function TransactionsPage() {
                               className="px-2 py-0.5 rounded text-white text-xs font-medium"
                               style={{ backgroundColor: categoryColors[tx.category] || DEFAULT_CATEGORY_COLORS[tx.category] || '#64748b' }}
                             >
-                              {tx.category}
+                              {tc(tx.category)}
                             </span>
                             <span className="text-xs text-muted-foreground whitespace-nowrap">
-                              {new Date(tx.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                              {new Date(tx.date).toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' })}
                             </span>
                           </div>
-                          <p className="font-medium text-foreground text-sm line-clamp-2 md:text-base">{tx.note || "ไม่มีบันทึกเพิ่มเติม"}</p>
+                          <p className="font-medium text-foreground text-sm line-clamp-2 md:text-base">{tx.note || t('transactions.no_note')}</p>
                         </div>
                         <div className="flex flex-col items-end gap-1 shrink-0">
                           <span className={`font-bold text-lg md:text-xl ${tx.type === 'INCOME' ? 'text-[#00B900]' : 'text-foreground'}`}>
@@ -395,7 +430,7 @@ export default function TransactionsPage() {
           )}
           {data.length > 0 && page === totalPages && (
             <div className="text-center p-6 text-xs text-muted-foreground border-t border-border/50">
-              {language === 'th' ? "โหลดรายการทั้งหมดแล้ว" : "All transactions loaded."}
+              {t('transactions.all_loaded')}
             </div>
           )}
         </CardContent>
@@ -406,18 +441,18 @@ export default function TransactionsPage() {
         <SheetContent className="bg-background border-border overflow-y-auto sm:max-w-md w-full p-6 pt-12">
           <SheetHeader>
             <SheetTitle>{editId ? t('transactions.form.title.edit') : t('transactions.form.title.add')}</SheetTitle>
-            <SheetDescription>Configure the transaction details directly to the database.</SheetDescription>
+            <SheetDescription>{t('transactions.form.desc')}</SheetDescription>
           </SheetHeader>
           <form onSubmit={handleFormSubmit} className="space-y-6 mt-8">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Type</label>
+              <label className="text-sm font-medium">{t('transactions.table.type')}</label>
               <select 
-                className="w-full bg-muted/50 border border-border rounded p-2 text-sm text-foreground"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 value={formData.type}
                 onChange={(e) => setFormData({...formData, type: e.target.value})}
               >
-                <option value="EXPENSE">Expense</option>
-                <option value="INCOME">Income</option>
+                <option value="EXPENSE">{t('common.expense')}</option>
+                <option value="INCOME">{t('common.income')}</option>
               </select>
             </div>
             <div className="space-y-2">
@@ -427,7 +462,7 @@ export default function TransactionsPage() {
                 type="number" 
                 required 
                 placeholder="0.00" 
-                className="bg-muted/50" 
+                className="bg-background" 
                 value={formData.amount}
                 onChange={(e) => setFormData({...formData, amount: e.target.value})}
               />
@@ -435,7 +470,7 @@ export default function TransactionsPage() {
             <div className="space-y-2">
               <label className="text-sm font-medium">{t('transactions.table.category')}</label>
               <select 
-                className="w-full bg-muted/50 border border-border rounded p-2 text-sm text-foreground"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 value={isCustomCategory ? 'CUSTOM' : formData.category}
                 onChange={(e) => {
                   if (e.target.value === 'CUSTOM') {
@@ -448,32 +483,32 @@ export default function TransactionsPage() {
                 }}
               >
                 {availableCategories.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
+                  <option key={cat} value={cat}>{tc(cat)}</option>
                 ))}
                 {customCategories.length > 0 && (
-                  <optgroup label={language === 'th' ? "หมวดหมู่เพิ่มเติม (Custom)" : "Custom Categories"}>
+                  <optgroup label={t('transactions.form.custom_group')}>
                     {customCategories.map(cat => (
                       <option key={cat} value={cat}>{cat}</option>
                     ))}
                   </optgroup>
                 )}
-                <option value="CUSTOM">+ {language === 'th' ? 'พิมพ์หมวดหมู่ใหม่...' : 'New Custom Category...'}</option>
+                <option value="CUSTOM">+ {t('transactions.form.new_category')}</option>
               </select>
               <div className="mt-2 flex items-center gap-3">
                 <input 
                   type="color" 
                   value={formData.color} 
                   onChange={(e) => setFormData({...formData, color: e.target.value})}
-                  className="w-10 h-10 p-1 rounded cursor-pointer border border-border"
+                  className="w-8 h-8 p-0.5 rounded cursor-pointer border border-border bg-background"
                 />
-                <span className="text-xs text-muted-foreground">{language === 'th' ? 'เลือกสีสำหรับหมวดหมู่นี้' : 'Pick a color for this category'}</span>
+                <span className="text-xs text-muted-foreground">{t('transactions.form.pick_color')}</span>
               </div>
               {isCustomCategory && (
                 <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
                   <Input 
                     autoFocus
-                    placeholder={language === 'th' ? 'ชื่อหมวดหมู่ของคุณ' : 'Your category name'}
-                    className="mt-2 bg-muted/50" 
+                    placeholder={t('transactions.form.category_name')}
+                    className="mt-2 bg-background" 
                     value={formData.category}
                     onChange={(e) => setFormData({...formData, category: e.target.value})}
                     required
@@ -487,7 +522,7 @@ export default function TransactionsPage() {
                 name="date" 
                 type="date" 
                 required 
-                className="bg-muted/50" 
+                className="bg-background" 
                 value={formData.date}
                 onChange={(e) => setFormData({...formData, date: e.target.value})}
               />
@@ -496,16 +531,16 @@ export default function TransactionsPage() {
               <label className="text-sm font-medium">{t('transactions.table.notes')}</label>
               <Input 
                 name="notes" 
-                placeholder="Optional description" 
-                className="bg-muted/50" 
+                placeholder={t('transactions.notes_placeholder')} 
+                className="bg-background" 
                 value={formData.notes}
                 onChange={(e) => setFormData({...formData, notes: e.target.value})}
               />
             </div>
-            <SheetFooter className="mt-8 flex flex-col sm:flex-row gap-3">
+            <SheetFooter className={`mt-8 grid gap-3 w-full ${editId ? 'grid-cols-2' : 'grid-cols-1'}`}>
               {editId && (
-                <Button type="button" variant="destructive" disabled={isSubmitting} className="w-full sm:w-auto" onClick={requestDeleteTx}>
-                  ลบรายการ (Delete)
+                <Button type="button" variant="destructive" disabled={isSubmitting} className="w-full" onClick={requestDeleteTx}>
+                  {t('common.delete')}
                 </Button>
               )}
               <Button type="submit" disabled={isSubmitting} className="w-full">
@@ -523,18 +558,18 @@ export default function TransactionsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle className="text-destructive flex items-center gap-2 text-xl">
               <FileX2 className="w-6 h-6"/>
-              {language === 'th' ? "คุณแน่ใจหรือไม่?" : "Are you sure?"}
+              {t('transactions.delete.title')}
             </AlertDialogTitle>
             <AlertDialogDescription className="text-base pt-2 text-foreground/80">
-              {language === 'th' ? "การดำเนินการนี้ไม่สามารถย้อนกลับได้ คุณต้องการลบรายการธุรกรรมนี้ออกจากบัญชีใช่หรือไม่?" : "This action cannot be undone. Are you sure you want to delete this transaction?"}
+              {t('transactions.delete.desc')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="mt-4 gap-2 border-t border-border/50 pt-4">
             <AlertDialogCancel disabled={isSubmitting} className="rounded-xl h-11 w-full mt-0">
-              {language === 'th' ? "ยกเลิก" : "Cancel"}
+              {t('common.cancel')}
             </AlertDialogCancel>
             <AlertDialogAction onClick={executeDeleteTx} disabled={isSubmitting} className="rounded-xl h-11 w-full bg-destructive hover:bg-destructive/90 text-destructive-foreground">
-              {language === 'th' ? "ยืนยันการลบ" : "Confirm Delete"}
+              {t('common.confirm_delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -559,7 +594,7 @@ export default function TransactionsPage() {
               </div>
               <div className="bg-primary text-primary-foreground p-6 rounded-t-full rounded-bl-full shadow-2xl flex flex-col items-center justify-center gap-2 border-4 border-white/20">
                 <Cat className="w-16 h-16 animate-pulse" />
-                <span className="font-heading font-bold text-lg text-white">เก่งมาก!</span>
+                <span className="font-heading font-bold text-lg text-white">{t('transactions.success_badge')}</span>
               </div>
             </div>
           </motion.div>
