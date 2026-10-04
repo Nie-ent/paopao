@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useRef, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { ArrowLeftRight, ArrowDownRight, ArrowUpRight, Loader2, FileX2, Edit, Plus, Cat, Sparkle, Download } from "lucide-react"
+import { ArrowLeftRight, ArrowDownRight, ArrowUpRight, Loader2, FileX2, Edit, Plus, Cat, Sparkle, Download, FileUp } from "lucide-react"
 import * as XLSX from "xlsx"
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -17,6 +17,7 @@ import { updateCategoryColors } from "@/features/settings/actions"
 import { useLanguage } from "@/contexts/LanguageContext"
 import { toast } from "sonner"
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, DEFAULT_CATEGORY_COLORS } from "@/lib/categories"
+import { StatementImportDialog } from "@/components/transactions/StatementImportDialog"
 
 type TransactionType = 'ALL' | 'INCOME' | 'EXPENSE'
 
@@ -56,6 +57,7 @@ export default function TransactionsPage() {
   
   // AlertDialog states
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
 
   useEffect(() => {
     fetchInitialData()
@@ -239,6 +241,9 @@ export default function TransactionsPage() {
           <p className="text-muted-foreground">{t('transactions.subtitle')}</p>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" className="shrink-0 bg-background/50 backdrop-blur" onClick={() => setImportOpen(true)}>
+            <FileUp className="h-4 w-4 mr-2" /> {t('statement.btn')}
+          </Button>
           <Button variant="outline" className="shrink-0 bg-background/50 backdrop-blur" onClick={exportToExcel}>
             <Download className="h-4 w-4 mr-2" /> {t('transactions.btn.export')}
           </Button>
@@ -410,6 +415,8 @@ export default function TransactionsPage() {
           )}
         </CardContent>
       </Card>
+
+      <StatementImportDialog open={importOpen} onOpenChange={setImportOpen} onImported={fetchInitialData} />
 
       {/* CRUD Sheet */}
       <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>

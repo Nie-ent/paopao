@@ -3,6 +3,10 @@
 import prisma from "@/lib/db"
 import { getCurrentUser } from "@/lib/current-user"
 import { dayWithTimeOf } from "@/lib/dates"
+import { z } from "zod"
+import { FALLBACK_CATEGORY } from "@/lib/categories"
+import { statementRowTimestamp } from "@/lib/statement"
+import { normalizeReference } from "@/lib/slip"
 
 
 export async function getTransactions(options: { 
@@ -224,4 +228,41 @@ export async function deleteTransactionServer(id: string) {
     console.error(error)
     return { success: false, error: 'Database Error' }
   }
+}
+
+const statementRowsSchema = z.array(z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  time: z.string().regex(/^\d{1,2}:\d{2}$/).optional(),
+  type: z.enum(['INCOME', 'EXPENSE']),
+  amount: z.number().positive().max(100_000_000),
+  category: z.string().min(1).max(60),
+  note: z.string().max(200),
+  reference: z.string().max(64).nullish(),
+})).min(1).max(1000)
+
+/** Saves the statement rows the user kept in the preview. Rows whose bank reference is already recorded are skipped. */
+export async function importStatementRows(input: unknown) {
+  const user = await getCurrentUser()
+  if (!user) return { success: false as const, error: 'Unauthorized' }
+
+  const parsed = statementRowsSchema.safeParse(input)
+  if (!parsed.success) return { success: false as const, error: 'Invalid rows' }
+
+  const categories = await prisma.category.findMany({ where: { OR: [{ userId: null }, { userId: user.id }] } })
+  const categoryId = (name: string, type: 'INCOME' | 'EXPENSE') =>
+    (categories.find(c => c.name === name) ?? categories.find(c => c.name === FALLBACK_CATEGORY[type]))!.id
+
+  const { count } = await prisma.transaction.createMany({
+    data: parsed.data.map(row => ({
+      userId: user.id,
+      type: row.type,
+      amount: row.amount,
+      categoryId: categoryId(row.category, row.type),
+      note: row.note,
+      date: statementRowTimestamp(row),
+      reference: normalizeReference(row.reference),
+    })),
+    skipDuplicates: true, // unique (userId, reference)
+  })
+  return { success: true as const, imported: count, skipped: parsed.data.length - count }
 }
