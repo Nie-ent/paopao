@@ -5,6 +5,21 @@ import { redirect } from "next/navigation"
 import { cookies } from "next/headers"
 import prisma from "@/lib/db"
 import { ensureDemoData } from "@/features/demo/seed"
+import { createSessionToken, verifySessionToken, SESSION_COOKIE, sessionCookieOptions } from "@/lib/session"
+import { verifyLiffAccessToken } from "@/lib/line-login"
+import { resolveLineId } from "@/lib/auth-user"
+
+/** Signs the user in with a signed session cookie and sends them on to PDPA or the dashboard. */
+async function startLineSession(user: { lineId: string; hasAcceptedPDPA: boolean }) {
+  const token = await createSessionToken(user.lineId)
+  if (!token) return redirect("/login?error=Sign-in%20is%20not%20configured")
+
+  const cookieStore = await cookies()
+  cookieStore.set(SESSION_COOKIE, token, sessionCookieOptions)
+  if (!user.hasAcceptedPDPA) redirect("/pdpa")
+  cookieStore.set("pdpa_accepted", "true", { maxAge: 60 * 60 * 24 * 30, path: '/' })
+  redirect("/")
+}
 
 export async function signInWithLineDirect(formData: FormData) {
   const otpInput = formData.get("otp") as string
@@ -30,20 +45,19 @@ export async function signInWithLineDirect(formData: FormData) {
     data: { otp: null, otpExpiresAt: null }
   })
 
-  const cookieStore = await cookies()
-  cookieStore.set("direct_line_session", user.lineId, { maxAge: 60 * 60 * 24 * 30, path: '/' })
-  
-  if (!user.hasAcceptedPDPA) {
-    redirect("/pdpa")
-  } else {
-    cookieStore.set("pdpa_accepted", "true", { maxAge: 60 * 60 * 24 * 30, path: '/' })
-    redirect("/")
-  }
+  await startLineSession(user)
 }
 
-export async function signInWithLiffAction(lineId: string, displayName: string, avatarUrl: string) {
-  if (!lineId) return redirect("/login?error=Invalid%20LIFF%20Profile")
-  
+/**
+ * LIFF sign-in. The client sends its LIFF access token; LINE tells us whose it is. Never accept a
+ * user id from the client, or anyone could sign in as anyone.
+ */
+export async function signInWithLiffAction(accessToken: string) {
+  const profile = await verifyLiffAccessToken(accessToken)
+  if (!profile) return redirect("/login?error=Invalid%20LIFF%20session")
+  const { userId: lineId, displayName } = profile
+  const avatarUrl = profile.pictureUrl || ""
+
   let user = await prisma.user.findUnique({
     where: { lineId }
   })
@@ -66,15 +80,7 @@ export async function signInWithLiffAction(lineId: string, displayName: string, 
     }
   }
 
-  const cookieStore = await cookies()
-  cookieStore.set("direct_line_session", user.lineId, { maxAge: 60 * 60 * 24 * 30, path: '/' })
-  
-  if (!user.hasAcceptedPDPA) {
-    redirect("/pdpa")
-  } else {
-    cookieStore.set("pdpa_accepted", "true", { maxAge: 60 * 60 * 24 * 30, path: '/' })
-    redirect("/")
-  }
+  await startLineSession(user)
 }
 
 export async function signInAsDemo() {
@@ -88,7 +94,7 @@ export async function signInAsDemo() {
 export async function signOut() {
   const cookieStore = await cookies()
   cookieStore.delete("demo_mode_bypass")
-  cookieStore.delete("direct_line_session")
+  cookieStore.delete(SESSION_COOKIE)
   cookieStore.delete("pdpa_accepted")
   const supabase = await createClient()
   await supabase.auth.signOut()
@@ -104,16 +110,8 @@ export async function acceptPDPA() {
     redirect("/")
   }
 
-  // Update in DB
-  let lineId = cookieStore.get("direct_line_session")?.value
-
-  if (!lineId) {
-    if (userObj.app_metadata?.provider === "line") {
-      lineId = (userObj as any).user_metadata.provider_id
-    } else if (userObj.id) {
-      lineId = userObj.id // Magic fallback
-    }
-  }
+  // Update in DB, for the user of the verified session
+  const lineId = resolveLineId(userObj)
 
   if (lineId) {
     try {
@@ -135,14 +133,14 @@ export async function acceptPDPA() {
 export async function getUser() {
   const cookieStore = await cookies()
   
-  // 1. Check Magic Direct LINE Session
-  const directSession = cookieStore.get("direct_line_session")?.value
-  if (directSession) {
-    return { 
-      id: directSession, 
-      email: null, 
+  // 1. Signed LINE session (OTP or LIFF). A missing, forged or expired cookie is ignored.
+  const lineId = await verifySessionToken(cookieStore.get(SESSION_COOKIE)?.value)
+  if (lineId) {
+    return {
+      id: lineId,
+      email: null,
       app_metadata: { provider: 'line' },
-      user_metadata: { provider_id: directSession }
+      user_metadata: { provider_id: lineId }
     }
   }
 

@@ -43,6 +43,7 @@ Vercel Cron ──► /api/cron/digest, /api/cron/reminders ──► LINE push
 - **Cost guards.** Daily chat limits per tier (free 10 / pro 100 / shared demo 30) and capped reply length. The morning brief is a template (no LLM) and only goes to users active in the last 7 days, which also saves LINE push quota.
 - **One source of truth** for categories (`src/lib/categories.ts`), shared by the AI prompt, the UI and the parser, and tested against i18n.
 - **Every query is scoped to the signed-in user.** Server actions start with `getCurrentUser()` (`src/lib/current-user.ts`); updates and deletes always include `userId`.
+- **Sessions can't be forged.** The LINE session cookie is HMAC-signed with an expiry, and LIFF sign-in sends a LIFF access token that the server verifies with LINE. The client never gets to pick its own user id.
 - **Fails closed.** Cron routes require `CRON_SECRET`; the admin area requires `ADMIN_PASSWORD` and uses an HMAC session cookie.
 
 ## Getting started
