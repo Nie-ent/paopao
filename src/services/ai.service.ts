@@ -1,8 +1,6 @@
-import { GoogleGenAI, Type, Schema } from "@google/genai";
+import { Type, Schema } from "@google/genai";
+import { generateContent } from "@/lib/ai";
 
-// Ensure we fall back to a dummy key if env is missing to prevent crash on init
-const apiKey = process.env.AI_API_KEY || "dummy_key";
-const ai = new GoogleGenAI({ apiKey });
 
 export const DEFAULT_TRANSACTION_CATEGORIES = [
   'Salary', 'Freelance', 'Gift', 'Income', 'Transfer In', 'Other Income',
@@ -85,8 +83,7 @@ IMPORTANT RULES:
 export async function extractTransactionsFromText(text: string, userCategories: string[] = []): Promise<ExtractedTransaction[]> {
   const { transactionSchema, SYSTEM_INSTRUCTION } = buildAIConfig(userCategories);
 
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
+  const response = await generateContent({
     contents: text,
     config: {
       systemInstruction: `${SYSTEM_INSTRUCTION}
@@ -116,8 +113,7 @@ export async function extractTransactionsFromText(text: string, userCategories: 
 export async function extractTransactionFromImage(imageBuffer: Buffer, mimeType: string = "image/jpeg", userCategories: string[] = []): Promise<ExtractedTransaction | null> {
   const { transactionSchema, SYSTEM_INSTRUCTION } = buildAIConfig(userCategories);
   
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
+  const response = await generateContent({
       contents: [
         "Please extract the transaction details from this bank slip.",
         {
@@ -162,8 +158,7 @@ export async function extractTransactionsFromImages(images: {buffer: Buffer, mim
     });
   }
 
-  const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
+  const response = await generateContent({
     contents,
     config: {
       systemInstruction: SYSTEM_INSTRUCTION,

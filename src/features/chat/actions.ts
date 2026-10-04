@@ -2,11 +2,10 @@
 
 import prisma from "@/lib/db"
 import { getProfileData } from "@/features/user/actions"
-import { GoogleGenAI, Type } from "@google/genai"
+import { Type } from "@google/genai"
+import { generateContent, startChat, isQuotaError } from "@/lib/ai"
 import { DEMO_LINE_ID } from "@/lib/auth-user"
 
-const apiKey = process.env.AI_API_KEY || "dummy_key"
-const ai = new GoogleGenAI({ apiKey })
 
 const SYSTEM_INSTRUCTION = `You are PaoPao, a friendly and expert financial assistant.
 You help users plan their savings, resolve debts, or organize their financial and daily tasks.
@@ -93,8 +92,7 @@ export async function sendChatMessage(sessionId: string | null, message: string,
     // Generate Title gracefully falling back if Quota exceeded
     let title = language === 'en' ? "💬 New chat" : "💬 บทสนทนาใหม่"
     try {
-      const titleRes = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+      const titleRes = await generateContent({
         config: { maxOutputTokens: 30, thinkingConfig: { thinkingBudget: 0 } },
         contents: `Generate a 3-word ${language === 'en' ? 'English' : 'Thai'} title with 1 emoji, reply with the title only: "${message.substring(0, 50)}"`
       })
@@ -122,14 +120,11 @@ export async function sendChatMessage(sessionId: string | null, message: string,
     parts: [{ text: msg.content }]
   }))
 
-  const chat = ai.chats.create({
-    model: "gemini-2.5-flash",
-    config: { systemInstruction: `${SYSTEM_INSTRUCTION}\nReply in ${language === 'en' ? 'English' : 'Thai'} unless the user writes in another language. Keep replies concise.`, tools, temperature: 0.7, maxOutputTokens: MAX_REPLY_TOKENS, thinkingConfig: { thinkingBudget: 0 } },
-    history: formattedHistory
-  })
-
   try {
-    const response = await chat.sendMessage({ message })
+    const { chat, response } = await startChat({
+      config: { systemInstruction: `${SYSTEM_INSTRUCTION}\nReply in ${language === 'en' ? 'English' : 'Thai'} unless the user writes in another language. Keep replies concise.`, tools, temperature: 0.7, maxOutputTokens: MAX_REPLY_TOKENS, thinkingConfig: { thinkingBudget: 0 } },
+      history: formattedHistory
+    }, { message })
     historyMessages.push({ role: 'user', content: message, at: new Date().toISOString() })
 
     let botReply = response.text || ""
@@ -188,8 +183,7 @@ export async function sendChatMessage(sessionId: string | null, message: string,
     console.error("AI Error:", error)
     // Don't leave an empty conversation in the history when the very first message fails
     if (isNewSession) await prisma.chatSession.delete({ where: { id: activeSessionId! } }).catch(() => {})
-    const msg = String(error?.message || "").toLowerCase()
-    const isQuota = error?.status === 429 || msg.includes("429") || msg.includes("quota") || msg.includes("exhausted")
+    const isQuota = isQuotaError(error)
     return { error: "Failed to communicate with AI.", isQuota }
   }
 }

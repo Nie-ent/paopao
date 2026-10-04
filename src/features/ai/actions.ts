@@ -3,35 +3,14 @@
 import prisma from "@/lib/db"
 import { resolveLineId } from "@/lib/auth-user"
 import { getUser } from "@/features/auth/actions"
-import { GoogleGenAI } from "@google/genai"
+import { generateContent, isQuotaError } from "@/lib/ai"
 import { unstable_cache } from "next/cache"
 
-function isQuotaError(error: any) {
-  const msg = String(error?.message || "").toLowerCase()
-  return error?.status === 429 || msg.includes("429") || msg.includes("quota") || msg.includes("exhausted")
-}
-
-// Try the next model when one is overloaded (503) or rate-limited
-const ADVICE_MODELS = ["gemini-flash-latest", "gemini-2.5-flash"]
-
-async function generateWithFallback(prompt: string) {
-  const ai = new GoogleGenAI({ apiKey: process.env.AI_API_KEY || "dummy" })
-  let lastError: unknown
-  for (const model of ADVICE_MODELS) {
-    try {
-      const response = await ai.models.generateContent({ model, contents: prompt, config: { temperature: 0.7 } })
-      return response.text
-    } catch (error) {
-      lastError = error
-      console.warn(`AI model ${model} failed, trying next`, error)
-    }
-  }
-  throw lastError
-}
 
 const getCachedInsight = unstable_cache(
   async (prompt: string, cacheDateString: string) => {
-    return generateWithFallback(prompt)
+    const response = await generateContent({ contents: prompt, config: { temperature: 0.7 } })
+    return response.text
   },
   ['gemini-dashboard-insight'],
   { revalidate: 86400 } // 24 hours
@@ -39,7 +18,8 @@ const getCachedInsight = unstable_cache(
 
 const getCachedFinancialAdvice = unstable_cache(
   async (prompt: string, cacheDateString: string) => {
-    return generateWithFallback(prompt)
+    const response = await generateContent({ contents: prompt, config: { temperature: 0.7 } })
+    return response.text
   },
   ['gemini-financial-advice'],
   { revalidate: 86400 }
