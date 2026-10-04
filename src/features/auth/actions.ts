@@ -2,12 +2,13 @@
 
 import { createClient } from "@/utils/supabase/server"
 import { redirect } from "next/navigation"
-import { cookies } from "next/headers"
+import { cookies, headers } from "next/headers"
 import prisma from "@/lib/db"
 import { ensureDemoData } from "@/features/demo/seed"
 import { createSessionToken, verifySessionToken, SESSION_COOKIE, sessionCookieOptions } from "@/lib/session"
 import { verifyLiffAccessToken } from "@/lib/line-login"
 import { resolveLineId } from "@/lib/auth-user"
+import { hashOtp, isWellFormedOtp, OTP_LIMITS, otpRateLimitReason } from "@/lib/otp"
 
 /** Signs the user in with a signed session cookie and sends them on to PDPA or the dashboard. */
 async function startLineSession(user: { lineId: string; hasAcceptedPDPA: boolean }) {
@@ -21,23 +22,34 @@ async function startLineSession(user: { lineId: string; hasAcceptedPDPA: boolean
   redirect("/")
 }
 
-export async function signInWithLineDirect(formData: FormData) {
-  const otpInput = formData.get("otp") as string
-  if (!otpInput) return redirect("/login?error=กรุณาระบุรหัส%20OTP")
-  
-  // Find user by OTP and ensure it has not expired
-  let user = await prisma.user.findFirst({
-    where: {
-      otp: otpInput,
-      otpExpiresAt: {
-        gt: new Date()
-      }
-    }
-  })
+async function clientIp() {
+  const h = await headers()
+  return h.get("x-forwarded-for")?.split(",")[0].trim() || h.get("x-real-ip") || "unknown"
+}
 
-  if (!user) {
-    return redirect("/login?error=รหัส%20OTP%20ไม่ถูกต้องหรือหมดอายุแล้ว")
-  }
+/** OTP sign-in. Rate-limited per IP and system-wide, since a guess is checked against every active code. */
+export async function signInWithLineDirect(formData: FormData) {
+  const code = String(formData.get("otp") ?? "").trim()
+  if (!code) return redirect("/login?error=otp_missing")
+
+  const ip = await clientIp()
+  const now = Date.now()
+  const [ipFailures, globalFailures] = await Promise.all([
+    prisma.loginAttempt.count({ where: { ip, success: false, createdAt: { gt: new Date(now - OTP_LIMITS.perIp.windowMs) } } }),
+    prisma.loginAttempt.count({ where: { success: false, createdAt: { gt: new Date(now - OTP_LIMITS.global.windowMs) } } }),
+  ])
+  const limited = otpRateLimitReason({ ipFailures, globalFailures })
+  if (limited) return redirect(`/login?error=${limited === "ip" ? "otp_rate_limited" : "otp_paused"}`)
+
+  const user = isWellFormedOtp(code)
+    ? await prisma.user.findFirst({ where: { otp: hashOtp(code), otpExpiresAt: { gt: new Date(now) } } })
+    : null
+
+  await prisma.loginAttempt.create({ data: { ip, success: !!user } })
+  // Keep the table small; attempts older than a day are never counted
+  await prisma.loginAttempt.deleteMany({ where: { createdAt: { lt: new Date(now - 24 * 60 * 60 * 1000) } } })
+
+  if (!user) return redirect("/login?error=otp_invalid")
 
   // Clear OTP to prevent reuse
   await prisma.user.update({
