@@ -2,27 +2,46 @@
 
 import prisma from "@/lib/db"
 import { cookies } from "next/headers"
+import { createHmac, timingSafeEqual } from "crypto"
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "paopao123"
+const ADMIN_COOKIE = "admin_session"
+
+/** Cookie value derived from ADMIN_PASSWORD, so it can't be forged and rotates with the password. */
+function adminSessionToken() {
+  const password = process.env.ADMIN_PASSWORD
+  if (!password) return null
+  return createHmac("sha256", password).update("paopao-admin-session").digest("hex")
+}
+
+function safeEqual(a: string, b: string) {
+  const left = Buffer.from(a)
+  const right = Buffer.from(b)
+  return left.length === right.length && timingSafeEqual(left, right)
+}
 
 export async function loginAdmin(password: string) {
-  if (password === ADMIN_PASSWORD) {
-    const cookieStore = await cookies()
-    cookieStore.set("admin_session", "true", { httpOnly: true, secure: process.env.NODE_ENV === "production" })
-    return { success: true }
+  const expected = process.env.ADMIN_PASSWORD
+  const token = adminSessionToken()
+  // Fails closed: with no ADMIN_PASSWORD configured, nobody can sign in
+  if (!expected || !token || !safeEqual(password, expected)) {
+    return { success: false, error: "รหัสผ่านไม่ถูกต้อง" }
   }
-  return { success: false, error: "รหัสผ่านไม่ถูกต้อง" }
+  const cookieStore = await cookies()
+  cookieStore.set(ADMIN_COOKIE, token, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: 60 * 60 * 12 })
+  return { success: true }
 }
 
 export async function logoutAdmin() {
   const cookieStore = await cookies()
-  cookieStore.delete("admin_session")
+  cookieStore.delete(ADMIN_COOKIE)
   return { success: true }
 }
 
 export async function isAdmin() {
   const cookieStore = await cookies()
-  return cookieStore.get("admin_session")?.value === "true"
+  const token = adminSessionToken()
+  const cookie = cookieStore.get(ADMIN_COOKIE)?.value
+  return !!token && !!cookie && safeEqual(cookie, token)
 }
 
 export async function getAdminStats() {
