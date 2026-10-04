@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { signInWithLineDirect, signInAsDemo, signInWithLiffAction } from "@/features/auth/actions"
 import { useLanguage } from "@/contexts/LanguageContext"
 import { LanguageToggle } from "@/components/layouts/LanguageToggle"
+import { clearProfileCache } from "@/lib/clientCache"
 
 function ErrorMessageHandler() {
   const { t } = useLanguage()
@@ -35,6 +36,10 @@ export default function LoginPage() {
   const { t } = useLanguage()
   const [isLiffLoading, setIsLiffLoading] = useState(false);
   const [isPending, startTransition] = useTransition();
+
+  // Every sign-in (and every sign-out) passes through this page: drop the previous user's cached
+  // profile so the header doesn't show their avatar and points after switching accounts.
+  useEffect(() => { clearProfileCache() }, []);
 
   useEffect(() => {
     async function initLiff() {
