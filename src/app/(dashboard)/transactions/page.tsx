@@ -16,38 +16,13 @@ import { getTransactions, createTransactionServer, updateTransactionServer, dele
 import { updateCategoryColors } from "@/features/settings/actions"
 import { useLanguage } from "@/contexts/LanguageContext"
 import { toast } from "sonner"
+import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, DEFAULT_CATEGORY_COLORS } from "@/lib/categories"
 
 type TransactionType = 'ALL' | 'INCOME' | 'EXPENSE'
 
 // YYYY-MM-DD in the viewer's local time (toISOString would shift to UTC)
 const toDateInput = (d: Date) => d.toLocaleDateString('en-CA')
 type SortBy = 'DATE_DESC' | 'DATE_ASC' | 'CATEGORY'
-
-// Mirrors the global categories in the DB
-const INCOME_CATEGORIES = ['Salary', 'Freelance', 'Business', 'Investment Income', 'Gift', 'Transfer In', 'Other Income']
-const EXPENSE_CATEGORIES = ['Food', 'Groceries', 'Transport', 'Housing', 'Utilities', 'Shopping', 'Personal Care', 'Entertainment', 'Education', 'Family & Pets', 'Health & Medical', 'Investment', 'Saving', 'Transfer Out', 'Debt Payment', 'Gift & Donation', 'Other Expense']
-
-const DEFAULT_CATEGORY_COLORS: Record<string, string> = {
-  // Income (based on dashboard INCOME_COLORS)
-  'Salary': '#10b981',      
-  'Freelance': '#3b82f6',   
-  'Gift': '#f59e0b',        
-  'Income': '#14b8a6',      
-  'Transfer In': '#8b5cf6', 
-  'Other Income': '#ec4899',
-  
-  // Expense (based on dashboard EXPENSE_COLORS)
-  'Food': '#ef4444',        
-  'Transport': '#f97316',   
-  'Housing': '#06b6d4',     
-  'Utilities': '#eab308',   
-  'Shopping': '#d946ef',    
-  'Entertainment': '#6366f1',
-  'Transfer Out': '#8b5cf6', 
-  'Investment': '#2dd4bf',  
-  'Saving': '#34d399',      
-  'Other Expense': '#64748b'
-}
 
 export default function TransactionsPage() {
   const { t, tc, locale } = useLanguage()

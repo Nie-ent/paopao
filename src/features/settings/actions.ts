@@ -1,35 +1,25 @@
 "use server"
 
 import prisma from "@/lib/db"
-import { resolveLineId } from "@/lib/auth-user"
-import { getUser } from "@/features/auth/actions"
+import { getCurrentUser } from "@/lib/current-user"
 
 export async function getUserSettings() {
-  const user = await getUser()
+  const user = await getCurrentUser()
   if (!user) return { error: 'Unauthorized', data: null }
 
-  const lineId = resolveLineId(user)
-
-  const prismaUser = await prisma.user.findUnique({
-    where: { lineId },
-    select: { salaryDeduction: true, freelanceTaxRate: true }
-  })
-
-  return { data: prismaUser }
+  return { data: { salaryDeduction: user.salaryDeduction, freelanceTaxRate: user.freelanceTaxRate } }
 }
 
 export async function updateDeductionSettings(formData: FormData) {
-  const user = await getUser()
+  const user = await getCurrentUser()
   if (!user) return { error: 'Unauthorized' }
-
-  const lineId = resolveLineId(user)
 
   const salaryDeduction = Number(formData.get('salaryDeduction') || 0)
   const freelanceTaxRate = Number(formData.get('freelanceTaxRate') || 0)
 
   try {
     await prisma.user.update({
-      where: { lineId },
+      where: { id: user.id },
       data: {
         salaryDeduction,
         freelanceTaxRate
@@ -43,14 +33,10 @@ export async function updateDeductionSettings(formData: FormData) {
 }
 
 export async function updateCategoryColors(categoryColors: Record<string, string>) {
-  const user = await getUser()
-  if (!user) return { error: 'Unauthorized' }
-
-  const lineId = resolveLineId(user)
+  const prismaUser = await getCurrentUser()
+  if (!prismaUser) return { error: 'Unauthorized' }
 
   try {
-    const prismaUser = await prisma.user.findUnique({ where: { lineId } })
-    if (!prismaUser) return { error: 'User not found' }
 
     // This is a simplified migration approach: 
     // We update existing categories or create them if they don't exist.
@@ -89,18 +75,10 @@ export async function updateCategoryColors(categoryColors: Record<string, string
 }
 
 export async function getCategoryColors() {
-  const user = await getUser()
-  if (!user) return { error: 'Unauthorized', categoryColors: {} }
-
-  const lineId = resolveLineId(user)
+  const prismaUser = await getCurrentUser()
+  if (!prismaUser) return { error: 'Unauthorized', categoryColors: {} }
 
   try {
-    const prismaUser = await prisma.user.findUnique({
-      where: { lineId },
-      select: { id: true }
-    })
-    
-    if (!prismaUser) return { error: 'User not found', categoryColors: {} }
 
     const categories = await prisma.category.findMany({
       where: { OR: [{ userId: null }, { userId: prismaUser.id }] }

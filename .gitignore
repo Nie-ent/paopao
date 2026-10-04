@@ -47,3 +47,4 @@ next-env.d.ts
 scratch_*
 /.next */
 import_nie.ts
+!.env.example

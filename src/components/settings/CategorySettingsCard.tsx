@@ -10,34 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { getCategoryColors, updateCategoryColors } from "@/features/settings/actions"
 import { useLanguage } from "@/contexts/LanguageContext"
-
-// Mirrors the global categories (and their default colors) in the DB
-const DEFAULT_CATEGORY_COLORS: Record<string, string> = {
-  'Salary': '#10b981',
-  'Freelance': '#3b82f6',
-  'Business': '#8b5cf6',
-  'Investment Income': '#2dd4bf',
-  'Gift': '#f59e0b',
-  'Transfer In': '#6366f1',
-  'Other Income': '#ec4899',
-  'Food': '#ef4444',
-  'Groceries': '#84cc16',
-  'Transport': '#f97316',
-  'Housing': '#06b6d4',
-  'Utilities': '#eab308',
-  'Shopping': '#d946ef',
-  'Personal Care': '#ec4899',
-  'Entertainment': '#6366f1',
-  'Education': '#3b82f6',
-  'Family & Pets': '#f43f5e',
-  'Health & Medical': '#14b8a6',
-  'Investment': '#2dd4bf',
-  'Saving': '#10b981',
-  'Transfer Out': '#8b5cf6',
-  'Debt Payment': '#ef4444',
-  'Gift & Donation': '#f59e0b',
-  'Other Expense': '#64748b'
-}
+import { DEFAULT_CATEGORY_COLORS } from "@/lib/categories"
 
 export function CategorySettingsCard() {
   const { t, tc } = useLanguage()
