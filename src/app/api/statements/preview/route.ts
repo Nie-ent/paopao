@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/current-user"
+import { isAiBusyError } from "@/lib/ai"
 import { previewStatement, StatementError } from "@/services/statement.service"
 
 // Reading a long statement can take a while
@@ -20,6 +21,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ rows })
   } catch (error) {
     if (error instanceof StatementError) return NextResponse.json({ error: error.code }, { status: 422 })
+    if (isAiBusyError(error)) return NextResponse.json({ error: "AI_BUSY" }, { status: 503 })
     console.error("Statement preview failed:", error)
     return NextResponse.json({ error: "FAILED" }, { status: 500 })
   }

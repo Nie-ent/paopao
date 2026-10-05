@@ -13,15 +13,34 @@ export const AI_MODELS = (process.env.AI_MODELS || "gemini-3.8-flash,gemini-3.5-
   .map(m => m.trim())
   .filter(Boolean)
 
-async function withModelFallback<T>(run: (model: string) => Promise<T>): Promise<T> {
+/** Overloaded (503), rate-limited (429) and internal (500) errors usually clear within seconds. */
+export function isAiBusyError(error: unknown) {
+  const status = (error as { status?: number })?.status
+  return status === 503 || status === 429 || status === 500
+}
+
+/** Pauses before each extra round over the model list, used only when every model was busy. */
+const BUSY_RETRY_DELAYS_MS = [2000, 5000]
+
+export async function withModelFallback<T>(
+  run: (model: string) => Promise<T>,
+  { models = AI_MODELS, retryDelaysMs = BUSY_RETRY_DELAYS_MS } = {},
+): Promise<T> {
   let lastError: unknown
-  for (const model of AI_MODELS) {
-    try {
-      return await run(model)
-    } catch (error) {
-      lastError = error
-      console.warn(`AI model ${model} failed, trying next`, error)
+  for (let round = 0; round <= retryDelaysMs.length; round++) {
+    if (round > 0) await new Promise(resolve => setTimeout(resolve, retryDelaysMs[round - 1]))
+    let allBusy = true
+    for (const model of models) {
+      try {
+        return await run(model)
+      } catch (error) {
+        lastError = error
+        if (!isAiBusyError(error)) allBusy = false
+        console.warn(`AI model ${model} failed (round ${round + 1})`, (error as { status?: number })?.status ?? error)
+      }
     }
+    // A retired model or a bad request will not fix itself, so only retry when everything was busy
+    if (!allBusy) break
   }
   throw lastError
 }

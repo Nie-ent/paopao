@@ -50,8 +50,10 @@ async function toStatementInput(file: File, password: string | undefined): Promi
 export async function previewStatement(userId: string, file: File, password?: string): Promise<StatementPreviewRow[]> {
   if (file.size > MAX_STATEMENT_BYTES) throw new StatementError("TOO_LARGE")
 
+  // Read the file first so a bad file or password fails before any database or AI work
+  const input = await toStatementInput(file, password)
   const customCategories = (await prisma.category.findMany({ where: { userId }, select: { name: true } })).map(c => c.name)
-  const raw = await extractStatementRows(await toStatementInput(file, password), customCategories)
+  const raw = await extractStatementRows(input, customCategories)
 
   const rows: StatementRow[] = raw.flatMap(r => {
     const date = normalizeStatementDate(r.date)
