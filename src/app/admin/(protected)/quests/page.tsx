@@ -17,7 +17,7 @@ export default function AdminQuestsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
-  const [formData, setFormData] = useState({ title: '', description: '', points: 50, type: 'ONETIME', condition: 'NONE' })
+  const [formData, setFormData] = useState({ title: '', description: '', titleEn: '', descriptionEn: '', points: 50, type: 'ONETIME', condition: 'NONE' })
 
   // Delete modal
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
@@ -34,6 +34,8 @@ export default function AdminQuestsPage() {
       res = await updateQuest(editId, {
         title: formData.title,
         description: formData.description,
+        titleEn: formData.titleEn.trim() || undefined,
+        descriptionEn: formData.descriptionEn.trim() || undefined,
         points: Number(formData.points),
         type: formData.type,
         condition: formData.condition
@@ -42,6 +44,8 @@ export default function AdminQuestsPage() {
       res = await createQuest({
         title: formData.title,
         description: formData.description,
+        titleEn: formData.titleEn.trim() || undefined,
+        descriptionEn: formData.descriptionEn.trim() || undefined,
         points: Number(formData.points),
         type: formData.type,
         condition: formData.condition
@@ -58,14 +62,14 @@ export default function AdminQuestsPage() {
   }
 
   const openEditModal = (q: any) => {
-    setFormData({ title: q.title, description: q.description || '', points: q.points, type: q.type, condition: q.condition || 'NONE' })
+    setFormData({ title: q.title, description: q.description || '', titleEn: q.titleEn || '', descriptionEn: q.descriptionEn || '', points: q.points, type: q.type, condition: q.condition || 'NONE' })
     setEditId(q.id)
     setIsEditMode(true)
     setIsDialogOpen(true)
   }
 
   const openCreateModal = () => {
-    setFormData({ title: '', description: '', points: 50, type: 'ONETIME', condition: 'NONE' })
+    setFormData({ title: '', description: '', titleEn: '', descriptionEn: '', points: 50, type: 'ONETIME', condition: 'NONE' })
     setIsEditMode(false)
     setEditId(null)
     setIsDialogOpen(true)
@@ -116,6 +120,11 @@ export default function AdminQuestsPage() {
                 <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">รายละเอียด (Description)</label>
                 <Input value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="อธิบายเงื่อนไขภารกิจ" />
               </div>
+              <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+                <p className="text-xs font-medium text-slate-600">English (shown to users with the English UI; falls back to Thai if empty)</p>
+                <Input value={formData.titleEn} onChange={e => setFormData({...formData, titleEn: e.target.value})} placeholder="Title, e.g. Save ฿500 this month" />
+                <Input value={formData.descriptionEn} onChange={e => setFormData({...formData, descriptionEn: e.target.value})} placeholder="Description" />
+              </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">แต้มรางวัล (Reward Points)</label>
                 <Input type="number" value={formData.points} onChange={e => setFormData({...formData, points: e.target.value as any})} />
@@ -165,6 +174,11 @@ export default function AdminQuestsPage() {
                 <td className="px-6 py-4">
                   <p className="font-semibold text-slate-900 flex items-center gap-2"><Target className="w-4 h-4 text-orange-500"/> {q.title}</p>
                   <p className="text-xs text-slate-500">{q.description}</p>
+                  {q.titleEn ? (
+                    <p className="text-xs text-slate-400 mt-1">EN: {q.titleEn}{q.descriptionEn ? ` — ${q.descriptionEn}` : ''}</p>
+                  ) : (
+                    <p className="text-[10px] text-amber-600 mt-1">No English translation (English UI shows the Thai text)</p>
+                  )}
                   {q.condition === 'LOG_TRANSACTION_TODAY' && <span className="text-[10px] bg-blue-100 text-blue-700 px-1 py-0.5 rounded mt-1 inline-block">ตรวจจับการบันทึกบัญชีออโต้</span>}
                 </td>
                 <td className="px-6 py-4"><span className="bg-slate-100 text-slate-700 px-2 py-1 rounded text-xs font-medium">{q.type}</span></td>

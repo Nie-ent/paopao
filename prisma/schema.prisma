@@ -195,8 +195,11 @@ model RewardClaim {
 
 model Quest {
   id          String         @id @default(uuid())
+  /// Thai (default) title and description; the *En fields are shown in the English UI
   title       String
   description String?
+  titleEn       String?
+  descriptionEn String?
   points      Int
   type        QuestType      @default(ONETIME)
   condition   QuestCondition @default(NONE)
