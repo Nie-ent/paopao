@@ -3,8 +3,8 @@ import { getCurrentUser } from "@/lib/current-user"
 import { isAiBusyError } from "@/lib/ai"
 import { previewStatement, StatementError } from "@/services/statement.service"
 
-// Reading a long statement can take a while
-export const maxDuration = 120
+// Reading a long statement can take a while, more so when a model times out and the next one is tried
+export const maxDuration = 300
 
 /** Upload a statement file and get back the parsed rows, with likely duplicates flagged. Nothing is saved. */
 export async function POST(req: Request) {
