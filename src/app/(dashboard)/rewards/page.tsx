@@ -47,7 +47,7 @@ export default function RewardsPage() {
         window.dispatchEvent(new Event('points_updated')) // Notify Header
         loadData() // Refresh list of claims
       } else {
-        toast.error(res.error || t('rewards.redeem_failed'))
+        toast.error(t(res.error || 'rewards.redeem_failed'))
       }
     } finally {
       setLoading(false)

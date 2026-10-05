@@ -8,7 +8,7 @@ export async function claimDynamicQuest(questId: string) {
   if (!user) return { success: false, error: "Unauthorized" }
 
   const quest = await prisma.quest.findUnique({ where: { id: questId } })
-  if (!quest || quest.status !== 'ACTIVE') return { success: false, error: "Quest is not active" }
+  if (!quest || quest.status !== 'ACTIVE') return { success: false, error: "quest.error.inactive" }
 
   // Check claims
   const now = new Date()
@@ -18,14 +18,14 @@ export async function claimDynamicQuest(questId: string) {
   })
 
   if (quest.type === 'ONETIME' && claims.length > 0) {
-    return { success: false, error: "ภารกิจนี้รับได้ครั้งเดียวและคุณได้รับไปแล้ว" }
+    return { success: false, error: "quest.error.claimed_once" }
   } else if (quest.type === 'DAILY' && claims.length > 0) {
     const lastClaim = new Date(claims[0].createdAt)
     // UTC midnight exactly aligns with 07:00 AM Bangkok Time
     const today = new Date(now.getTime()).toDateString()
     const claimDate = new Date(lastClaim.getTime()).toDateString()
     if (today === claimDate) {
-      return { success: false, error: "ภารกิจรายวันนี้รับไปแล้ว (รีเซ็ตทุก 7 โมงเช้า)\nกลับมาใหม่พรุ่งนี้นะครับ" }
+      return { success: false, error: "quest.error.claimed_today" }
     }
   }
 
@@ -37,14 +37,14 @@ export async function claimDynamicQuest(questId: string) {
     })
     
     if (!txToday) {
-      return { success: false, error: "คุณต้องบันทึกรายรับหรือรายจ่ายวันนี้ก่อน ถึงจะรับภารกิจนี้ได้" }
+      return { success: false, error: "quest.error.log_today" }
     }
     
     const txDateStr = new Date(txToday.date.getTime()).toDateString()
     const currentDateStr = new Date(now.getTime()).toDateString()
     
     if (txDateStr !== currentDateStr) {
-      return { success: false, error: "คุณยังไม่ได้บันทึกธุรกรรมของวันนี้เลย!" }
+      return { success: false, error: "quest.error.log_today" }
     }
   }
 
@@ -61,7 +61,7 @@ export async function claimDynamicQuest(questId: string) {
     return { success: true }
   } catch (error) {
     console.error("Failed to claim dynamic quest", error)
-    return { success: false, error: "ระบบขัดข้อง กรุณาลองใหม่อีกครั้ง" }
+    return { success: false, error: "common.something_wrong" }
   }
 }
 
@@ -87,12 +87,12 @@ export async function redeemReward(rewardId: string) {
   // 1. Fetch reward
   const reward = await prisma.reward.findUnique({ where: { id: rewardId } })
   if (!reward || reward.status !== 'AVAILABLE') {
-    return { success: false, error: "ของรางวัลนี้หมดหรือไม่อยู่ในระบบแล้ว" }
+    return { success: false, error: "rewards.error.unavailable" }
   }
 
   // 2. Check points
   if ((user.paoPoints || 0) < reward.points) {
-    return { success: false, error: "PaoPoints ไม่เพียงพอ" }
+    return { success: false, error: "rewards.error.not_enough_points" }
   }
 
   // 3. Transaction
@@ -116,7 +116,7 @@ export async function redeemReward(rewardId: string) {
     return { success: true }
   } catch (error) {
     console.error("Redemption error", error)
-    return { success: false, error: "ระบบขัดข้อง กรุณาลองใหม่อีกครั้ง" }
+    return { success: false, error: "common.something_wrong" }
   }
 }
 

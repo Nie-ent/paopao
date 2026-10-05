@@ -15,6 +15,7 @@ import { claimDynamicQuest, getActiveQuests } from "@/features/quests/actions"
 import { useLanguage } from "@/contexts/LanguageContext"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
+import { questText } from "@/lib/quests"
 
 type Timeframe = 'ALL' | 'YTD' | 'MONTH' | 'WEEK'
 
@@ -66,7 +67,7 @@ export default function DashboardOverview() {
         getDashboardData(timeframe, selectedMonth, selectedYear, locale).then(setDbData);
         window.dispatchEvent(new Event('points_updated'));
       } else {
-        toast.error(res.error || t('common.something_wrong'));
+        toast.error(t(res.error || 'common.something_wrong'));
       }
     } finally {
       setClaimingId(null);
@@ -230,8 +231,8 @@ export default function DashboardOverview() {
                  return (
                    <div key={q.id} className="min-w-[260px] max-w-[300px] snap-center shrink-0 h-full bg-white/80 dark:bg-black/40 p-4 rounded-xl border border-orange-200/50 dark:border-orange-900/50 flex flex-col justify-between gap-3 shadow-sm hover:shadow-md transition-shadow">
                      <div className="flex-1">
-                       <p className="font-bold text-[15px] text-foreground leading-tight line-clamp-2 mb-1">{q.title}</p>
-                       <p className="text-[13px] text-muted-foreground line-clamp-2">{q.description}</p>
+                       <p className="font-bold text-[15px] text-foreground leading-tight line-clamp-2 mb-1">{questText(q, language).title}</p>
+                       <p className="text-[13px] text-muted-foreground line-clamp-2">{questText(q, language).description}</p>
                        {q.condition === 'LOG_TRANSACTION_TODAY' && (
                          <span className="inline-block mt-2 px-2 py-0.5 rounded text-[11px] font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
                            {t('dashboard.quests.log_today')}

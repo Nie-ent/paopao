@@ -160,9 +160,9 @@ export async function getAdminQuests() {
   return prisma.quest.findMany({ orderBy: { createdAt: 'desc' } })
 }
 
-export async function createQuest(data: { title: string, description: string, points: number, type: string, condition?: string }) {
+export async function createQuest(data: { title: string, description: string, titleEn?: string, descriptionEn?: string, points: number, type: string, condition?: string }) {
   if (!await isAdmin()) return { error: "Unauthorized" }
-  await prisma.quest.create({ data: { ...data, type: data.type as any, condition: (data.condition as any) || 'NONE', status: 'ACTIVE' } })
+  await prisma.quest.create({ data: { ...data, titleEn: data.titleEn?.trim() || null, descriptionEn: data.descriptionEn?.trim() || null, type: data.type as any, condition: (data.condition as any) || 'NONE', status: 'ACTIVE' } })
   return { success: true }
 }
 
@@ -172,9 +172,9 @@ export async function updateQuestStatus(id: string, status: string) {
   return { success: true }
 }
 
-export async function updateQuest(id: string, data: { title: string, description: string, points: number, type: string, condition?: string }) {
+export async function updateQuest(id: string, data: { title: string, description: string, titleEn?: string, descriptionEn?: string, points: number, type: string, condition?: string }) {
   if (!await isAdmin()) return { error: "Unauthorized" }
-  await prisma.quest.update({ where: { id }, data: { ...data, type: data.type as any, condition: data.condition as any } })
+  await prisma.quest.update({ where: { id }, data: { ...data, titleEn: data.titleEn?.trim() || null, descriptionEn: data.descriptionEn?.trim() || null, type: data.type as any, condition: data.condition as any } })
   return { success: true }
 }
 
