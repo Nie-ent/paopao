@@ -25,6 +25,12 @@ describe("withModelFallback", () => {
     expect(run).toHaveBeenCalledTimes(6)
   })
 
+  it("tells the run which attempt is the last model", async () => {
+    const seen: [string, boolean][] = []
+    await expect(withModelFallback(async (model, { isLast }) => { seen.push([model, isLast]); throw busy() }, { ...opts, retryDelaysMs: [] })).rejects.toBeTruthy()
+    expect(seen).toEqual([["a", false], ["b", true]])
+  })
+
   it("does not retry errors that will not clear up", async () => {
     const run = vi.fn(async (model: string) => { throw model === "a" ? busy() : retired() })
     await expect(withModelFallback(run, opts)).rejects.toMatchObject({ status: 404 })
@@ -34,7 +40,8 @@ describe("withModelFallback", () => {
 
 describe("isAiBusyError", () => {
   it("recognises temporary errors only", () => {
-    expect([503, 429, 500].every(status => isAiBusyError({ status }))).toBe(true)
+    expect([503, 429, 500, 502, 504].every(status => isAiBusyError({ status }))).toBe(true)
+    expect(isAiBusyError(new DOMException("This operation was aborted", "AbortError"))).toBe(true)
     expect(isAiBusyError({ status: 404 })).toBe(false)
     expect(isAiBusyError(new Error("x"))).toBe(false)
   })

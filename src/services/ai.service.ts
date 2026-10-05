@@ -214,7 +214,8 @@ export async function extractStatementRows(input: StatementInput, userCategories
 
   const rows: RawStatementRow[] = []
   for (const contents of parts) {
-    const response = await generateContent({ contents: contents as never, config })
+    // A statement can produce a lot of output, so each model gets longer than the default
+    const response = await generateContent({ contents: contents as never, config }, { timeoutMs: 45_000 })
     if (!response.text) continue
     try {
       rows.push(...(JSON.parse(response.text) as RawStatementRow[]))
