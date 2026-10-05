@@ -4,11 +4,12 @@ export const ai = new GoogleGenAI({ apiKey: process.env.AI_API_KEY || "dummy_key
 
 /**
  * Models tried in order. Gemini models get overloaded (503), rate-limited (429) or retired for new
- * API keys (404), so every call falls through to the next one. Keep distinct models next to each
- * other: aliases like gemini-flash-latest may point at the first model and share its quota.
+ * API keys (404), so every call falls through to the next one. Use distinct models: an alias like
+ * gemini-flash-latest points at one of them and is busy whenever it is. The lite model is less
+ * accurate but runs on separate capacity, so it is the last resort.
  * Override with AI_MODELS="model-a,model-b".
  */
-export const AI_MODELS = (process.env.AI_MODELS || "gemini-3.8-flash,gemini-3.5-flash,gemini-flash-latest")
+export const AI_MODELS = (process.env.AI_MODELS || "gemini-3.8-flash,gemini-3.5-flash,gemini-3.5-flash-lite")
   .split(",")
   .map(m => m.trim())
   .filter(Boolean)

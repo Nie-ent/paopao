@@ -67,7 +67,7 @@ Vercel Cron ──► /api/cron/digest, /api/cron/reminders ──► LINE push
 ### Design decisions
 
 - **AI is the fallback, not the default.** A rule-based parser (`src/services/quick-parse.ts`) handles single-item messages using the user's own history first, then keyword rules. Against 463 real historical notes it covers ~44% of messages without an LLM call. Anything ambiguous (several numbers, refunds, loans) still goes to the AI.
-- **Model fallback everywhere.** Every Gemini call walks an ordered model list (`AI_MODELS`), so an overloaded (503), rate-limited (429) or retired (404) model doesn't take the product down. Distinct models come first: aliases like `gemini-flash-latest` can share the first model's quota.
+- **Model fallback everywhere.** Every Gemini call walks an ordered model list (`AI_MODELS`), so an overloaded (503), rate-limited (429) or retired (404) model doesn't take the product down. If every model is busy, the list is retried after a short pause. The last model is a lite model that runs on separate capacity, so it usually answers when the larger ones are overloaded.
 - **Cost guards.** Daily chat limits per tier (free 10 / pro 100 / shared demo 30) and capped reply length. The morning brief is a template (no LLM) and only goes to users active in the last 7 days, which also saves LINE push quota.
 - **Review before import.** Statement rows are matched against existing transactions by bank reference, or by type and amount within a day. Each existing transaction is matched at most once, so genuinely repeated payments stay importable.
 - **One source of truth** for categories (`src/lib/categories.ts`), shared by the AI prompt, the UI and the parser, and tested against i18n.
