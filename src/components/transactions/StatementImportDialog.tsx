@@ -15,7 +15,7 @@ import type { StatementPreviewRow } from "@/lib/statement"
 type Props = { open: boolean; onOpenChange: (open: boolean) => void; onImported: () => void }
 
 const ACCEPT = ".pdf,.csv,.xlsx,.xls,image/png,image/jpeg,image/webp"
-const KNOWN_ERRORS = ["TOO_LARGE", "UNSUPPORTED", "PASSWORD_REQUIRED", "WRONG_PASSWORD", "NO_ROWS"]
+const KNOWN_ERRORS = ["TOO_LARGE", "UNSUPPORTED", "PASSWORD_REQUIRED", "WRONG_PASSWORD", "NO_ROWS", "AI_BUSY"]
 
 export function StatementImportDialog({ open, onOpenChange, onImported }: Props) {
   const { t, tc, locale } = useLanguage()

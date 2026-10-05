@@ -181,6 +181,7 @@ export const en = {
   'statement.error.WRONG_PASSWORD': 'Wrong PDF password',
   'statement.error.NO_ROWS': 'No transactions found in this file',
   'statement.error.FAILED': "Couldn't read the statement. Please try again.",
+  'statement.error.AI_BUSY': 'The AI is busy right now. Please try again in a minute.',
 
   // Goals
   'goals.title': 'Goals & Tasks',
@@ -565,6 +566,7 @@ export const th: Record<MessageKey, string> = {
   'statement.error.WRONG_PASSWORD': 'รหัสผ่าน PDF ไม่ถูกต้อง',
   'statement.error.NO_ROWS': 'ไม่พบรายการในไฟล์นี้',
   'statement.error.FAILED': 'อ่าน Statement ไม่สำเร็จ กรุณาลองใหม่',
+  'statement.error.AI_BUSY': 'ระบบ AI มีผู้ใช้งานหนาแน่น กรุณาลองใหม่อีกครั้งในอีกสักครู่',
 
   'goals.title': 'เป้าหมายและสิ่งที่ต้องทำ',
   'goals.subtitle': 'ติดตามแผนการออมเงินและสิ่งที่ต้องทำของคุณ',
