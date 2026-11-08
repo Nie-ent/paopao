@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react"
 import { getAdminUsers, adjustUserPoints } from "@/features/admin/actions"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
+import { useSingleFlight } from "@/hooks/use-single-flight"
 import { Input } from "@/components/ui/input"
 import { Users, Edit2, History, Search } from "lucide-react"
 
@@ -23,10 +24,12 @@ export default function AdminUsersPage() {
     u.lineId?.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
-  const handleAdjustPoints = async (isAdd: boolean) => {
+  // Adjusting points is not idempotent: a double click would add the points twice
+  const { run, pendingKey } = useSingleFlight()
+  const handleAdjustPoints = (isAdd: boolean) => run(async () => {
     const amount = Number(pointsInput)
     if (!amount || amount <= 0) return
-    
+
     const delta = isAdd ? amount : -amount
     const res = await adjustUserPoints(adjustModal.user.id, delta)
     if (res?.success) {
@@ -34,7 +37,7 @@ export default function AdminUsersPage() {
       setPointsInput('')
       loadUsers()
     }
-  }
+  }, isAdd ? "add" : "remove")
 
   return (
     <div className="space-y-6">
@@ -138,14 +141,16 @@ export default function AdminUsersPage() {
                 variant="outline" 
                 className="w-full flex-1 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
                 onClick={() => handleAdjustPoints(false)}
-                disabled={!pointsInput}
+                disabled={!pointsInput || pendingKey !== null}
+                loading={pendingKey === "remove"}
               >
                 หักออก (-{pointsInput || '0'})
               </Button>
               <Button 
                 className="w-full flex-1 bg-emerald-600 hover:bg-emerald-700"
                 onClick={() => handleAdjustPoints(true)}
-                disabled={!pointsInput}
+                disabled={!pointsInput || pendingKey !== null}
+                loading={pendingKey === "add"}
               >
                 เพิ่มให้ (+{pointsInput || '0'})
               </Button>

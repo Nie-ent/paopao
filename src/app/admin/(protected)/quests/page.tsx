@@ -4,6 +4,8 @@ import { getAdminQuests, createQuest, updateQuestStatus, updateQuest, deleteQues
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
+import { useSingleFlight } from "@/hooks/use-single-flight"
+import { Select } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { toast } from "sonner"
@@ -26,7 +28,13 @@ export default function AdminQuestsPage() {
   const loadQuests = () => getAdminQuests().then(setQuests)
   useEffect(() => { loadQuests() }, [])
 
-  const handleCreateOrUpdate = async () => {
+  // One write at a time: a double click would create duplicate items or send two requests
+  const { run, pendingKey } = useSingleFlight()
+  const handleCreateOrUpdate = () => run(createOrUpdateImpl, "save")
+  const handleDelete = () => run(deleteImpl, "delete")
+  const handleToggleStatus = (id: string, current: string) => run(() => toggleStatusImpl(id, current), `toggle:${id}`)
+
+  const createOrUpdateImpl = async () => {
     if (!formData.title) return toast.error("Please provide a title")
     
     let res: any;
@@ -75,7 +83,7 @@ export default function AdminQuestsPage() {
     setIsDialogOpen(true)
   }
 
-  const handleDelete = async () => {
+  const deleteImpl = async () => {
     if (!itemToDelete) return
     const res = await deleteQuest(itemToDelete.id)
     if (res?.success) {
@@ -87,7 +95,7 @@ export default function AdminQuestsPage() {
     }
   }
 
-  const handleToggleStatus = async (id: string, currentStatus: string) => {
+  const toggleStatusImpl = async (id: string, currentStatus: string) => {
     const newStatus = currentStatus === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
     const res = await updateQuestStatus(id, newStatus)
     if (res?.success) {
@@ -131,27 +139,15 @@ export default function AdminQuestsPage() {
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">ประเภทภารกิจ (Type)</label>
-                <select 
-                  value={formData.type} 
-                  onChange={e => setFormData({...formData, type: e.target.value})}
-                  className="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <option value="ONETIME">ทำครั้งเดียวจบ (One-Time)</option>
-                  <option value="DAILY">แพทช์รายวัน (Daily)</option>
-                </select>
+                <Select aria-label="ประเภทภารกิจ" className="h-10" value={formData.type} onValueChange={v => setFormData({...formData, type: v})}
+                  options={[{ value: "ONETIME", label: "ทำครั้งเดียวจบ (One-Time)" }, { value: "DAILY", label: "แพทช์รายวัน (Daily)" }]} />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">เงื่อนไขตรวจสอบ (Condition)</label>
-                <select 
-                  value={formData.condition} 
-                  onChange={e => setFormData({...formData, condition: e.target.value})}
-                  className="flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <option value="NONE">ไม่มีเงื่อนไข (กดรับได้เลย)</option>
-                  <option value="LOG_TRANSACTION_TODAY">ตรวจจับการบันทึก 1 ธุรกรรมภายในวันนี้</option>
-                </select>
+                <Select aria-label="เงื่อนไขตรวจสอบ" className="h-10" value={formData.condition} onValueChange={v => setFormData({...formData, condition: v})}
+                  options={[{ value: "NONE", label: "ไม่มีเงื่อนไข (กดรับได้เลย)" }, { value: "LOG_TRANSACTION_TODAY", label: "ตรวจจับการบันทึก 1 ธุรกรรมภายในวันนี้" }]} />
               </div>
-              <Button onClick={handleCreateOrUpdate} className="w-full bg-slate-900">{isEditMode ? "บันทึกการแก้ไข" : "สร้างภารกิจ"}</Button>
+              <Button onClick={handleCreateOrUpdate} loading={pendingKey === "save"} className="w-full bg-slate-900">{isEditMode ? "บันทึกการแก้ไข" : "สร้างภารกิจ"}</Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -230,7 +226,7 @@ export default function AdminQuestsPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">ยืนยันการลบ</AlertDialogAction>
+            <Button onClick={handleDelete} loading={pendingKey === "delete"} className="bg-red-600 hover:bg-red-700">ยืนยันการลบ</Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -1,6 +1,8 @@
 import { Button as ButtonPrimitive } from "@base-ui/react/button"
 import { cva, type VariantProps } from "class-variance-authority"
 
+import { Loader2 } from "lucide-react"
+
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
@@ -40,18 +42,32 @@ const buttonVariants = cva(
   }
 )
 
+/**
+ * `loading` shows a spinner and disables the button (with aria-busy), so an action in flight can't
+ * be started again. Pair it with useSingleFlight, which also blocks clicks that land before React
+ * re-renders.
+ */
 function Button({
   className,
   variant = "default",
   size = "default",
+  loading = false,
+  disabled,
+  children,
   ...props
-}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
+}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants> & { loading?: boolean }) {
   return (
     <ButtonPrimitive
       data-slot="button"
+      data-loading={loading || undefined}
+      aria-busy={loading || undefined}
+      disabled={disabled || loading}
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
-    />
+    >
+      {loading && <Loader2 className="animate-spin" aria-hidden />}
+      {children}
+    </ButtonPrimitive>
   )
 }
 

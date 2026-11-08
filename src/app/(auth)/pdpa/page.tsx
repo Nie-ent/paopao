@@ -14,6 +14,7 @@ export default function PDPAPage() {
   const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false)
   const [isAccepted, setIsAccepted] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const submitLock = useRef(false)
   
   const contentRef = useRef<HTMLDivElement>(null)
 
@@ -36,7 +37,8 @@ export default function PDPAPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!hasScrolledToBottom || !isAccepted) return
+    if (!hasScrolledToBottom || !isAccepted || submitLock.current) return
+    submitLock.current = true
     setIsSubmitting(true)
     await acceptPDPA()
   }

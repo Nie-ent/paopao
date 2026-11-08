@@ -19,6 +19,7 @@ export default function RewardsPage() {
   const [claims, setClaims] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const redeemLockRef = React.useRef(false)
+  const [redeemingId, setRedeemingId] = React.useState<string | null>(null)
   
   const loadData = async () => {
     fetchProfileDataCached().then(user => {
@@ -40,6 +41,7 @@ export default function RewardsPage() {
     
     redeemLockRef.current = true
     setLoading(true)
+    setRedeemingId(item.id)
     try {
       const res = await redeemReward(item.id)
       if (res.success) {
@@ -52,6 +54,7 @@ export default function RewardsPage() {
       }
     } finally {
       setLoading(false)
+      setRedeemingId(null)
       redeemLockRef.current = false
     }
   }
@@ -92,6 +95,7 @@ export default function RewardsPage() {
               </CardContent>
               <CardFooter className="pt-0">
                 <Button 
+                  loading={redeemingId === item.id}
                   onClick={() => handleRedeem(item)}
                   disabled={loading || item.status === 'OUT_OF_STOCK' || points === null || points < item.points} 
                   className={`w-full ${item.status === 'OUT_OF_STOCK' ? 'bg-muted text-muted-foreground' : 'bg-orange-500 hover:bg-orange-600'}`}

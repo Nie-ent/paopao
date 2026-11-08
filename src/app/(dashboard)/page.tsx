@@ -14,6 +14,8 @@ import { generateDashboardInsight } from "@/features/ai/actions"
 import { claimDynamicQuest, getActiveQuests } from "@/features/quests/actions"
 import { bangkokDayKey } from "@/lib/dates"
 import { useLanguage } from "@/contexts/LanguageContext"
+import { Select } from "@/components/ui/select"
+import { useSingleFlight } from "@/hooks/use-single-flight"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import { questText } from "@/lib/localized"
@@ -36,7 +38,7 @@ export default function DashboardOverview() {
     isOpen: false, title: '', data: [], colors: []
   })
   const [activeQuests, setActiveQuests] = useState<any[]>([])
-  const [claimingId, setClaimingId] = useState<string | null>(null)
+  const { run: runClaim, pendingKey: claimingId } = useSingleFlight()
   
   // Fetch Quests
   const loadQuests = () => getActiveQuests().then(setActiveQuests)
@@ -56,10 +58,7 @@ export default function DashboardOverview() {
     })
   }, [timeframe, selectedMonth, selectedYear, locale])
 
-  const handleClaimDynamicQuest = async (questId: string) => {
-    if (claimingId) return; // Prevent double click
-    setClaimingId(questId);
-    try {
+  const handleClaimDynamicQuest = (questId: string) => runClaim(async () => {
       const res = await claimDynamicQuest(questId);
       if (res.success) {
         toast.success(t('dashboard.quests.claim_success'));
@@ -70,10 +69,7 @@ export default function DashboardOverview() {
       } else {
         toast.error(t(res.error || 'common.something_wrong'));
       }
-    } finally {
-      setClaimingId(null);
-    }
-  }
+  }, questId)
 
   // Lazy Load AI Insight (Once per day/language)
   useEffect(() => {
@@ -159,26 +155,20 @@ export default function DashboardOverview() {
         </div>
         {timeframe === 'MONTH' && (
           <div className="flex gap-2 self-start sm:self-auto">
-            <select 
-              className="bg-background border border-border rounded-md text-sm p-1.5 px-3 text-foreground shadow-sm h-9"
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(Number(e.target.value))}
-            >
-              {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
-                <option key={m} value={m}>
-                  {new Date(0, m - 1).toLocaleString(locale, { month: 'long' })}
-                </option>
-              ))}
-            </select>
-            <select 
-              className="bg-background border border-border rounded-md text-sm p-1.5 px-3 text-foreground shadow-sm h-9"
-              value={selectedYear}
-              onChange={(e) => setSelectedYear(Number(e.target.value))}
-            >
-              {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(y => (
-                <option key={y} value={y}>{y + (language === 'th' ? 543 : 0)}</option>
-              ))}
-            </select>
+            <Select
+              aria-label="Month"
+              className="w-auto min-w-32 shadow-sm"
+              value={String(selectedMonth)}
+              onValueChange={v => setSelectedMonth(Number(v))}
+              options={Array.from({ length: 12 }, (_, i) => i + 1).map(m => ({ value: String(m), label: new Date(0, m - 1).toLocaleString(locale, { month: 'long' }) }))}
+            />
+            <Select
+              aria-label="Year"
+              className="w-auto min-w-20 shadow-sm"
+              value={String(selectedYear)}
+              onValueChange={v => setSelectedYear(Number(v))}
+              options={Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(y => ({ value: String(y), label: String(y + (language === 'th' ? 543 : 0)) }))}
+            />
           </div>
         )}
       </div>

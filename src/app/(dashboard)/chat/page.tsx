@@ -33,6 +33,7 @@ function ChatContent() {
   const [messages, setMessages] = useState<Message[]>([])
   const [inputValue, setInputValue] = useState("")
   const [isTyping, setIsTyping] = useState(false)
+  const sendingRef = useRef(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const initialQuerySent = useRef(false)
 
@@ -87,7 +88,9 @@ function ChatContent() {
 
   const handleSend = async (overrideMsg?: string) => {
     const msg = overrideMsg || inputValue
-    if (!msg.trim()) return
+    // One message at a time: each send is a paid AI call, and Enter can fire twice before re-render
+    if (!msg.trim() || sendingRef.current) return
+    sendingRef.current = true
 
     setInputValue("")
     setMessages(prev => [...prev, { role: 'user', content: msg }])
@@ -122,6 +125,7 @@ function ChatContent() {
       setMessages(prev => [...prev, { role: 'model', content: t('chat.server_error_msg') }])
     } finally {
       setIsTyping(false)
+      sendingRef.current = false
     }
   }
 

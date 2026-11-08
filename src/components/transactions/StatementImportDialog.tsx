@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useRef } from "react"
 import { FileUp, Loader2, AlertTriangle } from "lucide-react"
 import { toast } from "sonner"
 
@@ -25,6 +25,8 @@ export function StatementImportDialog({ open, onOpenChange, onImported }: Props)
   const [rows, setRows] = useState<StatementPreviewRow[] | null>(null)
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [busy, setBusy] = useState<"reading" | "importing" | null>(null)
+  // Set synchronously, so a second click before the re-render can't read (AI + quota) or import (duplicate rows) twice
+  const busyRef = useRef(false)
 
   const reset = () => {
     setFile(null); setPassword(""); setNeedsPassword(false); setRows(null); setSelected(new Set()); setBusy(null)
@@ -37,7 +39,8 @@ export function StatementImportDialog({ open, onOpenChange, onImported }: Props)
   }
 
   const readStatement = async () => {
-    if (!file) return
+    if (!file || busyRef.current) return
+    busyRef.current = true
     setBusy("reading")
     try {
       const body = new FormData()
@@ -58,15 +61,16 @@ export function StatementImportDialog({ open, onOpenChange, onImported }: Props)
       toast.error(t("statement.error.FAILED"))
     } finally {
       setBusy(null)
+      busyRef.current = false
     }
   }
 
   const importSelected = async () => {
-    if (!rows) return
+    if (!rows || busyRef.current) return
+    busyRef.current = true
     setBusy("importing")
     const chosen = rows.filter((_, i) => selected.has(i)).map(({ date, time, type, amount, category, note, reference }) => ({ date, time, type, amount, category, note, reference }))
-    const res = await importStatementRows(chosen)
-    setBusy(null)
+    const res = await importStatementRows(chosen).finally(() => { setBusy(null); busyRef.current = false })
     if (!res.success) {
       toast.error(t("statement.error.FAILED"))
       return
@@ -151,14 +155,13 @@ export function StatementImportDialog({ open, onOpenChange, onImported }: Props)
           {rows ? (
             <>
               <Button variant="outline" onClick={() => { setRows(null); setSelected(new Set()) }} disabled={!!busy}>{t("statement.back")}</Button>
-              <Button onClick={importSelected} disabled={!!busy || selected.size === 0}>
-                {busy === "importing" && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              <Button onClick={importSelected} disabled={!!busy || selected.size === 0} loading={busy === "importing"}>
                 {t("statement.import", { count: selected.size })}
               </Button>
             </>
           ) : (
-            <Button onClick={readStatement} disabled={!file || !!busy} className="w-full sm:w-auto">
-              {busy === "reading" ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />{t("statement.reading")}</> : t("statement.read")}
+            <Button onClick={readStatement} disabled={!file || !!busy} loading={busy === "reading"} className="w-full sm:w-auto">
+              {busy === "reading" ? t("statement.reading") : t("statement.read")}
             </Button>
           )}
         </DialogFooter>

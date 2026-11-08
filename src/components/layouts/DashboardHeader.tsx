@@ -17,6 +17,7 @@ import { useRouter, usePathname } from "next/navigation"
 
 export function DashboardHeader() {
   const { t, language, setLanguage } = useLanguage()
+  const signingOut = React.useRef(false)
   const router = useRouter()
   const pathname = usePathname()
   const [avatarUrl, setAvatarUrl] = React.useState<string>("https://github.com/shadcn.png")
@@ -136,6 +137,9 @@ export function DashboardHeader() {
             <DropdownMenuItem 
               className="cursor-pointer text-destructive focus:bg-destructive/10 focus:text-destructive"
               onClick={() => {
+                if (signingOut.current) return
+                signingOut.current = true
+                toast.loading(t('header.signing_out'))
                 React.startTransition(async () => {
                   await signOut();
                 });
