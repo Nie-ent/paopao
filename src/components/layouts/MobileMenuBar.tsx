@@ -7,9 +7,7 @@ import {
   LineChart,
   Wallet,
   Target,
-  Settings,
-  Sparkles,
-  Gift,
+  Receipt,
   MessageSquare,
 } from "lucide-react"
 import { useLanguage } from "@/contexts/LanguageContext"
@@ -30,6 +28,11 @@ const items = [
     titleKey: "nav.goals",
     url: "/goals",
     icon: Target,
+  },
+  {
+    titleKey: "nav.bills",
+    url: "/bills",
+    icon: Receipt,
   },
   {
     titleKey: "nav.chat",

@@ -54,3 +54,14 @@ describe('classifyByKeywords', () => {
     expect(parse(text)).toBe('NO_KEYWORD')
   })
 })
+
+describe('debt repayments and formatted amounts', () => {
+  it('reads debt payments with thousands separators without AI', async () => {
+    const { normalizeAmountText } = await import('@/lib/amount-text')
+    expect(parse(normalizeAmountText('ชำระหนี้ 1,000'))).toEqual({ type: 'EXPENSE', category: 'Debt Payment', amount: 1000, note: 'ชำระหนี้' })
+    expect(parse(normalizeAmountText('ค่างวดรถ ๘,๕๐๐ บาท'))).toEqual({ type: 'EXPENSE', category: 'Debt Payment', amount: 8500, note: 'ค่างวดรถ' })
+    expect(parse('จ่ายหนี้ กยศ 2000')).toMatchObject({ category: 'Debt Payment', amount: 2000 })
+    // Money back from a friend is left to the AI
+    expect(parse('เพื่อนคืนหนี้ 500')).toBe('NO_KEYWORD')
+  })
+})

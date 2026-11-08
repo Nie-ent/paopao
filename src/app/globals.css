@@ -177,3 +177,19 @@
     @apply bg-white/80 dark:bg-black/60 backdrop-blur-md border border-white/20 dark:border-white/10 shadow-md;
   }
 }
+/* Landing page: a soft light sweep across the final call-to-action */
+@keyframes cta-shine {
+  0% { transform: translateX(-120%) skewX(-20deg); }
+  60%, 100% { transform: translateX(220%) skewX(-20deg); }
+}
+.cta-shine::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.25), transparent);
+  animation: cta-shine 5s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cta-shine::after { animation: none; display: none; }
+}

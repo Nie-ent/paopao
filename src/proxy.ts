@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { createSessionToken, verifySessionToken, SESSION_COOKIE, sessionCookieOptions } from '@/lib/session'
+import { RETURN_PATH_COOKIE, safeReturnPath } from '@/lib/return-path'
 
-const PUBLIC_PAGES = ['/welcome', '/pricing', '/privacy']
+const PUBLIC_PAGES = ['/welcome', '/en', '/pricing', '/privacy']
 
 /** LINE's in-app browser, where LIFF runs ("Line/<version>" in the user agent) */
 const isLineInAppBrowser = (request: NextRequest) => /\bLine\//i.test(request.headers.get('user-agent') ?? '')
@@ -18,11 +19,20 @@ export async function proxy(request: NextRequest) {
 
   // An old unsigned, forged or expired cookie is removed from every response, redirects included
   const hasStaleSession = !sessionLineId && request.cookies.has(SESSION_COOKIE)
-  const redirectTo = (pathname: string) => {
+  const redirectTo = (pathname: string, { remember }: { remember?: string | null } = {}) => {
     const url = request.nextUrl.clone()
     url.pathname = pathname
+    // liff.state is resolved here; left on /login, liff.init would bounce to it before sign-in
+    url.searchParams.delete('liff.state')
     const redirect = NextResponse.redirect(url)
     if (hasStaleSession) redirect.cookies.delete(SESSION_COOKIE)
+    if (remember) redirect.cookies.set(RETURN_PATH_COOKIE, remember, { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', path: '/', maxAge: 600 })
+    return redirect
+  }
+  /** Send a signed-in user to a saved page (LIFF deep link or the page they asked for before login) */
+  const redirectToReturnPath = (path: string) => {
+    const redirect = NextResponse.redirect(new URL(path, request.nextUrl.origin))
+    redirect.cookies.delete(RETURN_PATH_COOKIE)
     return redirect
   }
 
@@ -43,6 +53,14 @@ export async function proxy(request: NextRequest) {
   const isPdpaPage = pathname.startsWith('/pdpa')
   const isSignedIn = isDemoUser || isDirectLineSession
 
+  // Rich-menu / Flex links open "/?liff.state=%2Fbills": go straight there, or remember it through sign-in
+  const liffTarget = safeReturnPath(request.nextUrl.searchParams.get('liff.state'))
+  const savedTarget = safeReturnPath(request.cookies.get(RETURN_PATH_COOKIE)?.value)
+  if (liffTarget) {
+    if (isSignedIn && hasAcceptedPDPA) return redirectToReturnPath(liffTarget)
+    return redirectTo(isSignedIn ? '/pdpa' : '/login', { remember: liffTarget })
+  }
+
   // Public marketing pages: anyone can read them, signed in or not, PDPA accepted or not
   if (PUBLIC_PAGES.some(p => pathname === p || pathname.startsWith(p + '/'))) return response
 
@@ -59,7 +77,7 @@ export async function proxy(request: NextRequest) {
   
   // If not logged in and not heading to login -> redirect to login
   if (!isSignedIn && !isAuthPage && !request.nextUrl.pathname.startsWith('/api/')) {
-    return redirectTo('/login')
+    return redirectTo('/login', { remember: safeReturnPath(pathname + request.nextUrl.search) })
   }
 
   // If logged in, but hasn't accepted PDPA, and not on PDPA page -> redirect to PDPA
@@ -69,6 +87,10 @@ export async function proxy(request: NextRequest) {
 
   // If already logged in and heading to login or pdpa (when already accepted) -> redirect to dashboard
   if (isSignedIn) {
+    // Just signed in (or accepted PDPA): finish the trip to the page they were heading for
+    if (savedTarget && hasAcceptedPDPA && (pathname === '/' || isAuthPage || isPdpaPage)) {
+      return redirectToReturnPath(savedTarget)
+    }
     if (isAuthPage || (isPdpaPage && hasAcceptedPDPA)) {
       return redirectTo('/')
     }

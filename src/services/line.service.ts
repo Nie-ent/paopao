@@ -11,7 +11,9 @@ import { proPlanFor, verifySlipImage } from "@/lib/slip-verify";
 import { startProTrial } from "@/lib/trial";
 import { billReference, parseBillAnswer } from "@/lib/bills";
 import { siteUrl } from "@/lib/site";
-import { budgetTone, categoryLabel, duplicateCard, loginCard, proActivatedCard, recordedCard, summaryCard, summaryPickerCard, upsellCard } from "@/lib/line-cards";
+import { askAmountMessage, budgetTone, categoryLabel, categoryPickerMessage, confirmCard, duplicateCard, loginCard, proActivatedCard, recordedCard, summaryCard, summaryPickerCard, upsellCard } from "@/lib/line-cards";
+import { normalizeAmountText, parseAmountOnly } from "@/lib/amount-text";
+import { categoryChoices, DRAFT_TTL_MS, editItem, parseDraftItems, parseEntryAction, typeForCategory, type DraftItem, type EntryAction } from "@/lib/pending-entry";
 import { buildSummary, isSummaryRequest, parseSummaryAnswer, summaryRange, type SummaryPeriod } from "@/lib/summary";
 import { isTrialEligible } from "@/lib/subscription";
 import type { messagingApi } from "@line/bot-sdk";
@@ -74,6 +76,8 @@ export async function handleLineEvent(event: any) {
   if (event.type === "postback" && event.source?.userId && typeof event.postback?.data === "string") {
     const period = parseSummaryAnswer(event.postback.data);
     if (period) return handleSummaryAnswer(event.source.userId, event.replyToken, period);
+    const entryAction = parseEntryAction(event.postback.data);
+    if (entryAction) return handleEntryAction(event.source.userId, event.replyToken, entryAction);
     return handleBillAnswer(event.source.userId, event.replyToken, event.postback.data);
   }
   if (event.type !== "message" || !event.message || !event.source.userId) {
@@ -99,6 +103,19 @@ export async function handleLineEvent(event: any) {
     if (messageEvent.message.type === "text") {
       const textMessage = messageEvent.message as any;
       const text = textMessage.text.trim().toLowerCase();
+
+      // The user tapped "แก้ยอด" on a draft: a bare number now replaces that item's amount
+      const awaiting = await openDraft(user.id);
+      if (awaiting && awaiting.awaitingAmount != null) {
+        const amount = parseAmountOnly(textMessage.text);
+        await prisma.pendingEntry.update({ where: { id: awaiting.id }, data: { awaitingAmount: null } });
+        const items = amount ? editItem(parseDraftItems(awaiting.items), awaiting.awaitingAmount, { amount }) : null;
+        if (items) {
+          await prisma.pendingEntry.update({ where: { id: awaiting.id }, data: { items } });
+          return replyDraft(actualReplyToken, user.id, awaiting.id, items, noticesOf(awaiting.notices));
+        }
+        // Not a number: treat it as a new message below
+      }
       
       if (text === "login" || text === "เข้าสู่ระบบ" || text === "รหัสผ่าน" || text === "dashboard") {
         const liffUrl = process.env.NEXT_PUBLIC_LIFF_ID 
@@ -113,6 +130,22 @@ export async function handleLineEvent(event: any) {
         return reply(actualReplyToken, [summaryPickerCard()], `ดูสรุปรายรับรายจ่าย: แตะ "สรุปวันนี้" "สรุปเดือนนี้" หรือ "สรุปปีนี้" ด้านล่างได้เลยครับ`);
       }
 
+      if (text === "ส่งสลิป") {
+        // LINE permits camera/cameraRoll only in a quick reply, not a rich-menu
+        // action. Once the image arrives, the normal image branch below enforces
+        // the user's Free or Pro entitlement before doing any AI processing.
+        return reply(actualReplyToken, [{
+          type: "text",
+          text: "ส่งสลิปได้เลยครับ เลือกถ่ายรูปใหม่หรือเลือกจากอัลบั้ม",
+          quickReply: {
+            items: [
+              { type: "action", action: { type: "camera", label: "ถ่ายรูปสลิป" } },
+              { type: "action", action: { type: "cameraRoll", label: "เลือกจากอัลบั้ม" } },
+            ],
+          },
+        }], "ส่งสลิปได้เลยครับ เลือกถ่ายรูปใหม่หรือเลือกจากอัลบั้ม");
+      }
+
       if (text === "ทดลองใช้" || text === "ทดลองใช้ pro" || text === "trial") {
         const expiresAt = await startProTrial(user.id);
         if (!expiresAt) return replyText(actualReplyToken, "บัญชีนี้ใช้สิทธิ์ทดลองใช้ Pro ไปแล้ว หรือเป็น Pro อยู่ครับ ดูรายละเอียดแพ็กเกจ: " + subscriptionUrl());
@@ -120,7 +153,8 @@ export async function handleLineEvent(event: any) {
           `🎉 เริ่มทดลองใช้ PaoPao Pro ฟรี ${TRIAL_DAYS} วันแล้ว ใช้ได้ถึง ${bkkDate(expiresAt)}`);
       }
 
-      const cleanText = textMessage.text.replace(/\n/g, ' ');
+      // "1,500", Thai digits and "1.5k" become plain numbers for the parser and the AI
+      const cleanText = normalizeAmountText(textMessage.text.replace(/\n/g, ' '));
       // Simple single-item messages are parsed without AI; anything else goes to the LLM
       const quick = await quickParseTransaction(cleanText.trim(), user.id);
       if (quick) {
@@ -226,75 +260,13 @@ export async function handleLineEvent(event: any) {
       return replyText(actualReplyToken, "ผมไม่สามารถอ่านจำนวนเงินที่ชัดเจนจากข้อความ/รูปภาพของคุณได้ รบกวนพิมพ์ให้ชัดเจนขึ้นหรือส่งสลิปมาอีกครั้งนะครับ! 🙏");
     }
 
-    // Fetch categories to map names to IDs
-    const categories = await prisma.category.findMany({
-      where: { OR: [{ userId: null }, { userId: user.id }] }
-    });
+    // Show what was read and save only when the user confirms (or edits) it
+    const notices = [...(duplicateNotice ? [duplicateNotice] : []), ...slipNotices];
+    const draft = await addToDraft(user.id, extractedDataArray, notices);
+    if (draft) return replyDraft(actualReplyToken, user.id, draft.id, draft.items, draft.notices);
 
-    const getCategoryId = (name: string, type: 'INCOME' | 'EXPENSE') => {
-      const match = categories.find(c => c.name.toLowerCase() === name.toLowerCase());
-      if (match) return match.id;
-      const fallbackName = FALLBACK_CATEGORY[type];
-      const fallback = categories.find(c => c.name === fallbackName);
-      return fallback?.id || categories[0].id;
-    };
-
-    for (const data of extractedDataArray) {
-      try {
-        await prisma.transaction.create({
-          data: {
-            userId: user.id,
-            type: data.type,
-            amount: data.amount,
-            categoryId: getCategoryId(data.category, data.type),
-            note: data.note,
-            reference: data.reference ?? null,
-            slipHash: data.slipHash ?? null,
-          }
-        });
-      } catch (error) {
-        // Same slip arriving twice at once: the unique index on reference/slipHash rejects the second
-        if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")) throw error;
-      }
-    }
-
-    // Plain-text version, used as the fallback if LINE rejects the card
-    let statusText = "";
-    if (extractedDataArray.length === 1) {
-      const d = extractedDataArray[0];
-      statusText = `บันทึกรายการสำเร็จ ${d.type === "INCOME" ? "💵" : "💸"}\nยอดเงิน${d.type === "INCOME" ? "รับ" : "จ่าย"}: ฿${d.amount}\nหมวดหมู่: ${categoryLabel(d.category)}\nหมายเหตุ: ${d.note || "-"}`;
-    } else {
-      statusText = `📝 บันทึกสำเร็จทั้งหมด ${extractedDataArray.length} รายการ:\n` +
-        extractedDataArray.map((d, i) => `${i + 1}. ${d.type === "INCOME" ? "➕" : "➖"} ฿${d.amount} | ${categoryLabel(d.category)}`).join("\n");
-    }
-    if (duplicateNotice) statusText += `\n\n${duplicateNotice}`;
-    for (const notice of slipNotices) statusText += `\n\n${notice}`;
-
-    // This month's spending as a share of income (Bangkok month)
-    let budgetRatio: number | null = null;
-    try {
-      const today = bangkokParts(new Date());
-      const startOfMonth = bangkokDate(today.year, today.month, 1);
-      const mtd = await prisma.transaction.groupBy({ by: ['type'], where: { userId: user.id, date: { gte: startOfMonth } }, _sum: { amount: true } });
-      const total = (type: string) => mtd.find(t => t.type === type)?._sum.amount || 0;
-      if (total("INCOME") > 0 && extractedDataArray.some(d => d.type === "EXPENSE")) {
-        budgetRatio = (total("EXPENSE") / total("INCOME")) * 100;
-        const tone = budgetTone(budgetRatio);
-        if (tone) statusText += `\n\n${tone.message}`;
-      }
-    } catch (budgetError) {
-      console.error("Failed to calculate budget ratio", budgetError);
-    }
-
-    const colorOf = (name: string) => categories.find(c => c.name.toLowerCase() === name.toLowerCase())?.color ?? null;
-    const card = recordedCard({
-      items: extractedDataArray.map(d => ({ type: d.type, amount: d.amount, category: d.category, categoryColor: colorOf(d.category), note: d.note })),
-      dashboardUrl: appUrl("/"),
-      budgetRatio,
-      duplicates: duplicateList,
-      notices: slipNotices,
-    });
-    return reply(actualReplyToken, [card], statusText);
+    // No draft storage (e.g. the table isn't migrated yet): save straight away as before
+    return recordAndReply(user.id, extractedDataArray, actualReplyToken, { duplicates: duplicateList, notices: slipNotices, duplicateNotice });
 
 
   } catch (error: any) {
@@ -346,6 +318,91 @@ export async function replyText(replyToken: string, text: string) {
 }
 
 type SlipTransaction = ExtractedTransaction & { reference?: string | null; slipHash?: string | null };
+
+/**
+ * Writes the entries and replies with the "recorded" card (budget share of income included).
+ * Called when the user confirms a draft, or directly when no draft could be kept.
+ */
+async function recordAndReply(
+  userId: string,
+  items: SlipTransaction[],
+  replyToken: string,
+  extras: { duplicates?: { date: Date; amount: number }[]; notices?: string[]; duplicateNotice?: string } = {},
+) {
+  const duplicateList = extras.duplicates ?? [];
+  const slipNotices = extras.notices ?? [];
+  const duplicateNotice = extras.duplicateNotice ?? "";
+    // Fetch categories to map names to IDs
+    const categories = await prisma.category.findMany({
+      where: { OR: [{ userId: null }, { userId: userId }] }
+    });
+
+    const getCategoryId = (name: string, type: 'INCOME' | 'EXPENSE') => {
+      const match = categories.find(c => c.name.toLowerCase() === name.toLowerCase());
+      if (match) return match.id;
+      const fallbackName = FALLBACK_CATEGORY[type];
+      const fallback = categories.find(c => c.name === fallbackName);
+      return fallback?.id || categories[0].id;
+    };
+
+    for (const data of items) {
+      try {
+        await prisma.transaction.create({
+          data: {
+            userId: userId,
+            type: data.type,
+            amount: data.amount,
+            categoryId: getCategoryId(data.category, data.type),
+            note: data.note,
+            reference: data.reference ?? null,
+            slipHash: data.slipHash ?? null,
+          }
+        });
+      } catch (error) {
+        // Same slip arriving twice at once: the unique index on reference/slipHash rejects the second
+        if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")) throw error;
+      }
+    }
+
+    // Plain-text version, used as the fallback if LINE rejects the card
+    let statusText = "";
+    if (items.length === 1) {
+      const d = items[0];
+      statusText = `บันทึกรายการสำเร็จ ${d.type === "INCOME" ? "💵" : "💸"}\nยอดเงิน${d.type === "INCOME" ? "รับ" : "จ่าย"}: ฿${d.amount}\nหมวดหมู่: ${categoryLabel(d.category)}\nหมายเหตุ: ${d.note || "-"}`;
+    } else {
+      statusText = `📝 บันทึกสำเร็จทั้งหมด ${items.length} รายการ:\n` +
+        items.map((d, i) => `${i + 1}. ${d.type === "INCOME" ? "➕" : "➖"} ฿${d.amount} | ${categoryLabel(d.category)}`).join("\n");
+    }
+    if (duplicateNotice) statusText += `\n\n${duplicateNotice}`;
+    for (const notice of slipNotices) statusText += `\n\n${notice}`;
+
+    // This month's spending as a share of income (Bangkok month)
+    let budgetRatio: number | null = null;
+    try {
+      const today = bangkokParts(new Date());
+      const startOfMonth = bangkokDate(today.year, today.month, 1);
+      const mtd = await prisma.transaction.groupBy({ by: ['type'], where: { userId: userId, date: { gte: startOfMonth } }, _sum: { amount: true } });
+      const total = (type: string) => mtd.find(t => t.type === type)?._sum.amount || 0;
+      if (total("INCOME") > 0 && items.some(d => d.type === "EXPENSE")) {
+        budgetRatio = (total("EXPENSE") / total("INCOME")) * 100;
+        const tone = budgetTone(budgetRatio);
+        if (tone) statusText += `\n\n${tone.message}`;
+      }
+    } catch (budgetError) {
+      console.error("Failed to calculate budget ratio", budgetError);
+    }
+
+    const colorOf = (name: string) => categories.find(c => c.name.toLowerCase() === name.toLowerCase())?.color ?? null;
+    const card = recordedCard({
+      items: items.map(d => ({ type: d.type, amount: d.amount, category: d.category, categoryColor: colorOf(d.category), note: d.note })),
+      dashboardUrl: appUrl("/"),
+      budgetRatio,
+      duplicates: duplicateList,
+      notices: slipNotices,
+    });
+    return reply(replyToken, [card], statusText);
+}
+
 
 const bahtText = (n: number) => `฿${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
 const bkkDate = (d: Date) => d.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit", timeZone: "Asia/Bangkok" });
@@ -507,4 +564,105 @@ async function redeemVerifiedPayment(userId: string, transRef: string, amount: n
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return { kind: "reply", text: used };
     throw error;
   }
+}
+
+// ---------- confirm before saving ----------
+
+const noticesOf = (json: unknown) => (Array.isArray(json) ? json.filter((n): n is string => typeof n === "string") : []);
+
+/** The user's unexpired draft, or null. Never throws, so a missing table only turns drafts off. */
+async function openDraft(userId: string) {
+  try {
+    const draft = await prisma.pendingEntry.findUnique({ where: { userId } });
+    return draft && draft.expiresAt > new Date() ? draft : null;
+  } catch (error) {
+    console.error("[line] drafts unavailable:", (error as Error)?.message);
+    return null;
+  }
+}
+
+/**
+ * Adds what was just read to the user's open draft (or starts one), so several messages sent
+ * before tapping confirm are saved together instead of the earlier ones being lost.
+ * Returns null when drafts can't be stored, and the caller saves straight away.
+ */
+async function addToDraft(userId: string, entries: SlipTransaction[], notices: string[]) {
+  const fresh: DraftItem[] = entries.map(e => ({
+    type: e.type, amount: e.amount, category: e.category, note: e.note || null,
+    reference: e.reference ?? null, slipHash: e.slipHash ?? null,
+  }));
+  try {
+    const existing = await openDraft(userId);
+    const previous = existing ? parseDraftItems(existing.items) : [];
+    // A long-forgotten draft past the card's row limit is replaced rather than grown forever
+    const items = previous.length + fresh.length <= 10 ? [...previous, ...fresh] : fresh;
+    const allNotices = [...(existing && items.length > fresh.length ? noticesOf(existing.notices) : []), ...notices];
+    const data = { items, notices: allNotices, awaitingAmount: null, expiresAt: new Date(Date.now() + DRAFT_TTL_MS) };
+    const draft = await prisma.pendingEntry.upsert({ where: { userId }, create: { userId, ...data }, update: data });
+    return { id: draft.id, items, notices: allNotices };
+  } catch (error) {
+    console.error("[line] could not keep a draft, saving directly:", (error as Error)?.message);
+    return null;
+  }
+}
+
+/** The confirm card for a draft, with category colors */
+async function replyDraft(replyToken: string, userId: string, draftId: string, items: DraftItem[], notices: string[]) {
+  const categories = await prisma.category.findMany({ where: { OR: [{ userId: null }, { userId }] }, select: { name: true, color: true } });
+  const colorOf = (name: string) => categories.find(c => c.name.toLowerCase() === name.toLowerCase())?.color ?? null;
+  const card = confirmCard({ draftId, items: items.map(i => ({ ...i, categoryColor: colorOf(i.category) })), notices });
+  const fallback = `ตรวจสอบก่อนบันทึก:\n` + items.map((d, i) => `${i + 1}. ${d.type === "INCOME" ? "+" : "−"}${bahtText(d.amount)} ${categoryLabel(d.category)}${d.note ? ` (${d.note})` : ""}`).join("\n") +
+    `\n\nแตะ "ยืนยันบันทึก" บนการ์ดเพื่อบันทึกครับ`;
+  return reply(replyToken, [card], fallback);
+}
+
+const DRAFT_GONE = "รายการนี้บันทึกหรือยกเลิกไปแล้ว หรือหมดเวลายืนยัน ส่งรายการใหม่ได้เลยครับ เช่น \"กาแฟ 65\"";
+
+/** Buttons on the confirm card: save, cancel, change amount / category / income-expense */
+async function handleEntryAction(lineUserId: string, replyToken: string, action: EntryAction) {
+  const user = await prisma.user.findUnique({ where: { lineId: lineUserId }, select: { id: true } });
+  if (!user) return replyText(replyToken, DRAFT_GONE);
+  const draft = await openDraft(user.id);
+  // Buttons on an older card (already saved, cancelled or replaced) do nothing
+  if (!draft || draft.id !== action.draftId) return replyText(replyToken, DRAFT_GONE);
+  const items = parseDraftItems(draft.items);
+  const notices = noticesOf(draft.notices);
+
+  if (action.action === "save" || action.action === "cancel") {
+    // Deleting first makes a double tap save only once
+    const { count } = await prisma.pendingEntry.deleteMany({ where: { id: draft.id } });
+    if (count === 0) return replyText(replyToken, DRAFT_GONE);
+    if (action.action === "cancel") return replyText(replyToken, "ยกเลิกแล้ว ไม่ได้บันทึกรายการนี้ครับ 👌");
+    if (items.length === 0) return replyText(replyToken, DRAFT_GONE);
+    return recordAndReply(user.id, items.map(i => ({ ...i, note: i.note ?? "" })), replyToken);
+  }
+
+  const item = items[action.index];
+  if (!item) return replyText(replyToken, DRAFT_GONE);
+
+  if (action.action === "amount") {
+    await prisma.pendingEntry.update({ where: { id: draft.id }, data: { awaitingAmount: action.index } });
+    return reply(replyToken, [askAmountMessage(item)], askAmountMessage(item).text);
+  }
+
+  const userCategories = (await prisma.category.findMany({ where: { userId: user.id }, select: { name: true } })).map(c => c.name);
+
+  if (action.action === "pickCategory") {
+    const message = categoryPickerMessage(draft.id, action.index, item, categoryChoices(item.type, userCategories, item.category));
+    return reply(replyToken, [message], message.text);
+  }
+
+  let patch: Partial<DraftItem>;
+  if (action.action === "setCategory") {
+    const known = await prisma.category.findFirst({ where: { name: action.category, OR: [{ userId: null }, { userId: user.id }] }, select: { name: true } });
+    if (!known) return replyText(replyToken, "ไม่พบหมวดนี้ ลองเลือกใหม่อีกครั้งครับ");
+    patch = { category: known.name, type: typeForCategory(known.name, item.type) };
+  } else {
+    // Income ↔ expense: a built-in category of the old direction no longer fits
+    const type = item.type === "INCOME" ? "EXPENSE" : "INCOME";
+    patch = { type, category: typeForCategory(item.category, type) === type ? item.category : FALLBACK_CATEGORY[type] };
+  }
+  const updated = editItem(items, action.index, patch)!;
+  await prisma.pendingEntry.update({ where: { id: draft.id }, data: { items: updated, awaitingAmount: null } });
+  return replyDraft(replyToken, user.id, draft.id, updated, notices);
 }
