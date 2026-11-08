@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import type { messagingApi } from "@line/bot-sdk"
-import { billQuestionCard, budgetTone, duplicateCard, loginCard, morningBriefCard, proActivatedCard, recordedCard, upsellCard } from "./line-cards"
+import { billQuestionCard, budgetTone, duplicateCard, loginCard, morningBriefCard, proActivatedCard, recordedCard, summaryCard, summaryPickerCard, upsellCard } from "./line-cards"
+import { buildSummary } from "./summary"
 import { buildBillQuestion } from "./bills"
 
 /** Walks a Flex message and returns every violation of LINE's documented limits. */
@@ -117,5 +118,44 @@ describe("other cards", () => {
     const q = msg.quickReply?.items?.[0]?.action as { data: string }
     expect(JSON.stringify(msg.contents)).toContain(`"data":"${q.data}"`)
     expect(billQuestionCard).toBeTypeOf("function")
+  })
+})
+
+describe("summary cards", () => {
+  const at = (iso: string) => new Date(iso)
+  const txs = [
+    { type: "INCOME", amount: 30000, date: at("2026-11-01T03:00:00Z"), category: { name: "Salary", color: "#10b981" } },
+    ...Array.from({ length: 60 }, (_, i) => ({ type: "EXPENSE", amount: 50 + i, date: at(`2026-11-${String((i % 28) + 1).padStart(2, "0")}T05:00:00Z`), category: { name: ["Food", "Transport", "Shopping", "Utilities", "Entertainment"][i % 5], color: "#ef4444" } })),
+  ]
+  const now = at("2026-11-28T10:00:00Z")
+
+  it("picker offers today, this month and this year as buttons and quick replies", () => {
+    const msg = summaryPickerCard()
+    expect(lineViolations(msg)).toEqual([])
+    expect((msg.quickReply?.items ?? []).map(i => (i.action as { data: string }).data)).toEqual(["summary|DAY", "summary|MONTH", "summary|YEAR"])
+  })
+
+  it("every period renders within LINE's limits, including an empty one", () => {
+    for (const period of ["DAY", "MONTH", "YEAR"] as const) {
+      const msg = summaryCard(buildSummary(period, txs, now), URL)
+      expect(lineViolations(msg), period).toEqual([])
+      expect(msg.altText).toContain("รับ ฿30,000")
+    }
+    const empty = summaryCard(buildSummary("DAY", [], now), URL)
+    expect(lineViolations(empty)).toEqual([])
+    expect(empty.altText).toContain("ยังไม่มีรายการ")
+  })
+
+  it("the month chart has a bar per day; the year chart a pair of bars per month", () => {
+    const month = JSON.stringify(summaryCard(buildSummary("MONTH", txs, now), URL).contents)
+    expect(month).toContain("รายจ่ายรายวัน")
+    const year = summaryCard(buildSummary("YEAR", txs, now), URL)
+    expect(JSON.stringify(year.contents)).toContain("ม.ค.")
+    expect(JSON.stringify(year.contents)).toContain("รายรับ vs รายจ่าย")
+  })
+
+  it("shows a negative balance in red with a minus sign", () => {
+    const msg = summaryCard(buildSummary("DAY", [{ type: "EXPENSE", amount: 120, date: now, category: { name: "Food" } }], now), URL)
+    expect(msg.altText).toContain("คงเหลือ −฿120")
   })
 })
