@@ -15,32 +15,45 @@ const CATEGORY_TIPS: Record<string, string> = {
 }
 const DEFAULT_TIP = 'ลองตั้งงบรายวันไว้ จะช่วยคุมรายจ่ายได้ง่ายขึ้นครับ'
 
-type DigestTx = { type: string; amount: number; category: { name: string } | null }
+type DigestTx = { type: string; amount: number; category: { name: string; color?: string | null } | null }
+
+const categoryLabel = (name: string) => (th as Record<string, string>)[`category.${name}`] || name
+
+/** Yesterday's totals, top spending categories (Thai labels) and a saving tip. Shared by the card and the text. */
+export function summarizeDay(transactions: DigestTx[]) {
+  const expenses = transactions.filter(t => t.type === 'EXPENSE')
+  const spent = expenses.reduce((sum, t) => sum + t.amount, 0)
+  const income = transactions.filter(t => t.type === 'INCOME').reduce((sum, t) => sum + t.amount, 0)
+  const byCategory = new Map<string, { amount: number; color: string | null }>()
+  for (const t of expenses) {
+    const name = t.category?.name || 'Other Expense'
+    const entry = byCategory.get(name) ?? { amount: 0, color: t.category?.color ?? null }
+    entry.amount += t.amount
+    byCategory.set(name, entry)
+  }
+  const topCategories = [...byCategory.entries()]
+    .sort((a, b) => b[1].amount - a[1].amount)
+    .map(([name, v]) => ({ name, label: categoryLabel(name), amount: v.amount, color: v.color }))
+  const tip = spent === 0
+    ? '✨ รักษาโมเมนตัมนี้ไว้ แล้วเงินเก็บจะโตขึ้นเรื่อยๆ ครับ'
+    : CATEGORY_TIPS[topCategories[0].name] || DEFAULT_TIP
+  return { spent, income, topCategories, tip }
+}
 
 export function buildMorningBrief(transactions: DigestTx[]) {
   const baht = (n: number) => `฿${Math.round(n).toLocaleString('en-US')}`
-  const expenses = transactions.filter(t => t.type === 'EXPENSE')
-  const totalSpent = expenses.reduce((sum, t) => sum + t.amount, 0)
-  const totalIncome = transactions.filter(t => t.type === 'INCOME').reduce((sum, t) => sum + t.amount, 0)
+  const { spent, income, topCategories, tip } = summarizeDay(transactions)
   const lines = ['🌅 สวัสดีตอนเช้า สรุปยอดเงินเมื่อวานมาแล้ว!']
 
-  if (totalSpent === 0) {
-    lines.push(totalIncome > 0
-      ? `💰 เมื่อวานมีรายรับ ${baht(totalIncome)} และไม่มีรายจ่ายเลย เป็นวันที่เหมาะกับการเก็บเงินสุดๆ`
+  if (spent === 0) {
+    lines.push(income > 0
+      ? `💰 เมื่อวานมีรายรับ ${baht(income)} และไม่มีรายจ่ายเลย เป็นวันที่เหมาะกับการเก็บเงินสุดๆ`
       : '🎉 เมื่อวานไม่มียอดใช้จ่ายเลย เก่งมากครับ')
-    lines.push('✨ รักษาโมเมนตัมนี้ไว้ แล้วเงินเก็บจะโตขึ้นเรื่อยๆ ครับ')
+    lines.push(tip)
     return lines.join('\n')
   }
 
-  const byCategory: Record<string, number> = {}
-  for (const t of expenses) {
-    const name = t.category?.name || 'Other Expense'
-    byCategory[name] = (byCategory[name] || 0) + t.amount
-  }
-  const [topCategory] = Object.entries(byCategory).sort((a, b) => b[1] - a[1])[0]
-  const topLabel = (th as Record<string, string>)[`category.${topCategory}`] || topCategory
-
-  lines.push(`💸 ใช้ไป ${baht(totalSpent)}${totalIncome > 0 ? ` | รับเข้า ${baht(totalIncome)}` : ''} (จ่ายมากสุด: ${topLabel})`)
-  lines.push(`💡 ${CATEGORY_TIPS[topCategory] || DEFAULT_TIP}`)
+  lines.push(`💸 ใช้ไป ${baht(spent)}${income > 0 ? ` | รับเข้า ${baht(income)}` : ''} (จ่ายมากสุด: ${topCategories[0].label})`)
+  lines.push(`💡 ${tip}`)
   return lines.join('\n')
 }

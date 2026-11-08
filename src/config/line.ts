@@ -2,7 +2,8 @@ import { messagingApi } from '@line/bot-sdk';
 
 export const lineConfig = {
   channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN || "test_token",
-  channelSecret: process.env.LINE_CHANNEL_SECRET || "test_secret",
+  // No fallback: without the real secret the webhook rejects every request
+  channelSecret: process.env.LINE_CHANNEL_SECRET || "",
 };
 
 // MessagingApiClient is used to send messages back to the user

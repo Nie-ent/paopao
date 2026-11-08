@@ -2,6 +2,8 @@
 
 import prisma from "@/lib/db"
 import { getCurrentUser } from "@/lib/current-user"
+import { trackedGoalAmount } from "@/lib/goal-progress"
+import { parseBangkokDateTime } from "@/lib/dates"
 
 export async function getGoals() {
   const prismaUser = await getCurrentUser()
@@ -16,46 +18,9 @@ export async function getGoals() {
   })
 
   for (const goal of goals) {
-    if (goal.type === "FINANCIAL" && goal.trackCategory) {
-      if (goal.trackCategory === "DAILY_BALANCE") {
-        // Daily Balance: Today's Income - Today's Expense
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        
-        const agg = await prisma.transaction.groupBy({
-          by: ['type'],
-          _sum: { amount: true },
-          where: {
-            userId: prismaUser.id,
-            date: { gte: today }
-          }
-        });
-        
-        const income = agg.find((x: any) => x.type === 'INCOME')?._sum.amount || 0;
-        const expense = agg.find((x: any) => x.type === 'EXPENSE')?._sum.amount || 0;
-        
-        goal.currentAmount = income - expense;
-      } else {
-        // Start counting from the 1st day of the month the goal was created
-        // This allows retrospective transactions added in the same month to be included!
-        const startDate = new Date(goal.createdAt);
-        startDate.setDate(1);
-        startDate.setHours(0, 0, 0, 0);
-
-        const agg = await prisma.transaction.aggregate({
-          _sum: { amount: true },
-          where: {
-            userId: prismaUser.id,
-            category: { name: goal.trackCategory },
-            date: { 
-              gte: startDate, 
-              lte: goal.deadline ? new Date(goal.deadline.getTime() + 24 * 60 * 60 * 1000) : undefined // Include the entire deadline day
-            }
-          }
-        })
-        goal.currentAmount = agg._sum.amount || 0
-      }
-    }
+    if (goal.type !== "FINANCIAL") continue
+    const synced = await trackedGoalAmount(goal)
+    if (synced !== null) goal.currentAmount = synced
   }
 
   return { data: goals }
@@ -83,7 +48,7 @@ export async function createGoal(formData: FormData) {
       targetAmount,
       currentAmount: 0,
       trackCategory: trackCategory || null,
-      deadline: deadlineStr ? new Date(deadlineStr) : null
+      deadline: parseBangkokDateTime(deadlineStr)
     }
   })
 
@@ -136,7 +101,7 @@ export async function updateGoal(goalId: string, formData: FormData) {
       description: description || null,
       targetAmount,
       trackCategory: trackCategory || null,
-      deadline: deadlineStr ? new Date(deadlineStr) : null
+      deadline: parseBangkokDateTime(deadlineStr)
     }
   })
 

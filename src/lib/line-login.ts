@@ -6,7 +6,7 @@
 type LineProfile = { userId: string; displayName: string; pictureUrl?: string }
 
 /** The LINE Login channel that owns the LIFF app: the part of the LIFF ID before the first "-". */
-function liffChannelId() {
+export function liffChannelId() {
   return process.env.LINE_LOGIN_CHANNEL_ID || process.env.NEXT_PUBLIC_LIFF_ID?.split("-")[0] || null
 }
 

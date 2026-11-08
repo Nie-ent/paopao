@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import prisma from "@/lib/db";
 import { lineClient } from "@/config/line";
 import { isAuthorizedCron } from "@/lib/cron-auth";
+import { trackedGoalAmount } from "@/lib/goal-progress";
+import { bangkokDayKey } from "@/lib/dates";
+import { buildBillQuestion, isBillDue } from "@/lib/bills";
+import { appLink } from "@/lib/site";
 
 // This endpoint is triggered by Vercel Cron every morning at 7:00 AM BKK (0 0 * * *)
 export async function GET(req: Request) {
@@ -58,27 +62,11 @@ export async function GET(req: Request) {
         let isSuccess = false;
         let detailsText = "";
 
-        if (goal.type === "FINANCIAL" && goal.trackCategory) {
-          // Calculate amount
-          const startDate = new Date(goal.createdAt);
-          startDate.setDate(1);
-          startDate.setHours(0, 0, 0, 0);
+        const synced = goal.type === "FINANCIAL" ? await trackedGoalAmount(goal, startOfYesterdayUtc) : null;
+        if (synced !== null) {
+          isSuccess = synced >= goal.targetAmount;
+          detailsText = `ยอด: ฿${synced.toLocaleString()} / ฿${goal.targetAmount.toLocaleString()}`;
 
-          const agg = await prisma.transaction.aggregate({
-            _sum: { amount: true },
-            where: {
-              userId: user.id,
-              category: { name: goal.trackCategory },
-              date: { 
-                gte: startDate, 
-                lte: goal.deadline ? new Date(goal.deadline.getTime() + 24 * 60 * 60 * 1000) : undefined
-              }
-            }
-          });
-          const currentAmount = agg._sum.amount || 0;
-          isSuccess = currentAmount >= goal.targetAmount;
-          detailsText = `ยอด: ฿${currentAmount.toLocaleString()} / ฿${goal.targetAmount.toLocaleString()}`;
-          
           if (isSuccess && !goal.isCompleted) {
             await prisma.goal.update({ where: { id: goal.id }, data: { isCompleted: true } });
           }
@@ -292,7 +280,35 @@ export async function GET(req: Request) {
     }
     }
 
-    return NextResponse.json({ success: true, count: sentCount }, { status: 200 });
+    // ============================================
+    // 3. RECURRING BILLS DUE TODAY (Pro): one message per user with one-tap answers
+    // ============================================
+    const today = bangkokDayKey(now);
+    const billOwners = await prisma.user.findMany({
+      where: {
+        lineId: { notIn: ["", "demo", "demo_line_id"] },
+        subscriptionTier: { not: "FREE" },
+        proExpiresAt: { gt: now },
+        recurringBills: { some: { active: true } },
+      },
+      include: { recurringBills: { where: { active: true }, orderBy: { createdAt: "asc" } } },
+    });
+    let billMessages = 0;
+    for (const owner of billOwners) {
+      // Not yet asked today, so a re-run of this cron doesn't ask twice
+      const due = owner.recurringBills.filter(b => isBillDue(b, now) && b.lastAskedOn !== today);
+      if (due.length === 0) continue;
+      try {
+        await lineClient.pushMessage({ to: owner.lineId, messages: [buildBillQuestion(due, now, appLink("/bills"))] });
+        billMessages++;
+      } catch (err) {
+        console.error(`Failed to push bill question to user ${owner.id}:`, err);
+        continue;
+      }
+      await prisma.recurringBill.updateMany({ where: { id: { in: due.map(b => b.id) } }, data: { lastAskedOn: today } });
+    }
+
+    return NextResponse.json({ success: true, count: sentCount + billMessages, billMessages }, { status: 200 });
 
   } catch (error) {
     console.error("Cron Reminder Error:", error);

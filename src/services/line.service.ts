@@ -5,7 +5,16 @@ import { quickParseTransaction } from "@/services/quick-parse";
 import { FALLBACK_CATEGORY } from "@/lib/categories";
 import { hashImage, normalizeReference } from "@/lib/slip";
 import { Prisma } from "@prisma/client";
-import { generateOtp, hashOtp, OTP_TTL_MS } from "@/lib/otp";
+import { bangkokDate, bangkokParts } from "@/lib/dates";
+import { extendProExpiry, isProActive, LIMITS, PRO_PLANS, TRIAL_DAYS, type ProPlan } from "@/lib/subscription";
+import { proPlanFor, verifySlipImage } from "@/lib/slip-verify";
+import { startProTrial } from "@/lib/trial";
+import { billReference, parseBillAnswer } from "@/lib/bills";
+import { siteUrl } from "@/lib/site";
+import { budgetTone, categoryLabel, duplicateCard, loginCard, proActivatedCard, recordedCard, upsellCard } from "@/lib/line-cards";
+import { isTrialEligible } from "@/lib/subscription";
+import type { messagingApi } from "@line/bot-sdk";
+import { consumeDailyUsage } from "@/lib/usage";
 
 /**
  * Prepares the user entry in the DB.
@@ -37,7 +46,8 @@ async function getOrCreateUser(lineId: string) {
 async function checkAndResetAiQuota(user: any) {
   const now = new Date();
   if (!user.aiQuotaResetDate || now >= user.aiQuotaResetDate) {
-    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const { year, month } = bangkokParts(now);
+    const nextMonth = bangkokDate(year, month + 1, 1);
     return await prisma.user.update({
       where: { id: user.id },
       data: {
@@ -60,6 +70,9 @@ const imageQueue = new Map<string, BatchQueue>();
  * Handles incoming LINE Webhook events.
  */
 export async function handleLineEvent(event: any) {
+  if (event.type === "postback" && event.source?.userId && typeof event.postback?.data === "string") {
+    return handleBillAnswer(event.source.userId, event.replyToken, event.postback.data);
+  }
   if (event.type !== "message" || !event.message || !event.source.userId) {
     return null;
   }
@@ -77,6 +90,7 @@ export async function handleLineEvent(event: any) {
 
     let extractedDataArray: SlipTransaction[] = [];
     let duplicateNotice = "";
+    let duplicateList: { date: Date; amount: number }[] = [];
 
     if (messageEvent.message.type === "text") {
       const textMessage = messageEvent.message as any;
@@ -85,30 +99,17 @@ export async function handleLineEvent(event: any) {
       if (text === "login" || text === "เข้าสู่ระบบ" || text === "รหัสผ่าน" || text === "dashboard") {
         const liffUrl = process.env.NEXT_PUBLIC_LIFF_ID 
           ? `https://liff.line.me/${process.env.NEXT_PUBLIC_LIFF_ID}` 
-          : "https://paopao-wealthness.vercel.app/login";
+          : `${siteUrl()}/login`;
 
-        // Random 8-digit code; only its HMAC is stored
-        const otp = generateOtp()
-        const otpExpiresAt = new Date(Date.now() + OTP_TTL_MS)
+        // One-tap button inside LINE; on a computer the user signs in with LINE Login on the website
+        return reply(actualReplyToken, [loginCard(liffUrl, `${siteUrl()}/login`)], `เปิดแดชบอร์ด: ${liffUrl}\nบนคอมพิวเตอร์ เข้า ${siteUrl()}/login แล้วกด "เข้าสู่ระบบด้วย LINE"`);
+      }
 
-        await prisma.user.update({
-          where: { id: user.id },
-          data: { otp: hashOtp(otp), otpExpiresAt }
-        })
-
-        try {
-          await lineClient.replyMessage({
-            replyToken: actualReplyToken,
-            messages: [
-              { type: "text", text: `✨ เข้าสู่แดชบอร์ดแบบไม่ต้องใช้รหัสผ่านผ่าน LINE LIFF ได้เลยครับ:\n${liffUrl}` },
-              { type: "text", text: `🔐 หรือถ้านำไปเปิดในเว็บเบราว์เซอร์ ใช้รหัส OTP ด้านล่างนี้เพื่อเข้าสู่ระบบ (รหัสมีอายุ 5 นาที) 👇` },
-              { type: "text", text: otp }
-            ]
-          });
-        } catch (error) {
-          console.error("Error replying OTP to LINE:", error);
-        }
-        return;
+      if (text === "ทดลองใช้" || text === "ทดลองใช้ pro" || text === "trial") {
+        const expiresAt = await startProTrial(user.id);
+        if (!expiresAt) return replyText(actualReplyToken, "บัญชีนี้ใช้สิทธิ์ทดลองใช้ Pro ไปแล้ว หรือเป็น Pro อยู่ครับ ดูรายละเอียดแพ็กเกจ: " + subscriptionUrl());
+        return reply(actualReplyToken, [proActivatedCard({ expiresAt, kind: "TRIAL", billsUrl: appUrl("/bills"), plansUrl: subscriptionUrl() })],
+          `🎉 เริ่มทดลองใช้ PaoPao Pro ฟรี ${TRIAL_DAYS} วันแล้ว ใช้ได้ถึง ${bkkDate(expiresAt)}`);
       }
 
       const cleanText = textMessage.text.replace(/\n/g, ' ');
@@ -155,12 +156,22 @@ export async function handleLineEvent(event: any) {
       actualReplyToken = userQueue.replyToken; // use the latest replyToken
       imageQueue.delete(userId);
 
-      // --- QUOTA CHECK (Hard Block at 25 to prevent abuse, but allow grace period for upgrade slips) ---
-      if (user.subscriptionTier === "FREE" && user.aiSlipsUsed >= 25) {
-        const upgradeUrl = process.env.NEXT_PUBLIC_LIFF_ID 
-          ? `https://liff.line.me/${process.env.NEXT_PUBLIC_LIFF_ID}/subscription` 
-          : "https://paopao-wealthness.vercel.app/subscription";
-        return replyText(actualReplyToken, `⚠️ โควต้าสแกนสลิปของคุณเกินกำหนดแล้ว กรุณาอัปเกรดเป็น Pro เพื่อใช้งานต่อครับ:\n${upgradeUrl}`);
+      if (!isProActive(user)) {
+        // The Free plan logs by typing. A photo can only be the Pro payment slip, which is checked
+        // with the bank (no AI call); anything else gets the upgrade explanation.
+        const result = await redeemProPaymentFromImages(user.id, buffersToProcess);
+        if (result.kind === "reply") return reply(actualReplyToken, result.card ? [result.card] : [], result.text);
+        const hasPaid = (await prisma.subscriptionPayment.count({ where: { userId: user.id } })) > 0;
+        const wasOtherSlip = result.kind === "not_payment";
+        return reply(actualReplyToken, [upsellCard({
+          wasOtherSlip, trialEligible: isTrialEligible(user, hasPaid), trialDays: TRIAL_DAYS,
+          monthly: PRO_PLANS.MONTHLY, yearlyThb: PRO_PLANS.YEARLY.priceThb, plansUrl: subscriptionUrl(),
+        })], freePlanImageMessage(wasOtherSlip));
+      }
+
+      // Pro: fair-use cap on slips read by AI
+      if (user.aiSlipsUsed + buffersToProcess.length > LIMITS.proSlipsPerMonth) {
+        return replyText(actualReplyToken, `⚠️ เดือนนี้ส่งรูปสลิปครบ ${LIMITS.proSlipsPerMonth} ใบแล้ว (โควต้าการใช้งานที่เหมาะสมของ Pro) ระบบจะรีเซ็ตต้นเดือนหน้า ระหว่างนี้พิมพ์บันทึกได้ตามปกติครับ เช่น "กาแฟ 65"`);
       }
 
       const hashes = buffersToProcess.map(hashImage);
@@ -175,35 +186,23 @@ export async function handleLineEvent(event: any) {
         const aligned = extractedBatch.length === hashes.length;
         slips = extractedBatch.map((e, i) => ({ ...e, reference: normalizeReference(e.referenceNo), slipHash: aligned ? hashes[i] : null }));
       }
+      // Every image read by AI counts toward the monthly cap, recorded or not
+      await prisma.user.update({ where: { id: user.id }, data: { aiSlipsUsed: { increment: buffersToProcess.length } } });
 
-      const subscriptionSlip = slips.find(s => s.isSubscriptionPayment);
-      if (subscriptionSlip) {
-        return replyText(actualReplyToken, await redeemSubscriptionSlip(user.id, subscriptionSlip));
+      // The AI only hints that a slip renews Pro; the bank check decides. A slip that turns out not
+      // to be a Pro payment is recorded like any other slip.
+      if (slips.some(s => s.isSubscriptionPayment)) {
+        const result = await redeemProPaymentFromImages(user.id, buffersToProcess);
+        if (result.kind === "reply") return reply(actualReplyToken, result.card ? [result.card] : [], result.text);
       }
 
       const { fresh, duplicates } = await splitDuplicateSlips(user.id, slips);
       if (slips.length > 0 && fresh.length === 0) {
-        // Nothing new: don't charge slip quota for re-sent slips
-        return replyText(actualReplyToken, duplicateSlipMessage(duplicates));
+        return reply(actualReplyToken, [duplicateCard(duplicates)], duplicateSlipMessage(duplicates));
       }
       duplicateNotice = duplicates.length > 0 ? duplicateSlipMessage(duplicates) : "";
+      duplicateList = duplicates;
       extractedDataArray.push(...fresh);
-
-      // Update quota usage
-      if (extractedDataArray.length > 0) {
-        await prisma.user.update({
-          where: { id: user.id },
-          data: { aiSlipsUsed: { increment: buffersToProcess.length } }
-        });
-        
-        // Soft block if they just exceeded 20 (and it wasn't an upgrade slip)
-        if (user.subscriptionTier === "FREE" && user.aiSlipsUsed + buffersToProcess.length > 20) {
-           const upgradeUrl = process.env.NEXT_PUBLIC_LIFF_ID 
-             ? `https://liff.line.me/${process.env.NEXT_PUBLIC_LIFF_ID}/subscription` 
-             : "https://paopao-wealthness.vercel.app/subscription";
-           return replyText(actualReplyToken, `⚠️ โควต้าสแกนสลิปฟรีของคุณเดือนนี้เต็มแล้ว (${user.aiSlipsUsed + buffersToProcess.length}/20)\nข้อมูลนี้จะไม่ถูกบันทึก\n\nอัปเกรดเป็น Pro (เพียง ฿59/เดือน) ถ่ายรูปสลิปโอนเงิน 59 บาทส่งมาที่นี่ได้เลยครับ หรือดูรายละเอียด:\n${upgradeUrl}`);
-        }
-      }
     } 
     else {
       return replyText(actualReplyToken, "ขออภัยครับ ตอนนี้ผมเข้าใจเฉพาะข้อความและภาพสลิปธนาคารเท่านั้นครับ 😅");
@@ -215,8 +214,6 @@ export async function handleLineEvent(event: any) {
     if (extractedDataArray.length === 0) {
       return replyText(actualReplyToken, "ผมไม่สามารถอ่านจำนวนเงินที่ชัดเจนจากข้อความ/รูปภาพของคุณได้ รบกวนพิมพ์ให้ชัดเจนขึ้นหรือส่งสลิปมาอีกครั้งนะครับ! 🙏");
     }
-
-    const newTransactionsData: any[] = [];
 
     // Fetch categories to map names to IDs
     const categories = await prisma.category.findMany({
@@ -231,115 +228,88 @@ export async function handleLineEvent(event: any) {
       return fallback?.id || categories[0].id;
     };
 
-    // Preparation for auto deductions and normal saving
     for (const data of extractedDataArray) {
-      newTransactionsData.push({
-        userId: user.id,
-        type: data.type,
-        amount: data.amount,
-        categoryId: getCategoryId(data.category, data.type),
-        note: data.note,
-        reference: data.reference ?? null,
-        slipHash: data.slipHash ?? null,
-        // We temporarily keep data.category on the object just for the statusText builder below
-        _categoryName: data.category
-      });
-
-      // Auto-Deductions Interception
-      if (data.type === "INCOME") {
-        if ((data.category.includes("Salary")) && user.salaryDeduction > 0) {
-          newTransactionsData.push({
-            userId: user.id,
-            type: "EXPENSE",
-            amount: user.salaryDeduction,
-            categoryId: getCategoryId("Other Expense", "EXPENSE"),
-            note: "Social Security Auto-Deduction",
-            _categoryName: "Other Expense"
-          });
-        } else if (data.category === "Freelance" && user.freelanceTaxRate > 0) {
-          const taxAmount = data.amount * (user.freelanceTaxRate / 100);
-          newTransactionsData.push({
-            userId: user.id,
-            type: "EXPENSE",
-            amount: taxAmount,
-            categoryId: getCategoryId("Other Expense", "EXPENSE"),
-            note: `Withholding Tax Auto-Deduction (${user.freelanceTaxRate}%)`,
-            _categoryName: "Other Expense"
-          });
-        }
-      }
-    }
-
-    // Save to Database
-    for (const tData of newTransactionsData) {
-      const { _categoryName, ...dbData } = tData;
       try {
-        await prisma.transaction.create({ data: dbData });
+        await prisma.transaction.create({
+          data: {
+            userId: user.id,
+            type: data.type,
+            amount: data.amount,
+            categoryId: getCategoryId(data.category, data.type),
+            note: data.note,
+            reference: data.reference ?? null,
+            slipHash: data.slipHash ?? null,
+          }
+        });
       } catch (error) {
         // Same slip arriving twice at once: the unique index on reference/slipHash rejects the second
         if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")) throw error;
       }
     }
 
-    // Build status response msg
+    // Plain-text version, used as the fallback if LINE rejects the card
     let statusText = "";
     if (extractedDataArray.length === 1) {
       const d = extractedDataArray[0];
-      const emoji = d.type === "INCOME" ? "💵" : "💸";
-      const typeTH = d.type === "INCOME" ? "รับ" : "จ่าย";
-      statusText = `บันทึกรายการสำเร็จ ${emoji}\nยอดเงิน${typeTH}: ฿${d.amount}\nหมวดหมู่: ${d.category}\nหมายเหตุ: ${d.note || "-"}`;
+      statusText = `บันทึกรายการสำเร็จ ${d.type === "INCOME" ? "💵" : "💸"}\nยอดเงิน${d.type === "INCOME" ? "รับ" : "จ่าย"}: ฿${d.amount}\nหมวดหมู่: ${categoryLabel(d.category)}\nหมายเหตุ: ${d.note || "-"}`;
     } else {
-      statusText = `📝 บันทึกสำเร็จทั้งหมด ${extractedDataArray.length} รายการ:\n`;
-      extractedDataArray.forEach((d, i) => {
-         const emoji = d.type === "INCOME" ? "➕" : "➖";
-         statusText += `${i+1}. ${emoji} ฿${d.amount} | ${d.category}\n`;
-      });
+      statusText = `📝 บันทึกสำเร็จทั้งหมด ${extractedDataArray.length} รายการ:\n` +
+        extractedDataArray.map((d, i) => `${i + 1}. ${d.type === "INCOME" ? "➕" : "➖"} ฿${d.amount} | ${categoryLabel(d.category)}`).join("\n");
     }
-    
     if (duplicateNotice) statusText += `\n\n${duplicateNotice}`;
 
-    // Budget evaluation logic
+    // This month's spending as a share of income (Bangkok month)
+    let budgetRatio: number | null = null;
     try {
-      const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-      const mtdTransactions = await prisma.transaction.groupBy({
-        by: ['type'],
-        where: { userId: user.id, date: { gte: startOfMonth } },
-        _sum: { amount: true }
-      });
-      
-      let totalIncome = 0;
-      let totalExpense = 0;
-      mtdTransactions.forEach(t => {
-        if (t.type === 'INCOME') totalIncome += t._sum.amount || 0;
-        if (t.type === 'EXPENSE') totalExpense += t._sum.amount || 0;
-      });
-
-      const hasExpense = extractedDataArray.some(d => d.type === 'EXPENSE');
-      if (totalIncome > 0 && hasExpense) {
-        const ratio = (totalExpense / totalIncome) * 100;
-        if (ratio >= 90) {
-          statusText += `\n\n🚨 วิกฤตการเงิน!: เดือนนี้คุณใช้เงินทะลุ ${ratio.toFixed(0)}% ของรายรับแล้ว! โปรดงดใช้จ่ายด่วน 🛑`;
-        } else if (ratio >= 80) {
-          statusText += `\n\n⚠️ ความเสี่ยงสูง: เดือนนี้คุณใช้เงินไปแล้ว ${ratio.toFixed(0)}% ของรายรับ โปรดระมัดระวังการใช้จ่ายนะครับ`;
-        } else if (ratio >= 50) {
-          statusText += `\n\n👀 แจ้งให้ทราบ: ตอนนี้คุณใช้เงินเกินครึ่ง (${ratio.toFixed(0)}%) ของรายรับเดือนนี้ไปแล้วนะครับ`;
-        }
+      const today = bangkokParts(new Date());
+      const startOfMonth = bangkokDate(today.year, today.month, 1);
+      const mtd = await prisma.transaction.groupBy({ by: ['type'], where: { userId: user.id, date: { gte: startOfMonth } }, _sum: { amount: true } });
+      const total = (type: string) => mtd.find(t => t.type === type)?._sum.amount || 0;
+      if (total("INCOME") > 0 && extractedDataArray.some(d => d.type === "EXPENSE")) {
+        budgetRatio = (total("EXPENSE") / total("INCOME")) * 100;
+        const tone = budgetTone(budgetRatio);
+        if (tone) statusText += `\n\n${tone.message}`;
       }
     } catch (budgetError) {
       console.error("Failed to calculate budget ratio", budgetError);
     }
 
-    return replyText(actualReplyToken, statusText);
+    const colorOf = (name: string) => categories.find(c => c.name.toLowerCase() === name.toLowerCase())?.color ?? null;
+    const card = recordedCard({
+      items: extractedDataArray.map(d => ({ type: d.type, amount: d.amount, category: d.category, categoryColor: colorOf(d.category), note: d.note })),
+      dashboardUrl: appUrl("/"),
+      budgetRatio,
+      duplicates: duplicateList,
+    });
+    return reply(actualReplyToken, [card], statusText);
+
 
   } catch (error: any) {
     console.error("Error processing line event:", error);
 
     const errorMsg = error?.message?.toLowerCase() || "";
     if (error?.status === 429 || errorMsg.includes("429") || errorMsg.includes("quota") || errorMsg.includes("depleted") || errorMsg.includes("exhausted")) {
-       return replyText(actualReplyToken, "❌ ไม่สามารถประมวลผลได้ เนื่องจากโควต้าระบบ AI (Gemini API) ของคุณหมดแล้ว กรุณาไปที่ Google AI Studio เพื่อจัดการการเรียกเก็บเงินครับ");
+       console.error("AI quota exhausted: check the Gemini API billing in Google AI Studio");
+       return replyText(actualReplyToken, "ระบบ AI ไม่ว่างชั่วคราว ลองใหม่อีกครั้งในอีกสักครู่ หรือพิมพ์ให้สั้นลง เช่น \"กาแฟ 65\" ครับ 🙏");
     }
 
     return replyText(actualReplyToken, "เกิดข้อผิดพลาดในระบบเซิร์ฟเวอร์ ไม่สามารถบันทึกข้อมูลของคุณได้ในขณะนี้ครับ 🙏");
+  }
+}
+
+/**
+ * Replies with cards (Flex messages). If LINE rejects them (e.g. a layout LINE doesn't accept),
+ * falls back to the plain text so the user always gets an answer. A rejected request doesn't use
+ * up the reply token.
+ */
+export async function reply(replyToken: string, messages: messagingApi.Message[], fallbackText: string) {
+  if (messages.length === 0) return replyText(replyToken, fallbackText);
+  try {
+    await lineClient.replyMessage({ replyToken, messages });
+  } catch (error) {
+    const status = (error as { status?: number })?.status;
+    console.error("Card reply failed, sending text instead:", status, (error as { body?: string })?.body ?? error);
+    if (status === 400) await replyText(replyToken, fallbackText);
   }
 }
 
@@ -392,29 +362,107 @@ function duplicateSlipMessage(duplicates: { date: Date; amount: number }[]) {
   return `⚠️ สลิปนี้เคยบันทึกไปแล้ว จึงไม่บันทึกซ้ำครับ\n${lines}`;
 }
 
-/**
- * Upgrades the user to PRO from a payment slip. The bank reference must be readable and unused
- * by anyone, so a slip (the user's own or someone else's) can only ever upgrade once.
- */
-async function redeemSubscriptionSlip(userId: string, slip: SlipTransaction) {
-  if (!slip.reference) {
-    return "⚠️ อ่านเลขที่รายการบนสลิปไม่ชัด จึงยังอัปเกรดไม่ได้ รบกวนส่งสลิปที่เห็นเลขที่รายการชัดเจนอีกครั้งครับ";
-  }
-  const used = await prisma.subscriptionPayment.findFirst({
-    where: { OR: [{ reference: slip.reference }, ...(slip.slipHash ? [{ slipHash: slip.slipHash }] : [])] },
-  });
-  if (used) return "⚠️ สลิปนี้ถูกใช้อัปเกรดไปแล้ว ไม่สามารถใช้ซ้ำได้ครับ";
+const subscriptionUrl = () => process.env.NEXT_PUBLIC_LIFF_ID
+  ? `https://liff.line.me/${process.env.NEXT_PUBLIC_LIFF_ID}/subscription`
+  : `${siteUrl()}/subscription`;
 
+const appUrl = (path: string) => process.env.NEXT_PUBLIC_LIFF_ID
+  ? `https://liff.line.me/${process.env.NEXT_PUBLIC_LIFF_ID}${path}`
+  : `${siteUrl()}${path}`;
+
+function freePlanImageMessage(wasOtherSlip: boolean) {
+  const { MONTHLY, YEARLY } = PRO_PLANS;
+  return [
+    wasOtherSlip ? "สลิปนี้ไม่ใช่การชำระค่า PaoPao Pro ครับ" : null,
+    `แพ็กเกจ Free บันทึกรายรับรายจ่ายด้วยการพิมพ์ เช่น "กาแฟ 65" หรือ "เงินเดือน 30000" ได้เลยครับ 📝`,
+    `ส่งรูปสลิปให้บันทึกอัตโนมัติ บิลประจำที่เป๋าเป๋าถามให้ และสรุปการเงินทุกเช้า เป็นฟีเจอร์ของ Pro (฿${MONTHLY.priceThb} / ${MONTHLY.days} วัน หรือ ฿${YEARLY.priceThb} / ปี)`,
+    `ยังไม่เคยลอง? พิมพ์ "ทดลองใช้" เพื่อใช้ Pro ฟรี ${TRIAL_DAYS} วัน`,
+    `อัปเกรด: โอนผ่านพร้อมเพย์ตามหน้านี้ แล้วส่งสลิปมาในแชทนี้ ${subscriptionUrl()}`,
+  ].filter(Boolean).join("\n\n");
+}
+
+/**
+ * A tap on a recurring-bill quick reply. Records the bill as an expense (once per bill per day,
+ * thanks to the unique reference) and remembers the amount for next time.
+ */
+async function handleBillAnswer(lineId: string, replyToken: string, data: string) {
+  const answer = parseBillAnswer(data);
+  if (!answer) return null;
+  const user = await prisma.user.findUnique({ where: { lineId } });
+  if (!user) return null;
+  const bill = await prisma.recurringBill.findFirst({ where: { id: answer.billId, userId: user.id } });
+  if (!bill) return replyText(replyToken, "ไม่พบรายการประจำนี้แล้ว อาจถูกลบไปครับ");
+  if (!isProActive(user)) return replyText(replyToken, `บิลประจำเป็นฟีเจอร์ของ Pro ครับ ต่ออายุได้ที่ ${subscriptionUrl()}`);
+  if (answer.kind === "other") return replyText(replyToken, `พิมพ์ยอดที่จ่ายได้เลยครับ เช่น "${bill.name} 920"`);
+
+  const category = await prisma.category.findFirst({ where: { name: bill.category, OR: [{ userId: null }, { userId: user.id }] } })
+    ?? await prisma.category.findFirst({ where: { name: FALLBACK_CATEGORY.EXPENSE, userId: null } });
   try {
-    await prisma.$transaction([
-      prisma.subscriptionPayment.create({ data: { userId, reference: slip.reference, slipHash: slip.slipHash ?? null, amount: slip.amount } }),
-      prisma.user.update({ where: { id: userId }, data: { subscriptionTier: "PRO" } }),
-    ]);
+    await prisma.transaction.create({
+      data: { userId: user.id, type: "EXPENSE", amount: answer.amount, categoryId: category!.id, note: bill.name, reference: billReference(bill.id, answer.day) },
+    });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      return "⚠️ สลิปนี้ถูกใช้อัปเกรดไปแล้ว ไม่สามารถใช้ซ้ำได้ครับ";
+      return replyText(replyToken, `บันทึก${bill.name}ของวันนี้ไปแล้วครับ ✅`);
     }
     throw error;
   }
-  return "✅ ตรวจสอบสลิปสำเร็จ! บัญชีของคุณได้รับการอัปเกรดเป็น PaoPao PRO เรียบร้อยแล้ว ขอบคุณที่สนับสนุนครับ 🎉";
+  await prisma.recurringBill.update({ where: { id: bill.id }, data: { amount: answer.amount } });
+  const card = recordedCard({ items: [{ type: "EXPENSE", amount: answer.amount, category: category!.name, categoryColor: category!.color, note: bill.name }], dashboardUrl: appUrl("/") });
+  return reply(replyToken, [card], `บันทึกแล้ว ✅ ${bill.name} ${bahtText(answer.amount)}`);
+}
+
+type RedeemResult = { kind: "reply"; text: string; card?: messagingApi.FlexMessage } | { kind: "not_payment" } | { kind: "not_slip" };
+
+/**
+ * Looks for a Pro payment among the images by checking them with the bank (third-party slip
+ * verification). Each check is metered per day so a stream of random photos can't run up the bill.
+ */
+async function redeemProPaymentFromImages(userId: string, images: Buffer[]): Promise<RedeemResult> {
+  let sawOtherSlip = false;
+  for (const image of images.slice(0, 3)) {
+    if (!await consumeDailyUsage(userId, "slip_verification", LIMITS.slipVerificationsPerDay)) {
+      return { kind: "reply", text: `⚠️ วันนี้ส่งสลิปให้ตรวจสอบครบ ${LIMITS.slipVerificationsPerDay} ครั้งแล้ว ลองใหม่พรุ่งนี้ครับ` };
+    }
+    const result = await verifySlipImage(image);
+    const plan = proPlanFor(result);
+    if (plan && result.ok) return redeemVerifiedPayment(userId, result.transRef, result.amount, hashImage(image), plan);
+    if (result.ok) { sawOtherSlip = true; continue; }
+    if (result.reason === "NOT_CONFIGURED") {
+      console.error("EASYSLIP_API_KEY is not set; Pro payments can't be verified.");
+      return { kind: "reply", text: "⚠️ ระบบตรวจสอบสลิปยังไม่พร้อมใช้งาน กรุณาติดต่อแอดมินครับ" };
+    }
+    if (result.reason === "PENDING") return { kind: "reply", text: "⏳ ธนาคารยังไม่ยืนยันรายการนี้ รอประมาณ 5 นาทีแล้วส่งสลิปอีกครั้งครับ" };
+    if (result.reason === "UNAVAILABLE") return { kind: "reply", text: "⚠️ ตรวจสอบสลิปกับธนาคารไม่สำเร็จชั่วคราว ลองส่งใหม่อีกครั้งในอีกสักครู่ครับ" };
+  }
+  return { kind: sawOtherSlip ? "not_payment" : "not_slip" };
+}
+
+/**
+ * Records a bank-verified Pro payment and extends Pro by the plan's period (30 or 365 days). The bank reference is unique
+ * across all users, so a slip (the user's own or someone else's) can only ever pay once.
+ */
+async function redeemVerifiedPayment(userId: string, transRef: string, amount: number, slipHash: string, plan: ProPlan): Promise<RedeemResult> {
+  const reference = normalizeReference(transRef) ?? transRef.replace(/[\s-]/g, "").toUpperCase();
+  const used = "⚠️ สลิปนี้ถูกใช้ชำระค่า Pro ไปแล้ว ไม่สามารถใช้ซ้ำได้ครับ";
+  try {
+    const expiresAt = await prisma.$transaction(async tx => {
+      await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`;
+      if (await tx.subscriptionPayment.findFirst({ where: { OR: [{ reference }, { slipHash }] } })) return null;
+      const current = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { proExpiresAt: true } });
+      const proExpiresAt = extendProExpiry(current.proExpiresAt, new Date(), PRO_PLANS[plan].days);
+      await tx.subscriptionPayment.create({ data: { userId, reference, slipHash, amount, plan } });
+      await tx.user.update({ where: { id: userId }, data: { subscriptionTier: "PRO", proExpiresAt } });
+      return proExpiresAt;
+    });
+    if (!expiresAt) return { kind: "reply", text: used };
+    return {
+      kind: "reply",
+      text: `✅ ชำระเงินสำเร็จ! คุณใช้งาน PaoPao PRO ได้ถึงวันที่ ${bkkDate(expiresAt)} ขอบคุณที่สนับสนุนครับ 🎉`,
+      card: proActivatedCard({ expiresAt, kind: plan, billsUrl: appUrl("/bills"), plansUrl: subscriptionUrl() }),
+    };
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return { kind: "reply", text: used };
+    throw error;
+  }
 }

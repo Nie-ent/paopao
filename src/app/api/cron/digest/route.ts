@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import prisma from "@/lib/db";
 import { lineClient } from "@/config/line";
 import { buildMorningBrief } from "@/lib/morning-brief";
+import { morningBriefCard } from "@/lib/line-cards";
+import { appLink } from "@/lib/site";
 import { isAuthorizedCron } from "@/lib/cron-auth";
 
 // This endpoint should be triggered by Vercel Cron every morning (e.g. 08:00 AM)
@@ -25,12 +27,15 @@ export async function GET(req: Request) {
     const startOfYesterdayUtc = new Date(yesterdayStartBkk.getTime() - 7 * 60 * 60 * 1000);
     const endOfYesterdayUtc = new Date(yesterdayEndBkk.getTime() - 7 * 60 * 60 * 1000);
 
-    // 2. Only users who logged something in the last 7 days. Push messages count against the
+    // 2. Only Pro users who logged something in the last 7 days. Push messages count against the
     //    LINE OA quota, so inactive users are skipped.
     const activeSince = new Date(startOfYesterdayUtc.getTime() - 6 * 24 * 60 * 60 * 1000);
+    // The morning brief is a Pro feature: only users whose paid period is still running
     const activeUsers = await prisma.user.findMany({
       where: {
         lineId: { notIn: ["", "demo", "demo_line_id"] },
+        subscriptionTier: { not: "FREE" },
+        proExpiresAt: { gt: now },
         transactions: { some: { date: { gte: activeSince, lte: endOfYesterdayUtc } } }
       },
       include: {
@@ -45,10 +50,14 @@ export async function GET(req: Request) {
     let sentCount = 0;
     for (const user of activeUsers) {
       try {
-        await lineClient.pushMessage({
-          to: user.lineId,
-          messages: [{ type: "text", text: buildMorningBrief(user.transactions) }]
-        });
+        try {
+          await lineClient.pushMessage({ to: user.lineId, messages: [morningBriefCard(user.transactions, startOfYesterdayUtc, appLink("/"))] });
+        } catch (cardError) {
+          // A rejected card isn't delivered or counted, so fall back to the plain text brief
+          if ((cardError as { status?: number })?.status !== 400) throw cardError;
+          console.error("Morning brief card rejected, sending text:", (cardError as { body?: string })?.body);
+          await lineClient.pushMessage({ to: user.lineId, messages: [{ type: "text", text: buildMorningBrief(user.transactions) }] });
+        }
         sentCount++;
       } catch (pushError) {
         console.error(`Failed to push digest to user ${user.id}:`, pushError);

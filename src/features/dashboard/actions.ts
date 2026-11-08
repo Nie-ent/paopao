@@ -1,36 +1,32 @@
 "use server"
 
 import prisma from "@/lib/db"
+import { Prisma } from "@prisma/client"
 import { getCurrentUser } from "@/lib/current-user"
+import { bangkokDate, bangkokDayKey, bangkokMonthRange, bangkokParts } from "@/lib/dates"
+
+const BKK = "Asia/Bangkok"
 
 export async function getDashboardData(timeframe: 'ALL' | 'YTD' | 'MONTH' | 'WEEK' = 'MONTH', selectedMonth?: number, selectedYear?: number, locale: 'th-TH' | 'en-US' = 'en-US') {
   const prismaUser = await getCurrentUser()
   if (!prismaUser) return { error: "User not found" }
 
-  const now = new Date()
-  let startDate = new Date()
-  let endDate: Date | null = null
+  // All calendar math is in Bangkok time; the server runs in UTC
+  const today = bangkokParts(new Date())
+  const y = selectedYear || today.year
+  const m = selectedMonth ? selectedMonth - 1 : today.month
+  let dateFilter: { gte: Date; lt?: Date } | null = null
 
   if (timeframe === 'YTD') {
-    startDate = new Date(now.getFullYear(), 0, 1)
+    dateFilter = { gte: bangkokDate(today.year, 0, 1) }
   } else if (timeframe === 'MONTH') {
-    const y = selectedYear || now.getFullYear()
-    const m = selectedMonth ? selectedMonth - 1 : now.getMonth()
-    startDate = new Date(y, m, 1)
-    endDate = new Date(y, m + 1, 0, 23, 59, 59, 999)
+    dateFilter = bangkokMonthRange(y, m)
   } else if (timeframe === 'WEEK') {
-    startDate = new Date(now)
-    startDate.setDate(now.getDate() - 6)
-    startDate.setHours(0, 0, 0, 0)
+    dateFilter = { gte: bangkokDate(today.year, today.month, today.day - 6) }
   }
 
-  const whereClause: any = { userId: prismaUser.id }
-  if (timeframe !== 'ALL') {
-    whereClause.date = { gte: startDate }
-    if (endDate) {
-      whereClause.date.lte = endDate
-    }
-  }
+  const whereClause: Prisma.TransactionWhereInput = { userId: prismaUser.id }
+  if (dateFilter) whereClause.date = dateFilter
 
   const transactions = await prisma.transaction.findMany({
     where: whereClause,
@@ -41,28 +37,25 @@ export async function getDashboardData(timeframe: 'ALL' | 'YTD' | 'MONTH' | 'WEE
   const chartDataMap: Record<string, { name: string, income: number, expense: number }> = {}
 
   if (timeframe === 'YTD') {
-    for (let i = 0; i <= now.getMonth(); i++) {
-      const d = new Date(now.getFullYear(), i, 1)
-      const key = d.toLocaleString(locale, { month: 'short' })
+    for (let i = 0; i <= today.month; i++) {
+      const key = bangkokDate(today.year, i, 1).toLocaleString(locale, { month: 'short', timeZone: BKK })
       chartDataMap[i.toString()] = { name: key, income: 0, expense: 0 }
     }
     for (const t of transactions) {
-      const m = t.date.getMonth().toString()
-      if (chartDataMap[m]) {
-        if (t.type === 'INCOME') chartDataMap[m].income += Number(t.amount)
-        if (t.type === 'EXPENSE') chartDataMap[m].expense += Number(t.amount)
+      const month = bangkokParts(t.date).month.toString()
+      if (chartDataMap[month]) {
+        if (t.type === 'INCOME') chartDataMap[month].income += Number(t.amount)
+        if (t.type === 'EXPENSE') chartDataMap[month].expense += Number(t.amount)
       }
     }
   } else if (timeframe === 'MONTH') {
-    const y = selectedYear || now.getFullYear()
-    const m = selectedMonth ? selectedMonth - 1 : now.getMonth()
-    const daysInMonth = new Date(y, m + 1, 0).getDate()
+    const daysInMonth = new Date(Date.UTC(y, m + 1, 0)).getUTCDate()
     
     for (let i = 1; i <= daysInMonth; i++) {
       chartDataMap[i.toString()] = { name: i.toString(), income: 0, expense: 0 }
     }
     for (const t of transactions) {
-      const d = t.date.getDate().toString()
+      const d = bangkokParts(t.date).day.toString()
       if (chartDataMap[d]) {
         if (t.type === 'INCOME') chartDataMap[d].income += Number(t.amount)
         if (t.type === 'EXPENSE') chartDataMap[d].expense += Number(t.amount)
@@ -70,21 +63,21 @@ export async function getDashboardData(timeframe: 'ALL' | 'YTD' | 'MONTH' | 'WEE
     }
   } else if (timeframe === 'WEEK') {
     for (let i = 6; i >= 0; i--) {
-      const d = new Date()
-      d.setDate(d.getDate() - i)
-      const dayName = d.toLocaleDateString(locale, { weekday: 'short' })
-      chartDataMap[d.toDateString()] = { name: dayName, income: 0, expense: 0 }
+      const d = bangkokDate(today.year, today.month, today.day - i)
+      chartDataMap[bangkokDayKey(d)] = { name: d.toLocaleDateString(locale, { weekday: 'short', timeZone: BKK }), income: 0, expense: 0 }
     }
     for (const t of transactions) {
-      if (t.type === 'INCOME') chartDataMap[t.date.toDateString()].income += Number(t.amount)
-      if (t.type === 'EXPENSE') chartDataMap[t.date.toDateString()].expense += Number(t.amount)
+      const day = chartDataMap[bangkokDayKey(t.date)]
+      if (!day) continue
+      if (t.type === 'INCOME') day.income += Number(t.amount)
+      if (t.type === 'EXPENSE') day.expense += Number(t.amount)
     }
   } else if (timeframe === 'ALL') {
     for (const t of transactions) {
-      const year = t.date.getFullYear();
-      const month = t.date.toLocaleString(locale, { month: 'short' });
+      const { year, month: monthIndex } = bangkokParts(t.date);
+      const month = t.date.toLocaleString(locale, { month: 'short', timeZone: BKK });
       const key = `${month} ${locale === 'th-TH' ? year + 543 : year}`;
-      const sortKey = `${year}-${String(t.date.getMonth() + 1).padStart(2, '0')}`;
+      const sortKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
       
       if (!chartDataMap[key]) {
         chartDataMap[key] = { name: key, income: 0, expense: 0, _sortKey: sortKey } as any;

@@ -1,14 +1,14 @@
 "use client"
 
 import React, { useEffect, useState, useTransition, Suspense } from "react"
+import Link from "next/link"
 import { motion } from "framer-motion"
-import { Wallet, MessageCircle, AlertCircle, Cat } from "lucide-react"
+import { MessageCircle } from "lucide-react"
 import { useSearchParams } from "next/navigation"
 import { toast } from "sonner"
 
-import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { signInWithLineDirect, signInAsDemo, signInWithLiffAction } from "@/features/auth/actions"
+import { signInAsDemo, signInWithLiffAction } from "@/features/auth/actions"
 import { useLanguage } from "@/contexts/LanguageContext"
 import { LanguageToggle } from "@/components/layouts/LanguageToggle"
 import { clearProfileCache } from "@/lib/clientCache"
@@ -115,30 +115,18 @@ export default function LoginPage() {
         </div>
 
         <div className="space-y-6">
-          <form action={signInWithLineDirect} className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">{t('login.otp_label')}</label>
-              <Input 
-                name="otp" 
-                placeholder={t('login.otp_placeholder')} 
-                required 
-                type="text"
-                pattern="[0-9]*"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={8}
-                className="h-12 text-center text-lg tracking-widest bg-muted/50 border-border/50 focus-visible:ring-primary font-mono placeholder:font-sans placeholder:tracking-normal placeholder:text-sm"
-              />
-              <p className="text-xs text-muted-foreground mt-2 text-center font-medium">
-                {t('login.otp_hint_before')}<strong className="text-primary">"login"</strong>{t('login.otp_hint_after')}
-              </p>
-            </div>
-            <Button type="submit" className="w-full h-12 text-base font-medium bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20 flex items-center gap-3">
-              <MessageCircle className="w-5 h-5 fill-current" />
-              {t('login.otp_submit')}
-            </Button>
-          </form>
-          
+          {/* LINE Login (OAuth). Inside LINE, LIFF signs in automatically instead. */}
+          <div className="space-y-3">
+            <a
+              href="/api/auth/line"
+              className="flex w-full h-12 items-center justify-center gap-3 rounded-lg bg-[#06C755] text-base font-semibold text-white shadow-lg shadow-[#06C755]/25 transition-colors hover:bg-[#05b34c]"
+            >
+              <MessageCircle className="w-5 h-5 fill-current" aria-hidden />
+              {t('login.line')}
+            </a>
+            <p className="text-xs text-muted-foreground text-center">{t('login.line_hint')}</p>
+          </div>
+
           <div className="relative my-6">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-border" />
@@ -159,7 +147,10 @@ export default function LoginPage() {
         </div>
 
         <p className="mt-8 text-center text-xs text-muted-foreground">
-          {t('login.terms')}
+          {t('login.terms')}{" "}
+          <Link href="/privacy" className="underline underline-offset-2 hover:text-foreground">{t('login.privacy_link')}</Link>
+          {" · "}
+          <Link href="/pricing" className="underline underline-offset-2 hover:text-foreground">{t('login.pricing_link')}</Link>
         </p>
       </motion.div>
     </div>

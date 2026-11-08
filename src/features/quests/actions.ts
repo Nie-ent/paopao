@@ -1,7 +1,20 @@
 "use server"
 
 import prisma from "@/lib/db"
+import { Prisma } from "@prisma/client"
 import { getProfileData } from "@/features/user/actions"
+import { bangkokDayKey, startOfBangkokDay } from "@/lib/dates"
+
+/** Thrown inside a transaction to roll it back and return a user-facing error key. */
+class ClaimError extends Error {}
+
+/**
+ * Locks the user's row for the rest of the transaction, so concurrent claims and redemptions by the
+ * same user run one after another and each sees the previous one's result.
+ */
+async function lockUser(tx: Prisma.TransactionClient, userId: string) {
+  await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`
+}
 
 export async function claimDynamicQuest(questId: string) {
   const user = await getProfileData()
@@ -10,46 +23,30 @@ export async function claimDynamicQuest(questId: string) {
   const quest = await prisma.quest.findUnique({ where: { id: questId } })
   if (!quest || quest.status !== 'ACTIVE') return { success: false, error: "quest.error.inactive" }
 
-  // Check claims
-  const now = new Date()
-  const claims = await prisma.questClaim.findMany({
-    where: { userId: user.id, questId: quest.id },
-    orderBy: { createdAt: 'desc' }
-  })
-
-  if (quest.type === 'ONETIME' && claims.length > 0) {
-    return { success: false, error: "quest.error.claimed_once" }
-  } else if (quest.type === 'DAILY' && claims.length > 0) {
-    const lastClaim = new Date(claims[0].createdAt)
-    // UTC midnight exactly aligns with 07:00 AM Bangkok Time
-    const today = new Date(now.getTime()).toDateString()
-    const claimDate = new Date(lastClaim.getTime()).toDateString()
-    if (today === claimDate) {
-      return { success: false, error: "quest.error.claimed_today" }
-    }
-  }
-
-  // Pre-condition checking
-  if (quest.condition === 'LOG_TRANSACTION_TODAY') {
-    const txToday = await prisma.transaction.findFirst({
-      where: { userId: user.id },
-      orderBy: { date: 'desc' }
-    })
-    
-    if (!txToday) {
-      return { success: false, error: "quest.error.log_today" }
-    }
-    
-    const txDateStr = new Date(txToday.date.getTime()).toDateString()
-    const currentDateStr = new Date(now.getTime()).toDateString()
-    
-    if (txDateStr !== currentDateStr) {
-      return { success: false, error: "quest.error.log_today" }
-    }
-  }
+  const today = bangkokDayKey(new Date())
 
   try {
     await prisma.$transaction(async (tx) => {
+      await lockUser(tx, user.id)
+
+      // Checked after the lock, so two simultaneous requests can't both pass
+      const lastClaim = await tx.questClaim.findFirst({
+        where: { userId: user.id, questId: quest.id },
+        orderBy: { createdAt: 'desc' }
+      })
+      if (quest.type === 'ONETIME' && lastClaim) throw new ClaimError("quest.error.claimed_once")
+      if (quest.type === 'DAILY' && lastClaim && bangkokDayKey(lastClaim.createdAt) === today) {
+        throw new ClaimError("quest.error.claimed_today")
+      }
+
+      if (quest.condition === 'LOG_TRANSACTION_TODAY') {
+        const loggedToday = await tx.transaction.findFirst({
+          where: { userId: user.id, date: { gte: startOfBangkokDay() } },
+          select: { date: true }
+        })
+        if (!loggedToday || bangkokDayKey(loggedToday.date) !== today) throw new ClaimError("quest.error.log_today")
+      }
+
       await tx.user.update({
         where: { id: user.id },
         data: { paoPoints: { increment: quest.points } }
@@ -60,6 +57,7 @@ export async function claimDynamicQuest(questId: string) {
     })
     return { success: true }
   } catch (error) {
+    if (error instanceof ClaimError) return { success: false, error: error.message }
     console.error("Failed to claim dynamic quest", error)
     return { success: false, error: "common.something_wrong" }
   }
@@ -84,37 +82,27 @@ export async function redeemReward(rewardId: string) {
   const user = await getProfileData()
   if (!user) return { success: false, error: "Unauthorized" }
 
-  // 1. Fetch reward
   const reward = await prisma.reward.findUnique({ where: { id: rewardId } })
   if (!reward || reward.status !== 'AVAILABLE') {
     return { success: false, error: "rewards.error.unavailable" }
   }
 
-  // 2. Check points
-  if ((user.paoPoints || 0) < reward.points) {
-    return { success: false, error: "rewards.error.not_enough_points" }
-  }
-
-  // 3. Transaction
   try {
     await prisma.$transaction(async (tx) => {
-      // Deduct points
-      await tx.user.update({
-        where: { id: user.id },
+      // Only deducts when the balance covers the price, so concurrent redemptions can't overspend
+      const { count } = await tx.user.updateMany({
+        where: { id: user.id, paoPoints: { gte: reward.points } },
         data: { paoPoints: { decrement: reward.points } }
       })
+      if (count === 0) throw new ClaimError("rewards.error.not_enough_points")
 
-      // Add claim
       await tx.rewardClaim.create({
-        data: {
-          userId: user.id,
-          rewardId: reward.id,
-          status: 'PENDING'
-        }
+        data: { userId: user.id, rewardId: reward.id, status: 'PENDING' }
       })
     })
     return { success: true }
   } catch (error) {
+    if (error instanceof ClaimError) return { success: false, error: error.message }
     console.error("Redemption error", error)
     return { success: false, error: "common.something_wrong" }
   }
