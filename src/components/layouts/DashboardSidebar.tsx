@@ -11,8 +11,7 @@ import {
   Cat,
   Gift,
   MessageSquare,
-  Crown
-} from "lucide-react"
+  Crown, Receipt } from "lucide-react"
 import Link from "next/link"
 import { signOut } from "@/features/auth/actions"
 import { useLanguage } from "@/contexts/LanguageContext"
@@ -43,6 +42,11 @@ const items = [
     titleKey: "nav.goals",
     url: "/goals",
     icon: Target,
+  },
+  {
+    titleKey: "nav.bills",
+    url: "/bills",
+    icon: Receipt,
   },
   {
     titleKey: "nav.chat",

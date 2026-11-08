@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dayWithTimeOf, startOfBangkokDay } from './dates'
+import { bangkokDate, bangkokDayKey, bangkokMonthRange, bangkokParts, dayWithTimeOf, parseBangkokDateTime, startOfBangkokDay, toBangkokDateTimeInput } from './dates'
 
 describe('startOfBangkokDay', () => {
   it('returns Bangkok midnight as a UTC instant', () => {
@@ -29,5 +29,43 @@ describe('dayWithTimeOf', () => {
   it('keeps an existing entry on the same moment when its day is unchanged', () => {
     const existing = new Date('2026-09-15T12:34:56.789Z')
     expect(dayWithTimeOf('2026-09-15', existing).getTime()).toBe(existing.getTime())
+  })
+})
+
+describe('Bangkok calendar helpers', () => {
+  it('puts 01:00 Bangkok on 1 Dec in December, although it is still November in UTC', () => {
+    const instant = new Date('2026-11-30T18:00:00Z')
+    expect(bangkokParts(instant)).toEqual({ year: 2026, month: 11, day: 1 })
+    expect(bangkokDayKey(instant)).toBe('2026-12-01')
+    const { gte, lt } = bangkokMonthRange(2026, 11)
+    expect(instant >= gte && instant < lt).toBe(true)
+  })
+
+  it('month range runs from Bangkok midnight to the next month, rolling over the year', () => {
+    const { gte, lt } = bangkokMonthRange(2026, 11)
+    expect(gte.toISOString()).toBe('2026-11-30T17:00:00.000Z')
+    expect(lt.toISOString()).toBe('2026-12-31T17:00:00.000Z')
+  })
+
+  it('bangkokDate matches startOfBangkokDay', () => {
+    const now = new Date('2026-10-03T23:00:00Z')
+    const { year, month, day } = bangkokParts(now)
+    expect(bangkokDate(year, month, day).getTime()).toBe(startOfBangkokDay(now).getTime())
+  })
+})
+
+describe('parseBangkokDateTime', () => {
+  it('reads a datetime-local value as Bangkok time', () => {
+    expect(parseBangkokDateTime('2026-11-08T18:00')?.toISOString()).toBe('2026-11-08T11:00:00.000Z')
+  })
+  it('reads a date as Bangkok midnight', () => {
+    expect(parseBangkokDateTime('2026-12-31')?.toISOString()).toBe('2026-12-30T17:00:00.000Z')
+  })
+  it('rejects anything else', () => {
+    expect(parseBangkokDateTime('')).toBeNull()
+    expect(parseBangkokDateTime('tomorrow')).toBeNull()
+  })
+  it('round-trips with toBangkokDateTimeInput', () => {
+    expect(toBangkokDateTimeInput(parseBangkokDateTime('2026-11-08T18:00')!)).toBe('2026-11-08T18:00')
   })
 })

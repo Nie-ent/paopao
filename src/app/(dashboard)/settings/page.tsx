@@ -1,6 +1,7 @@
 "use client"
 
-import React, { useState } from "react"
+import React from "react"
+import { useFormStatus } from "react-dom"
 import { motion } from "framer-motion"
 import { Settings, LogOut, Webhook, BadgeCheck, BellRing, Smartphone, Shield } from "lucide-react"
 
@@ -9,13 +10,25 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { signOut } from "@/features/auth/actions"
-import { TaxSettingsCard } from "@/components/settings/TaxSettingsCard"
 import { CategorySettingsCard } from "@/components/settings/CategorySettingsCard"
 import { useLanguage } from "@/contexts/LanguageContext"
 
+/**
+ * Shows a spinner while signing out. The pending state comes from the form itself: disabling the
+ * button in its own onClick would cancel the submission before it is sent.
+ */
+function SignOutButton({ label }: { label: string }) {
+  const { pending } = useFormStatus()
+  return (
+    <Button type="submit" variant="destructive" disabled={pending} className="shadow-lg shadow-destructive/20">
+      {pending ? <div className="animate-spin w-4 h-4 mr-2 border-2 border-white/30 border-t-white rounded-full"/> : <LogOut className="h-4 w-4 mr-2" />}
+      {label}
+    </Button>
+  )
+}
+
 export default function SettingsPage() {
   const { t } = useLanguage()
-  const [isSignOutProcessing, setIsSignOutProcessing] = useState(false)
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -61,8 +74,8 @@ export default function SettingsPage() {
                     <Shield className="h-6 w-6 text-blue-500" />
                   </div>
                   <div>
-                    <h4 className="font-semibold text-foreground">Supabase Identity</h4>
-                    <p className="text-xs text-muted-foreground">{t('settings.supabase_desc')}</p>
+                    <h4 className="font-semibold text-foreground">{t('settings.line_login')}</h4>
+                    <p className="text-xs text-muted-foreground">{t('settings.line_login_desc')}</p>
                   </div>
                 </div>
                 <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/30">
@@ -72,9 +85,6 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
         </motion.div>
-
-        {/* Automated Taxes & Deductions */}
-        <TaxSettingsCard />
 
         {/* Category Colors & Custom Categories */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.05 }}>
@@ -121,16 +131,7 @@ export default function SettingsPage() {
                 {t('settings.danger_desc')}
               </p>
               <form action={signOut}>
-                <Button 
-                  type="submit"
-                  variant="destructive" 
-                  disabled={isSignOutProcessing}
-                  onClick={() => setIsSignOutProcessing(true)}
-                  className="shadow-lg shadow-destructive/20"
-                >
-                  {isSignOutProcessing ? <div className="animate-spin w-4 h-4 mr-2 border-2 border-white/30 border-t-white rounded-full"/> : <LogOut className="h-4 w-4 mr-2" />}
-                  {t('settings.logout')}
-                </Button>
+                <SignOutButton label={t('settings.logout')} />
               </form>
             </CardContent>
           </Card>

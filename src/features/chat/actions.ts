@@ -6,6 +6,7 @@ import { Type } from "@google/genai"
 import { generateContent, startChat, isQuotaError } from "@/lib/ai"
 import { DEMO_LINE_ID } from "@/lib/auth-user"
 import { startOfBangkokDay } from "@/lib/dates"
+import { effectivePlan, LIMITS } from "@/lib/subscription"
 
 
 const SYSTEM_INSTRUCTION = `You are PaoPao, a friendly and expert financial assistant.
@@ -13,8 +14,6 @@ You help users plan their savings, resolve debts, or organize their financial an
 You must speak in a friendly tone (using emojis!). 
 If you and the user agree on a clear action plan, you can use the 'createTaskOrGoal' tool to add tasks (TODO) or financial targets (FINANCIAL) to the user's dashboard automatically. Always ask for permission before using the tool.`
 
-// Messages per Bangkok day. The demo account is shared by every visitor, so its cap is account-wide.
-const DAILY_CHAT_LIMITS = { DEMO: 30, FREE: 10, PRO: 100, BUSINESS: 100 } as const
 const MAX_REPLY_TOKENS = 800
 
 
@@ -69,7 +68,7 @@ export async function sendChatMessage(sessionId: string | null, message: string,
   const user = await getProfileData()
   if (!user) return { error: "Unauthorized" }
 
-  const dailyLimit = user.lineId === DEMO_LINE_ID ? DAILY_CHAT_LIMITS.DEMO : DAILY_CHAT_LIMITS[user.subscriptionTier]
+  const dailyLimit = user.lineId === DEMO_LINE_ID ? LIMITS.chatPerDay.DEMO : LIMITS.chatPerDay[effectivePlan(user)]
   if (await countMessagesToday(user.id) >= dailyLimit) {
     return { error: "Daily chat limit reached", limitReached: true, limit: dailyLimit }
   }

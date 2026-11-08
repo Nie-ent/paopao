@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { getDashboardData } from "@/features/dashboard/actions"
 import { generateDashboardInsight } from "@/features/ai/actions"
 import { claimDynamicQuest, getActiveQuests } from "@/features/quests/actions"
+import { bangkokDayKey } from "@/lib/dates"
 import { useLanguage } from "@/contexts/LanguageContext"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
@@ -223,9 +224,7 @@ export default function DashboardOverview() {
                  if (q.claims?.length > 0) {
                    if (q.type === 'ONETIME') isClaimed = true;
                    else if (q.type === 'DAILY') {
-                     const today = new Date(new Date().getTime() + 7 * 60 * 60 * 1000).toDateString();
-                     const claimDate = new Date(new Date(q.claims[0].createdAt).getTime() + 7 * 60 * 60 * 1000).toDateString();
-                     if (today === claimDate) isClaimed = true;
+                     if (bangkokDayKey(new Date(q.claims[0].createdAt)) === bangkokDayKey(new Date())) isClaimed = true;
                    }
                  }
                  return (

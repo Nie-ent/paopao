@@ -48,7 +48,6 @@ function buildTransactions(now: Date): DemoTx[] {
     add("EXPENSE", 419, "Entertainment", "Netflix", at(y, mo, 12, 8))
     add("EXPENSE", 149, "Entertainment", "Spotify", at(y, mo, 14, 8))
     add("INCOME", 65000, "Salary", "Monthly salary", at(y, mo, 25, 7))
-    add("EXPENSE", 875, "Other Expense", "Social Security Auto-Deduction", at(y, mo, 25, 7))
     add("EXPENSE", 5000, "Investment", "DCA Bitcoin", at(y, mo, 26, 9))
     add("EXPENSE", 3000, "Investment", "DCA S&P 500 index fund", at(y, mo, 26, 9))
     add("EXPENSE", 6000, "Saving", "Transfer to emergency fund", at(y, mo, 26, 10))
@@ -59,7 +58,6 @@ function buildTransactions(now: Date): DemoTx[] {
       // First gig always lands early so the current month never opens with zero income
       const date = at(y, mo, i === 0 ? 2 : between(10, 22), 15)
       add("INCOME", amount, "Freelance", pick(["Landing page project", "API integration gig", "Bug-fix contract", "Dashboard UI freelance"]), date)
-      add("EXPENSE", Math.round(amount * 0.03), "Other Expense", "Withholding Tax Auto-Deduction (3%)", date)
     }
     if (rand() < 0.5) add("INCOME", between(800, 2400), "Investment Income", "Fund dividend", at(y, mo, between(10, 20), 11))
 

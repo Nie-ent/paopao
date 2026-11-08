@@ -2,7 +2,7 @@
 
 import prisma from "@/lib/db"
 import { getCurrentUser } from "@/lib/current-user"
-import { dayWithTimeOf } from "@/lib/dates"
+import { bangkokDate, bangkokMonthRange, dayWithTimeOf } from "@/lib/dates"
 import { z } from "zod"
 import { FALLBACK_CATEGORY } from "@/lib/categories"
 import { statementRowTimestamp } from "@/lib/statement"
@@ -34,23 +34,10 @@ export async function getTransactions(options: {
   }
   
   if (year) {
-    if (month && month > 0) {
-      // Note: month is 1-indexed (1 = Jan, 12 = Dec)
-      const startDate = new Date(year, month - 1, 1)
-      const endDate = new Date(year, month, 0, 23, 59, 59, 999)
-      whereClause.date = {
-        gte: startDate,
-        lte: endDate,
-      }
-    } else {
-      // Entire year
-      const startDate = new Date(year, 0, 1)
-      const endDate = new Date(year, 11, 31, 23, 59, 59, 999)
-      whereClause.date = {
-        gte: startDate,
-        lte: endDate,
-      }
-    }
+    // Month is 1-indexed (1 = Jan); 0 or missing means the whole year. Bangkok calendar.
+    whereClause.date = month && month > 0
+      ? bangkokMonthRange(year, month - 1)
+      : { gte: bangkokDate(year, 0, 1), lt: bangkokDate(year + 1, 0, 1) }
   }
 
   if (filterCategoryId && filterCategoryId !== 'ALL') {
@@ -104,51 +91,54 @@ export async function getTransactions(options: {
   }
 }
 
+const MAX_CUSTOM_CATEGORIES = 50
+
+const transactionFormSchema = z.object({
+  amount: z.coerce.number().positive().max(100_000_000),
+  type: z.enum(['INCOME', 'EXPENSE']).default('EXPENSE'),
+  category: z.string().trim().min(1).max(40),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  notes: z.string().max(200).default(''),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#64748b'),
+})
+
+/** Reads and validates the add/edit transaction form. */
+function parseTransactionForm(formData: FormData) {
+  const field = (name: string) => formData.get(name)?.toString() || undefined
+  return transactionFormSchema.safeParse({
+    amount: field('amount'), type: field('type'), category: field('category'),
+    date: field('date'), notes: field('notes'), color: field('color'),
+  })
+}
+
+/** The category with this name (built-in or the user's own), creating a custom one if needed. */
+async function findOrCreateCategory(userId: string, name: string, type: 'INCOME' | 'EXPENSE', color: string) {
+  const existing = await prisma.category.findFirst({ where: { name, OR: [{ userId: null }, { userId }] } })
+  if (existing) return existing
+  if (await prisma.category.count({ where: { userId } }) >= MAX_CUSTOM_CATEGORIES) return null
+  return prisma.category.create({ data: { name, type, color, icon: '📝', userId } })
+}
+
 export async function createTransactionServer(formData: FormData) {
   const prismaUser = await getCurrentUser()
   if (!prismaUser) return { success: false, error: 'User not found' }
 
-  const amount = Number(formData.get('amount'))
-  const categoryName = formData.get('category')?.toString()
-  const type = formData.get('type')?.toString() || 'EXPENSE'
-  const dateStr = formData.get('date')?.toString()
-  const paymentMethod = formData.get('paymentMethod')?.toString() || 'Cash'
-  const notes = formData.get('notes')?.toString() || ''
-  const color = formData.get('color')?.toString() || '#64748b'
+  const parsed = parseTransactionForm(formData)
+  if (!parsed.success) return { success: false, error: 'Invalid required fields' }
+  const { amount, type, category, date, notes, color } = parsed.data
 
-  if (!amount || isNaN(amount) || !dateStr || !categoryName) {
-    return { success: false, error: 'Invalid required fields' }
-  }
-
-  let categoryId = ''
   try {
-    let cat = await prisma.category.findFirst({
-      where: {
-        name: categoryName,
-        OR: [{ userId: null }, { userId: prismaUser.id }]
-      }
-    })
-    if (!cat) {
-      cat = await prisma.category.create({
-        data: {
-          name: categoryName,
-          type: type as any,
-          color,
-          icon: '📝',
-          userId: prismaUser.id
-        }
-      })
-    }
-    categoryId = cat.id
+    const cat = await findOrCreateCategory(prismaUser.id, category, type, color)
+    if (!cat) return { success: false, error: 'Too many categories' }
 
     await prisma.transaction.create({
       data: {
         userId: prismaUser.id,
-        date: dayWithTimeOf(dateStr, new Date()),
-        type: type as any,
-        categoryId,
+        date: dayWithTimeOf(date, new Date()),
+        type,
+        categoryId: cat.id,
         amount,
-        note: formData.get('notes')?.toString() || ''
+        note: notes
       }
     })
     return { success: true }
@@ -162,50 +152,25 @@ export async function updateTransactionServer(id: string, formData: FormData) {
   const prismaUser = await getCurrentUser()
   if (!prismaUser) return { success: false, error: 'User not found' }
 
-  const amount = Number(formData.get('amount'))
-  const categoryName = formData.get('category')?.toString()
-  const type = formData.get('type')?.toString() || 'EXPENSE'
-  const dateStr = formData.get('date')?.toString()
-  const paymentMethod = formData.get('paymentMethod')?.toString() || 'Cash'
-  const notes = formData.get('notes')?.toString() || ''
-  const color = formData.get('color')?.toString() || '#64748b'
-
-  if (!amount || isNaN(amount) || !dateStr || !categoryName) {
-    return { success: false, error: 'Invalid required fields' }
-  }
+  const parsed = parseTransactionForm(formData)
+  if (!parsed.success) return { success: false, error: 'Invalid required fields' }
+  const { amount, type, category, date, notes, color } = parsed.data
 
   try {
     const existing = await prisma.transaction.findFirst({ where: { id, userId: prismaUser.id } })
     if (!existing) return { success: false, error: 'Transaction not found' }
 
-    let categoryId = ''
-    let cat = await prisma.category.findFirst({
-      where: {
-        name: categoryName,
-        OR: [{ userId: null }, { userId: prismaUser.id }]
-      }
-    })
-    if (!cat) {
-      cat = await prisma.category.create({
-        data: {
-          name: categoryName,
-          type: type as any,
-          color,
-          icon: '📝',
-          userId: prismaUser.id
-        }
-      })
-    }
-    categoryId = cat.id
+    const cat = await findOrCreateCategory(prismaUser.id, category, type, color)
+    if (!cat) return { success: false, error: 'Too many categories' }
 
     await prisma.transaction.update({
       where: { id, userId: prismaUser.id },
       data: {
-        date: dayWithTimeOf(dateStr, existing.date),
-        type: type as any,
-        categoryId,
+        date: dayWithTimeOf(date, existing.date),
+        type,
+        categoryId: cat.id,
         amount,
-        note: formData.get('notes')?.toString() || ''
+        note: notes
       }
     })
     return { success: true }
@@ -220,10 +185,10 @@ export async function deleteTransactionServer(id: string) {
   if (!prismaUser) return { success: false, error: 'User not found' }
 
   try {
-    await prisma.transaction.delete({
+    const { count } = await prisma.transaction.deleteMany({
       where: { id, userId: prismaUser.id }
     })
-    return { success: true }
+    return count ? { success: true } : { success: false, error: 'Transaction not found' }
   } catch (error) {
     console.error(error)
     return { success: false, error: 'Database Error' }

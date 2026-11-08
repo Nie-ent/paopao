@@ -1,5 +1,6 @@
 "use client"
 
+import { toBangkokDateTimeInput } from "@/lib/dates"
 import React, { useEffect, useState, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Target, TrendingUp, Trophy, Plus, Loader2, Trash2, CheckCircle2, Circle, ListTodo, CalendarClock, Flag, Link as LinkIcon } from "lucide-react"
@@ -58,7 +59,7 @@ export default function GoalsPage() {
       targetAmount: goal.targetAmount?.toString() || "",
       trackCategory: goal.trackCategory || "",
       description: goal.description || "",
-      deadline: goal.deadline ? new Date(goal.deadline).toISOString().slice(0, 16) : ""
+      deadline: goal.deadline ? toBangkokDateTimeInput(new Date(goal.deadline)) : ""
     })
     setIsSheetOpen(true)
   }

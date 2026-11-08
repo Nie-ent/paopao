@@ -2,6 +2,7 @@
 
 import prisma from "@/lib/db"
 import { getCurrentUser } from "@/lib/current-user"
+import { bangkokDate, bangkokParts } from "@/lib/dates"
 import { generateContent, isQuotaError } from "@/lib/ai"
 import { unstable_cache } from "next/cache"
 
@@ -118,20 +119,18 @@ export async function generateDashboardInsight(language: string = 'en', timefram
   const prismaUser = await getCurrentUser()
   if (!prismaUser) return { advice: null }
 
-  const now = new Date()
+  const today = bangkokParts(new Date())
   let startDate = new Date()
 
   let timeText = "All Time"
   if (timeframe === 'YTD') {
-    startDate = new Date(now.getFullYear(), 0, 1)
+    startDate = bangkokDate(today.year, 0, 1)
     timeText = "Year-to-Date"
   } else if (timeframe === 'MONTH') {
-    startDate = new Date(now.getFullYear(), now.getMonth(), 1)
+    startDate = bangkokDate(today.year, today.month, 1)
     timeText = "This Month's"
   } else if (timeframe === 'WEEK') {
-    startDate = new Date(now)
-    startDate.setDate(now.getDate() - 6)
-    startDate.setHours(0, 0, 0, 0)
+    startDate = bangkokDate(today.year, today.month, today.day - 6)
     timeText = "Last 7 days"
   }
 

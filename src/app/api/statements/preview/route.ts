@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/current-user"
 import { isAiBusyError } from "@/lib/ai"
-import { previewStatement, StatementError } from "@/services/statement.service"
+import { MAX_STATEMENT_BYTES, previewStatement, StatementError } from "@/services/statement.service"
+import { DEMO_LINE_ID } from "@/lib/auth-user"
+import { isProActive, LIMITS } from "@/lib/subscription"
+import { consumeDailyUsage, refundUsage } from "@/lib/usage"
 
 // Reading a long statement can take a while, more so when a model times out and the next one is tried
 export const maxDuration = 300
@@ -16,10 +19,21 @@ export async function POST(req: Request) {
   const password = form.get("password")
   if (!(file instanceof File)) return NextResponse.json({ error: "UNSUPPORTED" }, { status: 400 })
 
+  if (file.size > MAX_STATEMENT_BYTES) return NextResponse.json({ error: "TOO_LARGE" }, { status: 422 })
+
+  // A Pro feature (the shared demo account can try it too), metered per day because the AI reads the whole file
+  const isDemo = user.lineId === DEMO_LINE_ID
+  if (!isDemo && !isProActive(user)) return NextResponse.json({ error: "PRO_ONLY" }, { status: 403 })
+  const limit = isDemo ? LIMITS.statementImportsPerDay.DEMO : LIMITS.statementImportsPerDay.PRO
+  const usage = await consumeDailyUsage(user.id, "statement_import", limit)
+  if (!usage) return NextResponse.json({ error: "DAILY_LIMIT" }, { status: 429 })
+
   try {
     const rows = await previewStatement(user.id, file, typeof password === "string" && password ? password : undefined)
     return NextResponse.json({ rows })
   } catch (error) {
+    // Rejected before any AI work (wrong password, unsupported file): don't charge the daily quota
+    if (error instanceof StatementError && error.code !== "NO_ROWS") await refundUsage(usage)
     if (error instanceof StatementError) return NextResponse.json({ error: error.code }, { status: 422 })
     if (isAiBusyError(error)) return NextResponse.json({ error: "AI_BUSY" }, { status: 503 })
     console.error("Statement preview failed:", error)

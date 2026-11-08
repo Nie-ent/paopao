@@ -11,20 +11,10 @@ export async function POST(req: Request) {
     const bodyText = await req.text();
     const signature = req.headers.get('x-line-signature') || '';
 
-    // 2. Validate Signature (Only if we have a real secret configured)
-    const { searchParams } = new URL(req.url);
-    const bypass = searchParams.get('bypass');
-    if (lineConfig.channelSecret && lineConfig.channelSecret !== "test_secret" && bypass !== "1") {
-      const isValid = validateSignature(
-        Buffer.from(bodyText),
-        lineConfig.channelSecret,
-        signature
-      );
-      
-      if (!isValid) {
-        console.warn("Invalid LINE webhook signature detected.");
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-      }
+    // 2. Every request must carry LINE's signature. Fails closed when the secret isn't configured.
+    if (!lineConfig.channelSecret || !validateSignature(Buffer.from(bodyText), lineConfig.channelSecret, signature)) {
+      console.warn("Rejected LINE webhook: missing or invalid signature.");
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     // 3. Parse JSON Body

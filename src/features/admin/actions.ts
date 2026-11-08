@@ -3,6 +3,7 @@
 import prisma from "@/lib/db"
 import { cookies } from "next/headers"
 import { createHmac, timingSafeEqual } from "crypto"
+import { clientIp, ADMIN_ATTEMPT_PREFIX } from "@/lib/client-ip"
 
 const ADMIN_COOKIE = "admin_session"
 
@@ -19,13 +20,27 @@ function safeEqual(a: string, b: string) {
   return left.length === right.length && timingSafeEqual(left, right)
 }
 
+const ADMIN_LOGIN_LIMIT = { maxFailures: 5, windowMs: 15 * 60 * 1000 }
+
 export async function loginAdmin(password: string) {
   const expected = process.env.ADMIN_PASSWORD
   const token = adminSessionToken()
   // Fails closed: with no ADMIN_PASSWORD configured, nobody can sign in
-  if (!expected || !token || !safeEqual(password, expected)) {
-    return { success: false, error: "รหัสผ่านไม่ถูกต้อง" }
+  if (!expected || !token) return { success: false, error: "รหัสผ่านไม่ถูกต้อง" }
+
+  // Per-IP guessing limit, counted before the password is checked
+  const ip = ADMIN_ATTEMPT_PREFIX + await clientIp()
+  const failures = await prisma.loginAttempt.count({
+    where: { ip, success: false, createdAt: { gt: new Date(Date.now() - ADMIN_LOGIN_LIMIT.windowMs) } }
+  })
+  if (failures >= ADMIN_LOGIN_LIMIT.maxFailures) {
+    return { success: false, error: "ลองผิดหลายครั้งเกินไป กรุณารอ 15 นาทีแล้วลองใหม่" }
   }
+
+  const ok = typeof password === "string" && safeEqual(password, expected)
+  await prisma.loginAttempt.create({ data: { ip, success: ok } })
+  if (!ok) return { success: false, error: "รหัสผ่านไม่ถูกต้อง" }
+
   const cookieStore = await cookies()
   cookieStore.set(ADMIN_COOKIE, token, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: 60 * 60 * 12 })
   return { success: true }

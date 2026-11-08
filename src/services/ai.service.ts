@@ -42,7 +42,7 @@ function buildAIConfig(userCategories: string[] = []) {
       },
       isSubscriptionPayment: {
         type: Type.BOOLEAN,
-        description: "True ONLY IF this is a transfer of exactly 59 THB to the receiver named 'ณภัทร สุวรรณจินดา' (Napat Suwanjinda). Otherwise, false."
+        description: "True ONLY IF this is a transfer of exactly 59 or 590 THB to the receiver named 'ณภัทร สุวรรณจินดา' (Napat Suwanjinda). Otherwise, false."
       }
     },
     required: ["type", "amount", "category", "note"]
@@ -60,7 +60,7 @@ ${CATEGORY_DEFINITIONS}
 If an image is provided, parse the transfer amount, infer if it's an expense (user paid someone) or income (someone paid user), and categorize it based on the memo/receiver context. Use standard timezone for 'Today'.
 IMPORTANT RULES: 
 1. You MUST write the 'note' value entirely in the Thai language.
-2. If the slip is a transfer of EXACTLY 59.00 THB to the account name "ณภัทร สุวรรณจินดา" (or Napat Suwanjinda), you MUST set 'isSubscriptionPayment' to true.`;
+2. If the slip is a transfer of EXACTLY 59.00 or 590.00 THB to the account name "ณภัทร สุวรรณจินดา" (or Napat Suwanjinda), you MUST set 'isSubscriptionPayment' to true.`;
 
   return { transactionSchema, SYSTEM_INSTRUCTION };
 }

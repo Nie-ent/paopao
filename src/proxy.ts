@@ -1,38 +1,15 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
 import { createSessionToken, verifySessionToken, SESSION_COOKIE, sessionCookieOptions } from '@/lib/session'
 
-export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({
-    request: {
-      headers: request.headers,
-    },
-  })
+const PUBLIC_PAGES = ['/welcome', '/pricing', '/privacy']
 
-  // Check Supabase session
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
-          response = NextResponse.next({
-            request,
-          })
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
-          )
-        },
-      },
-    }
-  )
+/** LINE's in-app browser, where LIFF runs ("Line/<version>" in the user agent) */
+const isLineInAppBrowser = (request: NextRequest) => /\bLine\//i.test(request.headers.get('user-agent') ?? '')
 
-  const { data: { user } } = await supabase.auth.getUser()
+export async function proxy(request: NextRequest) {
+  const response = NextResponse.next({ request: { headers: request.headers } })
+
   const isDemoUser = request.cookies.get('demo_mode_bypass')?.value === 'true'
   // Only a correctly signed, unexpired cookie counts as a LINE session
   const sessionLineId = await verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value)
@@ -61,21 +38,37 @@ export async function middleware(request: NextRequest) {
   // The admin area has its own password login, enforced in its server layout and actions
   if (request.nextUrl.pathname.startsWith('/admin')) return response
 
-  const isAuthPage = request.nextUrl.pathname.startsWith('/login')
-  const isPdpaPage = request.nextUrl.pathname.startsWith('/pdpa')
+  const pathname = request.nextUrl.pathname
+  const isAuthPage = pathname.startsWith('/login')
+  const isPdpaPage = pathname.startsWith('/pdpa')
+  const isSignedIn = isDemoUser || isDirectLineSession
+
+  // Public marketing pages: anyone can read them, signed in or not, PDPA accepted or not
+  if (PUBLIC_PAGES.some(p => pathname === p || pathname.startsWith(p + '/'))) return response
+
+  // "/" is the landing page for visitors and the dashboard once signed in. The URL stays "/" so
+  // the home page is what search engines index. LINE's in-app browser (LIFF) still goes to /login,
+  // which signs the user in with one tap.
+  if (pathname === '/' && !isSignedIn && !isLineInAppBrowser(request)) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/welcome'
+    const rewrite = NextResponse.rewrite(url)
+    if (hasStaleSession) rewrite.cookies.delete(SESSION_COOKIE)
+    return rewrite
+  }
   
   // If not logged in and not heading to login -> redirect to login
-  if (!user && !isDemoUser && !isDirectLineSession && !isAuthPage && !request.nextUrl.pathname.startsWith('/api/')) {
+  if (!isSignedIn && !isAuthPage && !request.nextUrl.pathname.startsWith('/api/')) {
     return redirectTo('/login')
   }
 
   // If logged in, but hasn't accepted PDPA, and not on PDPA page -> redirect to PDPA
-  if ((user || isDemoUser || isDirectLineSession) && !hasAcceptedPDPA && !isPdpaPage && !request.nextUrl.pathname.startsWith('/api/')) {
+  if (isSignedIn && !hasAcceptedPDPA && !isPdpaPage && !request.nextUrl.pathname.startsWith('/api/')) {
     return redirectTo('/pdpa')
   }
 
   // If already logged in and heading to login or pdpa (when already accepted) -> redirect to dashboard
-  if ((user || isDemoUser || isDirectLineSession)) {
+  if (isSignedIn) {
     if (isAuthPage || (isPdpaPage && hasAcceptedPDPA)) {
       return redirectTo('/')
     }
@@ -86,6 +79,7 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    // Static files, robots.txt, sitemap.xml and llms.txt skip the proxy
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|txt|xml)$).*)',
   ],
 }
