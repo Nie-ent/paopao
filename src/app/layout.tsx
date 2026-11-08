@@ -14,10 +14,24 @@ const notoSansThai = Noto_Sans_Thai({
 });
 
 import "./globals.css";
+import { siteUrl } from "@/lib/site";
+import { DESCRIPTION } from "@/features/marketing/content";
 
 export const metadata: Metadata = {
-  title: "PaoPao (เป๋าเป๋า)",
-  description: "AI personal finance assistant on LINE: log expenses by chat or slip photo. | เรื่องเงินปล่อยให้เป็นหน้าที่เรา คุณแค่ไปใช้ชีวิตให้มีความสุขก็พอ",
+  metadataBase: new URL(siteUrl()),
+  title: { default: "เป๋าเป๋า (PaoPao) – จดรายรับรายจ่ายใน LINE", template: "%s | เป๋าเป๋า (PaoPao)" },
+  description: DESCRIPTION,
+  applicationName: "PaoPao",
+  keywords: ["แอปจดรายรับรายจ่าย", "จดรายจ่ายใน LINE", "บันทึกรายรับรายจ่าย", "แอปบัญชีส่วนตัว", "สลิปโอนเงิน", "จัดการเงินส่วนตัว", "PaoPao", "เป๋าเป๋า"],
+  openGraph: {
+    type: "website",
+    locale: "th_TH",
+    siteName: "เป๋าเป๋า (PaoPao)",
+    images: [{ url: "/marketing/og.jpg", width: 1200, height: 630, alt: "แดชบอร์ดรายรับรายจ่ายของเป๋าเป๋า" }],
+  },
+  twitter: { card: "summary_large_image" },
+  // App pages are private; marketing pages opt back in to indexing
+  robots: { index: false, follow: false },
 };
 
 import { Toaster } from "@/components/ui/sonner";
