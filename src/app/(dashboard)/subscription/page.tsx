@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useRef } from "react"
 import { motion } from "framer-motion"
 import { Check, Sparkles, Zap, AlertCircle, QrCode, X, Gift } from "lucide-react"
 import { QRCodeSVG } from "qrcode.react"
@@ -41,10 +41,12 @@ export default function SubscriptionPage() {
     t('sub.pro.f4', { chat: limits?.chatPro ?? 100 }),
   ]
 
+  const trialLock = useRef(false)
   const handleStartTrial = async () => {
+    if (trialLock.current) return
+    trialLock.current = true
     setStartingTrial(true)
-    const res = await startTrial()
-    setStartingTrial(false)
+    const res = await startTrial().finally(() => { setStartingTrial(false); trialLock.current = false })
     if ("expiresAt" in res && res.expiresAt) {
       toast.success(t('sub.trial_started', { date: formatDate(res.expiresAt) }))
       load()
@@ -74,8 +76,8 @@ export default function SubscriptionPage() {
             </div>
           </div>
           {data.trialEligible && (
-            <Button onClick={handleStartTrial} disabled={startingTrial} className="rounded-xl gap-2 shrink-0">
-              <Gift className="w-4 h-4" /> {t('sub.trial_cta', { days: data.trialDays })}
+            <Button onClick={handleStartTrial} loading={startingTrial} className="rounded-xl gap-2 shrink-0">
+              {!startingTrial && <Gift className="w-4 h-4" />} {t('sub.trial_cta', { days: data.trialDays })}
             </Button>
           )}
         </div>

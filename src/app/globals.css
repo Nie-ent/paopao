@@ -129,6 +129,43 @@
   }
   html {
     @apply font-sans;
+    /* The app is light-themed: make everything the browser draws itself (autocomplete history,
+       <select> option lists, date pickers, scrollbars) light too, instead of following a dark OS. */
+    color-scheme: light;
+    /* Checkboxes, radios, range sliders and date-picker highlights in the brand color */
+    accent-color: var(--primary);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .dark {
+    color-scheme: dark;
+  }
+  ::selection {
+    background-color: color-mix(in srgb, var(--primary) 25%, transparent);
+  }
+  /* Chrome paints autofilled fields light blue/yellow; keep our own colors */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  textarea:-webkit-autofill,
+  select:-webkit-autofill {
+    -webkit-text-fill-color: var(--foreground);
+    -webkit-box-shadow: 0 0 0 1000px var(--card) inset;
+    caret-color: var(--foreground);
+    transition: background-color 9999s ease-out 0s;
+  }
+  /* No spinner arrows on number fields (amounts are typed) */
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+  /* The browser's own clear (×) button on search fields */
+  input[type="search"]::-webkit-search-cancel-button {
+    -webkit-appearance: none;
   }
 }
 

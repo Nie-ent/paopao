@@ -1,5 +1,7 @@
 "use client"
 
+import { useFormStatus } from "react-dom"
+
 import * as React from "react"
 import {
   LineChart,
@@ -11,7 +13,7 @@ import {
   Cat,
   Gift,
   MessageSquare,
-  Crown, Receipt } from "lucide-react"
+  Crown, Receipt, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { signOut } from "@/features/auth/actions"
 import { useLanguage } from "@/contexts/LanguageContext"
@@ -60,6 +62,17 @@ const items = [
   },
 ]
 
+/** Inside the sign-out form, so useFormStatus can show progress and block a second submit. */
+function SignOutMenuButton({ label }: { label: string }) {
+  const { pending } = useFormStatus()
+  return (
+    <SidebarMenuButton type="submit" disabled={pending} aria-busy={pending || undefined} className="text-destructive hover:bg-destructive/10 hover:text-destructive transition-colors">
+      {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
+      <span>{label}</span>
+    </SidebarMenuButton>
+  )
+}
+
 export function DashboardSidebar() {
   const { t } = useLanguage()
 
@@ -88,10 +101,7 @@ export function DashboardSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             <form action={signOut}>
-              <SidebarMenuButton type="submit" className="text-destructive hover:bg-destructive/10 hover:text-destructive transition-colors">
-                <LogOut className="h-4 w-4" />
-                <span>{t('header.logout')}</span>
-              </SidebarMenuButton>
+              <SignOutMenuButton label={t('header.logout')} />
             </form>
           </SidebarMenuItem>
         </SidebarMenu>

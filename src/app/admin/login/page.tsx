@@ -1,5 +1,5 @@
 "use client"
-import React, { useState } from "react"
+import React, { useState, useRef } from "react"
 import { loginAdmin } from "@/features/admin/actions"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,8 +11,11 @@ export default function AdminLoginPage() {
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
 
+  const submitting = useRef(false)
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (submitting.current) return
+    submitting.current = true
     setLoading(true)
     const res = await loginAdmin(password)
     if (res.success) {
@@ -22,6 +25,7 @@ export default function AdminLoginPage() {
       setPassword("")
     }
     setLoading(false)
+    submitting.current = false
   }
 
   return (
@@ -46,7 +50,7 @@ export default function AdminLoginPage() {
                 autoFocus
               />
             </div>
-            <Button type="submit" disabled={!password || loading} className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold h-11">
+            <Button type="submit" disabled={!password} loading={loading} className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold h-11">
               {loading ? "Authenticating..." : "Login Securely"}
             </Button>
           </form>

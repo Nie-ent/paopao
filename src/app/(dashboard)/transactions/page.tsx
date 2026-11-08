@@ -9,6 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Select } from "@/components/ui/select"
+import { useSingleFlight } from "@/hooks/use-single-flight"
 import { Input } from "@/components/ui/input"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
@@ -41,7 +43,9 @@ export default function TransactionsPage() {
 
   // Sheet States
   const [isSheetOpen, setIsSheetOpen] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  // One save/delete at a time, and one export at a time: blocks double clicks before React re-renders
+  const { run: runSave, pending: isSubmitting } = useSingleFlight()
+  const { run: runExport, pending: isExporting } = useSingleFlight()
   const [showSuccessPaoPao, setShowSuccessPaoPao] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [isCustomCategory, setIsCustomCategory] = useState(false)
@@ -116,7 +120,7 @@ export default function TransactionsPage() {
     if (page > 1) setPage(p => p - 1)
   }
 
-  const exportToExcel = async () => {
+  const exportToExcel = () => runExport(async () => {
     toast.info(t('transactions.export.preparing'))
     const res = await getTransactions({ page: 1, limit: 10000, type: filterType, month: selectedMonth, year: selectedYear, sortBy, filterCategoryId: selectedCategory })
     if (res.data && res.data.length > 0) {
@@ -138,7 +142,7 @@ export default function TransactionsPage() {
     } else {
       toast.error(t('transactions.export.empty'))
     }
-  }
+  })
 
   // --- CRUD ACTION HANDLERS ---
   const openCreateSheet = () => {
@@ -174,9 +178,9 @@ export default function TransactionsPage() {
     setIsSheetOpen(true)
   }
 
-  const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    setIsSubmitting(true)
+    void runSave(async () => {
 
     const payload = new FormData()
     Object.entries(formData).forEach(([key, value]) => {
@@ -208,18 +212,17 @@ export default function TransactionsPage() {
     } else {
       toast.error(t('common.error'), { description: res.error || t('transactions.action.failed') })
     }
-    setIsSubmitting(false)
+    })
   }
 
   const requestDeleteTx = () => {
     setDeleteConfirmOpen(true)
   }
 
-  const executeDeleteTx = async () => {
+  const executeDeleteTx = () => runSave(async () => {
     if (!editId) return
-    setDeleteConfirmOpen(false)
-    setIsSubmitting(true)
     const res = await deleteTransactionServer(editId)
+    setDeleteConfirmOpen(false)
     if (res.success) {
        toast.success(t('transactions.delete.success'))
        setIsSheetOpen(false)
@@ -227,8 +230,7 @@ export default function TransactionsPage() {
     } else {
        toast.error(t('common.error'), { description: res.error || t('transactions.delete.failed') })
     }
-    setIsSubmitting(false)
-  }
+  })
 
   const availableCategories = formData.type === 'INCOME' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES
   const customCategories = Object.keys(categoryColors).filter(c => !INCOME_CATEGORIES.includes(c) && !EXPENSE_CATEGORIES.includes(c))
@@ -244,8 +246,8 @@ export default function TransactionsPage() {
           <Button variant="outline" className="shrink-0 bg-background/50 backdrop-blur" onClick={() => setImportOpen(true)}>
             <FileUp className="h-4 w-4 mr-2" /> {t('statement.btn')}
           </Button>
-          <Button variant="outline" className="shrink-0 bg-background/50 backdrop-blur" onClick={exportToExcel}>
-            <Download className="h-4 w-4 mr-2" /> {t('transactions.btn.export')}
+          <Button variant="outline" className="shrink-0 bg-background/50 backdrop-blur" onClick={exportToExcel} loading={isExporting}>
+            {!isExporting && <Download className="h-4 w-4 mr-2" />} {t('transactions.btn.export')}
           </Button>
           <Button className="shrink-0 shadow-lg" onClick={openCreateSheet}>
             <Plus className="h-4 w-4 mr-2" /> {t('transactions.btn.add')}
@@ -258,54 +260,46 @@ export default function TransactionsPage() {
           <div className="flex flex-col gap-2">
             <CardTitle>{t('transactions.title')}</CardTitle>
             <CardDescription className="flex items-center gap-2 flex-wrap">
-              <select 
-                className="bg-background border border-border rounded text-sm p-1 text-foreground"
-                value={selectedMonth}
-                onChange={(e) => { setPage(1); setSelectedMonth(Number(e.target.value)) }}
-              >
-                <option value={0}>{t('transactions.filter.all_months')}</option>
-                {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
-                  <option key={m} value={m}>
-                    {new Date(0, m - 1).toLocaleString(locale, { month: 'long' })}
-                  </option>
-                ))}
-              </select>
-              <select 
-                className="bg-background border border-border rounded text-sm p-1 text-foreground"
-                value={selectedYear}
-                onChange={(e) => { setPage(1); setSelectedYear(Number(e.target.value)) }}
-              >
-                {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(y => (
-                  <option key={y} value={y}>{y + (locale === 'th-TH' ? 543 : 0)}</option>
-                ))}
-              </select>
-              <select 
-                className="bg-background border border-border rounded text-sm p-1 text-foreground font-medium"
+              <Select
+                aria-label={t('transactions.filter.all_months')}
+                className="h-8 w-auto min-w-32"
+                value={String(selectedMonth)}
+                onValueChange={v => { setPage(1); setSelectedMonth(Number(v)) }}
+                options={[
+                  { value: "0", label: t('transactions.filter.all_months') },
+                  ...Array.from({ length: 12 }, (_, i) => i + 1).map(m => ({ value: String(m), label: new Date(0, m - 1).toLocaleString(locale, { month: 'long' }) })),
+                ]}
+              />
+              <Select
+                aria-label="Year"
+                className="h-8 w-auto min-w-20"
+                value={String(selectedYear)}
+                onValueChange={v => { setPage(1); setSelectedYear(Number(v)) }}
+                options={Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(y => ({ value: String(y), label: String(y + (locale === 'th-TH' ? 543 : 0)) }))}
+              />
+              <Select
+                aria-label={t('transactions.sort.date_desc')}
+                className="h-8 w-auto min-w-36 font-medium"
                 value={sortBy}
-                onChange={(e) => { setPage(1); setSortBy(e.target.value as SortBy) }}
-              >
-                <option value="DATE_DESC">{t('transactions.sort.date_desc')}</option>
-                <option value="DATE_ASC">{t('transactions.sort.date_asc')}</option>
-                <option value="CATEGORY">{t('transactions.sort.category')}</option>
-              </select>
-              <select 
-                className="bg-background border border-border rounded text-sm p-1 text-foreground"
+                onValueChange={v => { setPage(1); setSortBy(v as SortBy) }}
+                options={[
+                  { value: "DATE_DESC", label: t('transactions.sort.date_desc') },
+                  { value: "DATE_ASC", label: t('transactions.sort.date_asc') },
+                  { value: "CATEGORY", label: t('transactions.sort.category') },
+                ]}
+              />
+              <Select
+                aria-label={t('transactions.filter.all_categories')}
+                className="h-8 w-auto min-w-36"
                 value={selectedCategory}
-                onChange={(e) => { setPage(1); setSelectedCategory(e.target.value) }}
-              >
-                <option value="ALL">{t('transactions.filter.all_categories')}</option>
-                {filterType === 'INCOME' 
-                  ? INCOME_CATEGORIES.map(c => <option key={c} value={c}>{tc(c)}</option>)
-                  : filterType === 'EXPENSE'
-                    ? EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{tc(c)}</option>)
-                    : Array.from(new Set([...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES])).map(c => <option key={c} value={c}>{tc(c)}</option>)
-                }
-                {customCategories.length > 0 && (
-                  <optgroup label={t('transactions.filter.custom')}>
-                    {customCategories.map(c => <option key={c} value={c}>{c}</option>)}
-                  </optgroup>
-                )}
-              </select>
+                onValueChange={v => { setPage(1); setSelectedCategory(v) }}
+                options={[
+                  { value: "ALL", label: t('transactions.filter.all_categories') },
+                  ...(filterType === 'INCOME' ? INCOME_CATEGORIES : filterType === 'EXPENSE' ? EXPENSE_CATEGORIES : Array.from(new Set([...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES])))
+                    .map(c => ({ value: c, label: tc(c) })),
+                  ...customCategories.map(c => ({ value: c, label: `${c} · ${t('transactions.filter.custom')}` })),
+                ]}
+              />
             </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2 bg-secondary/50 p-1 rounded-lg">
@@ -428,14 +422,13 @@ export default function TransactionsPage() {
           <form onSubmit={handleFormSubmit} className="space-y-6 mt-8">
             <div className="space-y-2">
               <label className="text-sm font-medium">{t('transactions.table.type')}</label>
-              <select 
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              <Select
+                aria-label={t('transactions.table.type')}
+                className="h-10"
                 value={formData.type}
-                onChange={(e) => setFormData({...formData, type: e.target.value})}
-              >
-                <option value="EXPENSE">{t('common.expense')}</option>
-                <option value="INCOME">{t('common.income')}</option>
-              </select>
+                onValueChange={v => setFormData({...formData, type: v})}
+                options={[{ value: "EXPENSE", label: t('common.expense') }, { value: "INCOME", label: t('common.income') }]}
+              />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">{t('transactions.table.amount')}</label>
@@ -451,31 +444,25 @@ export default function TransactionsPage() {
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">{t('transactions.table.category')}</label>
-              <select 
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              <Select
+                aria-label={t('transactions.table.category')}
+                className="h-10"
                 value={isCustomCategory ? 'CUSTOM' : formData.category}
-                onChange={(e) => {
-                  if (e.target.value === 'CUSTOM') {
+                onValueChange={v => {
+                  if (v === 'CUSTOM') {
                     setIsCustomCategory(true)
                     setFormData({...formData, category: '', color: '#64748b'})
                   } else {
                     setIsCustomCategory(false)
-                    setFormData({...formData, category: e.target.value, color: categoryColors[e.target.value] || DEFAULT_CATEGORY_COLORS[e.target.value] || '#64748b'})
+                    setFormData({...formData, category: v, color: categoryColors[v] || DEFAULT_CATEGORY_COLORS[v] || '#64748b'})
                   }
                 }}
-              >
-                {availableCategories.map(cat => (
-                  <option key={cat} value={cat}>{tc(cat)}</option>
-                ))}
-                {customCategories.length > 0 && (
-                  <optgroup label={t('transactions.form.custom_group')}>
-                    {customCategories.map(cat => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                  </optgroup>
-                )}
-                <option value="CUSTOM">+ {t('transactions.form.new_category')}</option>
-              </select>
+                options={[
+                  ...availableCategories.map(cat => ({ value: cat, label: tc(cat) })),
+                  ...customCategories.map(cat => ({ value: cat, label: `${cat} · ${t('transactions.form.custom_group')}` })),
+                  { value: "CUSTOM", label: `+ ${t('transactions.form.new_category')}` },
+                ]}
+              />
               <div className="mt-2 flex items-center gap-3">
                 <input 
                   type="color" 
@@ -525,8 +512,7 @@ export default function TransactionsPage() {
                   {t('common.delete')}
                 </Button>
               )}
-              <Button type="submit" disabled={isSubmitting} className="w-full">
-                {isSubmitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              <Button type="submit" loading={isSubmitting} className="w-full">
                 {t('transactions.action.save')}
               </Button>
             </SheetFooter>
@@ -550,9 +536,9 @@ export default function TransactionsPage() {
             <AlertDialogCancel disabled={isSubmitting} className="rounded-xl h-11 w-full mt-0">
               {t('common.cancel')}
             </AlertDialogCancel>
-            <AlertDialogAction onClick={executeDeleteTx} disabled={isSubmitting} className="rounded-xl h-11 w-full bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+            <Button onClick={executeDeleteTx} loading={isSubmitting} className="rounded-xl h-11 w-full bg-destructive hover:bg-destructive/90 text-destructive-foreground">
               {t('common.confirm_delete')}
-            </AlertDialogAction>
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

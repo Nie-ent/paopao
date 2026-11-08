@@ -8,6 +8,7 @@ import { DESCRIPTION, FAQS, FEATURES, FREE_FEATURES, PRO_FEATURES, STEPS, TAGLIN
 import { faqLd, organizationLd, softwareApplicationLd, websiteLd } from "@/features/marketing/structured-data"
 import { PRO_PLANS, TRIAL_DAYS } from "@/lib/subscription"
 import { JsonLd } from "@/components/marketing/JsonLd"
+import { PlainSubmitButton } from "@/components/ui/submit-button"
 import { PricingCards } from "@/components/marketing/PricingCards"
 import { FaqList } from "@/components/marketing/FaqList"
 
@@ -55,7 +56,7 @@ export default function LandingPage() {
             <div className="mt-8 flex flex-wrap gap-3">
               <a href="/api/auth/line" className="rounded-xl bg-primary px-6 py-3 font-semibold text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90">เริ่มใช้งานฟรี</a>
               <form action={signInAsDemo}>
-                <button type="submit" className="rounded-xl border border-border bg-card px-6 py-3 font-semibold text-foreground hover:bg-muted">ลองเดโม ไม่ต้องสมัคร</button>
+                <PlainSubmitButton className="rounded-xl border border-border bg-card px-6 py-3 font-semibold text-foreground hover:bg-muted disabled:opacity-70">ลองเดโม ไม่ต้องสมัคร</PlainSubmitButton>
               </form>
             </div>
             <p className="mt-4 text-sm text-muted-foreground">Pro ฿{PRO_PLANS.MONTHLY.priceThb}/{PRO_PLANS.MONTHLY.days} วัน หรือ ฿{PRO_PLANS.YEARLY.priceThb}/ปี · จ่ายผ่านพร้อมเพย์ ไม่ตัดเงินอัตโนมัติ</p>
@@ -151,7 +152,7 @@ export default function LandingPage() {
           <div className="mt-8 flex flex-wrap justify-center gap-3">
             <a href="/api/auth/line" className="rounded-xl bg-white px-6 py-3 font-semibold text-primary shadow hover:bg-white/90">เริ่มใช้งานฟรี</a>
             <form action={signInAsDemo}>
-              <button type="submit" className="rounded-xl border border-white/60 px-6 py-3 font-semibold text-white hover:bg-white/10">ลองเดโม</button>
+              <PlainSubmitButton className="rounded-xl border border-white/60 px-6 py-3 font-semibold text-white hover:bg-white/10 disabled:opacity-70">ลองเดโม</PlainSubmitButton>
             </form>
           </div>
         </div>

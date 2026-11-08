@@ -7,6 +7,7 @@ import { toast } from "sonner"
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { useSingleFlight } from "@/hooks/use-single-flight"
 import { Input } from "@/components/ui/input"
 import { getCategoryColors, updateCategoryColors } from "@/features/settings/actions"
 import { useLanguage } from "@/contexts/LanguageContext"
@@ -16,7 +17,7 @@ export function CategorySettingsCard() {
   const { t, tc } = useLanguage()
   const [colors, setColors] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
+  const { run: runSave, pending: saving } = useSingleFlight()
   const [newCategory, setNewCategory] = useState("")
 
   useEffect(() => {
@@ -34,16 +35,14 @@ export function CategorySettingsCard() {
     setColors(prev => ({ ...prev, [category]: color }))
   }
 
-  const handleSave = async () => {
-    setSaving(true)
+  const handleSave = () => runSave(async () => {
     const res = await updateCategoryColors(colors)
     if (res.success) {
       toast.success(t('settings.colors.saved'))
     } else {
       toast.error(t('settings.colors.save_failed'))
     }
-    setSaving(false)
-  }
+  })
 
   const handleAddCategory = () => {
     if (!newCategory.trim()) return
@@ -165,8 +164,8 @@ export function CategorySettingsCard() {
         </div>
 
         <div className="pt-4 flex justify-end">
-          <Button onClick={handleSave} disabled={saving} className="shadow-md">
-            {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+          <Button onClick={handleSave} loading={saving} className="shadow-md">
+            {!saving && <Save className="w-4 h-4 mr-2" />}
             {t('settings.colors.save')}
           </Button>
         </div>

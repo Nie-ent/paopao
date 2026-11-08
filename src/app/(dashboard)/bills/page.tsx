@@ -7,6 +7,9 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Select } from "@/components/ui/select"
+import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
+import { useSingleFlight } from "@/hooks/use-single-flight"
 import { Card, CardContent } from "@/components/ui/card"
 import { getBills, saveBill, deleteBill, type BillInput } from "@/features/bills/actions"
 import { EXPENSE_CATEGORIES } from "@/lib/categories"
@@ -25,7 +28,9 @@ export default function BillsPage() {
   const [loaded, setLoaded] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<typeof EMPTY | null>(null)
-  const [saving, setSaving] = useState(false)
+  const { run: runSave, pending: saving } = useSingleFlight()
+  const { run: runDelete, pending: deleting } = useSingleFlight()
+  const [billToDelete, setBillToDelete] = useState<Bill | null>(null)
 
   const load = async () => {
     const res = await getBills()
@@ -45,10 +50,10 @@ export default function BillsPage() {
     setForm({ name: b.name, category: b.category, amount: b.amount?.toString() ?? "", frequency: b.frequency, dayOfWeek: String(b.dayOfWeek ?? 1), dayOfMonth: String(b.dayOfMonth ?? 1) })
   }
 
-  const submit = async (e: React.FormEvent) => {
+  const submit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!form) return
-    setSaving(true)
+    void runSave(async () => {
     const res = await saveBill(editingId, {
       name: form.name,
       category: form.category,
@@ -57,15 +62,18 @@ export default function BillsPage() {
       dayOfWeek: form.frequency === "WEEKLY" ? Number(form.dayOfWeek) : null,
       dayOfMonth: form.frequency === "MONTHLY" ? Number(form.dayOfMonth) : null,
     })
-    setSaving(false)
     if ("success" in res) { toast.success(t('bills.saved')); setForm(null); load() }
     else toast.error(t(`bills.error.${res.error}`))
+    })
   }
 
-  const remove = async (id: string) => {
-    const res = await deleteBill(id)
+  const confirmDelete = () => runDelete(async () => {
+    if (!billToDelete) return
+    const res = await deleteBill(billToDelete.id)
     if ("success" in res) { toast.success(t('bills.deleted')); load() }
-  }
+    else toast.error(t(`bills.error.${res.error}`))
+    setBillToDelete(null)
+  })
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto space-y-6 animate-in fade-in duration-500">
@@ -106,42 +114,38 @@ export default function BillsPage() {
                 <span className="text-sm font-medium">{t('bills.form.name')}</span>
                 <Input name="name" required maxLength={40} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder={t('bills.form.name_ph')} />
               </label>
-              <label className="space-y-1.5">
+              <div className="space-y-1.5">
                 <span className="text-sm font-medium">{t('bills.form.category')}</span>
-                <select name="category" className="w-full h-9 rounded-lg border border-input bg-transparent px-3 text-sm" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>
-                  {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{t(`category.${c}`)}</option>)}
-                </select>
-              </label>
+                <Select aria-label={t('bills.form.category')} value={form.category} onValueChange={v => setForm({ ...form, category: v })}
+                  options={EXPENSE_CATEGORIES.map(c => ({ value: c, label: t(`category.${c}`) }))} />
+              </div>
               <label className="space-y-1.5">
                 <span className="text-sm font-medium">{t('bills.form.amount')}</span>
                 <Input name="amount" type="number" min="0" step="0.01" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} placeholder={t('bills.form.amount_ph')} />
               </label>
-              <label className="space-y-1.5">
+              <div className="space-y-1.5">
                 <span className="text-sm font-medium">{t('bills.form.frequency')}</span>
-                <select name="frequency" className="w-full h-9 rounded-lg border border-input bg-transparent px-3 text-sm" value={form.frequency} onChange={e => setForm({ ...form, frequency: e.target.value as Frequency })}>
-                  {(["DAILY", "WEEKLY", "MONTHLY"] as const).map(f => <option key={f} value={f}>{t(`bills.freq.${f}`)}</option>)}
-                </select>
-              </label>
+                <Select aria-label={t('bills.form.frequency')} value={form.frequency} onValueChange={v => setForm({ ...form, frequency: v as Frequency })}
+                  options={(["DAILY", "WEEKLY", "MONTHLY"] as const).map(f => ({ value: f, label: t(`bills.freq.${f}`) }))} />
+              </div>
               {form.frequency === "WEEKLY" && (
-                <label className="space-y-1.5">
+                <div className="space-y-1.5">
                   <span className="text-sm font-medium">{t('bills.form.weekday')}</span>
-                  <select name="dayOfWeek" className="w-full h-9 rounded-lg border border-input bg-transparent px-3 text-sm" value={form.dayOfWeek} onChange={e => setForm({ ...form, dayOfWeek: e.target.value })}>
-                    {weekdays.map((d, i) => <option key={i} value={i}>{d}</option>)}
-                  </select>
-                </label>
+                  <Select aria-label={t('bills.form.weekday')} value={form.dayOfWeek} onValueChange={v => setForm({ ...form, dayOfWeek: v })}
+                    options={weekdays.map((d, i) => ({ value: String(i), label: d }))} />
+                </div>
               )}
               {form.frequency === "MONTHLY" && (
-                <label className="space-y-1.5">
+                <div className="space-y-1.5">
                   <span className="text-sm font-medium">{t('bills.form.month_day')}</span>
-                  <select name="dayOfMonth" className="w-full h-9 rounded-lg border border-input bg-transparent px-3 text-sm" value={form.dayOfMonth} onChange={e => setForm({ ...form, dayOfMonth: e.target.value })}>
-                    {Array.from({ length: 31 }, (_, i) => i + 1).map(d => <option key={d} value={d}>{d}</option>)}
-                  </select>
-                </label>
+                  <Select aria-label={t('bills.form.month_day')} value={form.dayOfMonth} onValueChange={v => setForm({ ...form, dayOfMonth: v })}
+                    options={Array.from({ length: 31 }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }))} />
+                </div>
               )}
               <p className="text-xs text-muted-foreground sm:col-span-2">{t('bills.form.hint')}</p>
               <div className="flex gap-2 sm:col-span-2 justify-end">
-                <Button type="button" variant="outline" onClick={() => setForm(null)}>{t('common.cancel')}</Button>
-                <Button type="submit" disabled={saving}>{t('common.save')}</Button>
+                <Button type="button" variant="outline" disabled={saving} onClick={() => setForm(null)}>{t('common.cancel')}</Button>
+                <Button type="submit" loading={saving}>{t('common.save')}</Button>
               </div>
             </form>
           </CardContent>
@@ -168,13 +172,26 @@ export default function BillsPage() {
               </div>
               <div className="flex gap-1 shrink-0">
                 {isPro && <Button variant="ghost" size="icon" aria-label={t('bills.edit')} onClick={() => openEdit(b)}><Pencil className="w-4 h-4" /></Button>}
-                <Button variant="ghost" size="icon" aria-label={t('common.delete')} onClick={() => remove(b.id)}><Trash2 className="w-4 h-4" /></Button>
+                <Button variant="ghost" size="icon" aria-label={t('common.delete')} onClick={() => setBillToDelete(b)}><Trash2 className="w-4 h-4" /></Button>
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
       {isPro && bills.length > 0 && <p className="text-xs text-muted-foreground text-center">{t('bills.count', { count: bills.length, limit })}</p>}
+
+      <AlertDialog open={!!billToDelete} onOpenChange={open => { if (!open && !deleting) setBillToDelete(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-destructive flex items-center gap-2"><Trash2 className="w-5 h-5" />{t('bills.delete_title')}</AlertDialogTitle>
+            <AlertDialogDescription>{t('bills.delete_desc', { name: billToDelete?.name ?? "" })}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>{t('common.cancel')}</AlertDialogCancel>
+            <Button onClick={confirmDelete} loading={deleting} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">{t('common.confirm_delete')}</Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

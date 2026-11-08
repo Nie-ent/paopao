@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useState } from "react"
+import React, { useEffect, useState, useRef } from "react"
 import { motion } from "framer-motion"
 import { Sparkles, BrainCircuit, RefreshCw, AlertTriangle, ShieldCheck } from "lucide-react"
 import ReactMarkdown from "react-markdown"
@@ -20,7 +20,11 @@ export default function AIInsightsPage() {
     fetchAdvice()
   }, [language])
 
+  const generating = useRef(false)
   const fetchAdvice = async () => {
+    // Each run is a paid AI call: never start a second one while one is in flight
+    if (generating.current) return
+    generating.current = true
     setLoading(true)
     setError(null)
     const res = await generateFinancialAdvice(language)
@@ -30,6 +34,7 @@ export default function AIInsightsPage() {
       setAdvice(res.advice)
     }
     setLoading(false)
+    generating.current = false
   }
 
   return (

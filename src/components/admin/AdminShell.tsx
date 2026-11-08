@@ -1,11 +1,14 @@
 "use client"
+
+import { useSingleFlight } from "@/hooks/use-single-flight"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { logoutAdmin } from "@/features/admin/actions"
-import { LogOut, Package, ListChecks, LayoutDashboard, Users } from "lucide-react"
+import { LogOut, Package, ListChecks, LayoutDashboard, Users, Loader2 } from "lucide-react"
 
 /** Navigation chrome for signed-in admins. Access is enforced by the server layout and actions. */
 export function AdminShell({ children }: { children: React.ReactNode }) {
+  const { run, pendingKey } = useSingleFlight()
   const pathname = usePathname()
 
   return (
@@ -22,8 +25,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           <Link href="/admin/claims" className={`flex items-center gap-3 p-3 rounded-lg hover:bg-slate-100 ${pathname?.includes('/claims') ? 'bg-slate-100 font-semibold' : ''}`}><ListChecks className="w-5 h-5"/> ตรวจสอบการส่งของ</Link>
         </nav>
         <div className="p-4 border-t">
-          <button onClick={async () => { await logoutAdmin(); window.location.href = '/admin/login' }} className="flex items-center gap-3 p-3 w-full text-left text-red-600 rounded-lg hover:bg-red-50 transition-colors">
-             <LogOut className="w-5 h-5" /> ออกจากระบบแอดมิน
+          <button
+            disabled={pendingKey !== null}
+            aria-busy={pendingKey !== null || undefined}
+            onClick={() => run(async () => { await logoutAdmin(); window.location.href = '/admin/login' })}
+            className="flex items-center gap-3 p-3 w-full text-left text-red-600 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-60">
+             {pendingKey ? <Loader2 className="w-5 h-5 animate-spin" /> : <LogOut className="w-5 h-5" />} ออกจากระบบแอดมิน
           </button>
         </div>
       </aside>

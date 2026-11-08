@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react"
 import { getAdminClaims, updateClaimStatus } from "@/features/admin/actions"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { useSingleFlight } from "@/hooks/use-single-flight"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
@@ -19,7 +20,9 @@ export default function AdminClaimsPage() {
     loadClaims()
   }, [])
 
-  const handleUpdate = async (id: string, status: string) => {
+  // One status change at a time: "Shipped" sends the user a LINE message, so it must not fire twice
+  const { run, pendingKey } = useSingleFlight()
+  const handleUpdate = (id: string, status: string) => run(async () => {
     const res = await updateClaimStatus(id, status)
     if (res.success) {
       toast.success("Claim status updated to " + status)
@@ -27,7 +30,7 @@ export default function AdminClaimsPage() {
     } else {
       toast.error(res.error)
     }
-  }
+  }, `${id}:${status}`)
 
   return (
     <div className="space-y-6">
@@ -71,8 +74,8 @@ export default function AdminClaimsPage() {
                 <TableCell className="text-right">
                   {c.status === 'PENDING' && (
                     <div className="flex justify-end gap-2">
-                      <Button variant="outline" size="sm" onClick={() => handleUpdate(c.id, 'REJECTED')} className="text-red-500 hover:text-red-600 hover:bg-red-50 border-red-200">ปฏิเสธ</Button>
-                      <Button size="sm" onClick={() => handleUpdate(c.id, 'SHIPPED')} className="bg-slate-900 text-white hover:bg-slate-800">ส่งสำเร็จ (Shipped)</Button>
+                      <Button variant="outline" size="sm" disabled={pendingKey !== null} loading={pendingKey === `${c.id}:REJECTED`} onClick={() => handleUpdate(c.id, 'REJECTED')} className="text-red-500 hover:text-red-600 hover:bg-red-50 border-red-200">ปฏิเสธ</Button>
+                      <Button size="sm" disabled={pendingKey !== null} loading={pendingKey === `${c.id}:SHIPPED`} onClick={() => handleUpdate(c.id, 'SHIPPED')} className="bg-slate-900 text-white hover:bg-slate-800">ส่งสำเร็จ (Shipped)</Button>
                     </div>
                   )}
                   {c.status !== 'PENDING' && (

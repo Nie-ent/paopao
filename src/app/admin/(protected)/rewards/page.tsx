@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react"
 import { getAdminRewards, createReward, updateRewardStatus, updateReward, deleteReward } from "@/features/admin/actions"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { useSingleFlight } from "@/hooks/use-single-flight"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
@@ -39,7 +40,13 @@ export default function AdminRewardsPage() {
     loadRewards()
   }, [])
 
-  const handleCreateOrUpdate = async (e: React.FormEvent) => {
+  // One write at a time: a double click would create duplicate items or send two requests
+  const { run, pendingKey } = useSingleFlight()
+  const handleCreateOrUpdate = (e: React.FormEvent) => { e.preventDefault(); void run(() => createOrUpdateImpl(e), "save") }
+  const handleDelete = () => run(deleteImpl, "delete")
+  const handleToggleStatus = (id: string, current: string) => run(() => toggleStatusImpl(id, current), `toggle:${id}`)
+
+  const createOrUpdateImpl = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name || !points || !iconString) return toast.error("Please fill all required fields")
     
@@ -83,7 +90,7 @@ export default function AdminRewardsPage() {
     setIsDialogOpen(true)
   }
 
-  const handleDelete = async () => {
+  const deleteImpl = async () => {
     if (!itemToDelete) return
     const res = await deleteReward(itemToDelete.id)
     if (res?.success) {
@@ -95,7 +102,7 @@ export default function AdminRewardsPage() {
     }
   }
 
-  const handleToggleStatus = async (id: string, current: string) => {
+  const toggleStatusImpl = async (id: string, current: string) => {
     const nextStatus = current === 'AVAILABLE' ? 'OUT_OF_STOCK' : current === 'OUT_OF_STOCK' ? 'HIDDEN' : 'AVAILABLE'
     const res = await updateRewardStatus(id, nextStatus)
     if (res.success) {
@@ -141,7 +148,7 @@ export default function AdminRewardsPage() {
                 <label className="text-sm font-medium">ราคาแต้ม</label>
                 <Input type="number" value={points} onChange={e => setPoints(e.target.value)} placeholder="เช่น 500" />
               </div>
-              <Button type="submit" className="w-full">{isEditMode ? "บันทึกการแก้ไข" : "บันทึกเพิ่มเข้าคลังสินค้า"}</Button>
+              <Button type="submit" loading={pendingKey === "save"} className="w-full">{isEditMode ? "บันทึกการแก้ไข" : "บันทึกเพิ่มเข้าคลังสินค้า"}</Button>
             </form>
           </DialogContent>
         </Dialog>
@@ -219,7 +226,7 @@ export default function AdminRewardsPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">ยืนยันการลบ</AlertDialogAction>
+            <Button onClick={handleDelete} loading={pendingKey === "delete"} className="bg-red-600 hover:bg-red-700">ยืนยันการลบ</Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

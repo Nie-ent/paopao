@@ -8,6 +8,7 @@ import { useSearchParams } from "next/navigation"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
+import { SubmitButton } from "@/components/ui/submit-button"
 import { signInAsDemo, signInWithLiffAction } from "@/features/auth/actions"
 import { useLanguage } from "@/contexts/LanguageContext"
 import { LanguageToggle } from "@/components/layouts/LanguageToggle"
@@ -139,9 +140,9 @@ export default function LoginPage() {
           </div>
 
           <form action={signInAsDemo}>
-            <Button type="submit" variant="outline" className="w-full h-12 text-base font-medium glass-card hover:bg-primary/5 transition-colors">
+            <SubmitButton variant="outline" className="w-full h-12 text-base font-medium glass-card hover:bg-primary/5 transition-colors">
               {t('login.demo')}
-            </Button>
+            </SubmitButton>
             <p className="mt-2 text-center text-xs text-muted-foreground">{t('login.demo_hint')}</p>
           </form>
         </div>

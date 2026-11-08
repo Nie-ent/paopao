@@ -9,6 +9,8 @@ import confetti from "canvas-confetti"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Button } from "@/components/ui/button"
+import { Select } from "@/components/ui/select"
+import { useSingleFlight } from "@/hooks/use-single-flight"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
@@ -29,6 +31,8 @@ export default function GoalsPage() {
   const [editId, setEditId] = useState<string | null>(null)
   const evaluatedRef = useRef<Set<string>>(new Set())
   const submitLockRef = useRef(false)
+  const togglingIds = useRef(new Set<string>())
+  const { run: runDelete, pending: isDeleting } = useSingleFlight()
   
   const [sheetType, setSheetType] = useState<"FINANCIAL" | "TODO" | "DAILY">("FINANCIAL")
   const [formData, setFormData] = useState({
@@ -160,7 +164,7 @@ export default function GoalsPage() {
     }
   }
 
-  const executeDelete = async () => {
+  const executeDelete = () => runDelete(async () => {
     if (!goalToDelete) return;
     const res = await deleteGoal(goalToDelete)
     if (res.success) {
@@ -170,16 +174,23 @@ export default function GoalsPage() {
       toast.error(t('common.error'), { description: t('goals.toast.delete_failed') })
     }
     setGoalToDelete(null)
-  }
+  })
 
   const handleToggleCompletion = async (id: string, isCompleted: boolean) => {
+    // Ignore taps on a to-do whose previous toggle is still saving
+    if (togglingIds.current.has(id)) return
+    togglingIds.current.add(id)
     const updatedGoals = goals.map(g => g.id === id ? { ...g, isCompleted: !isCompleted } : g)
     setGoals(updatedGoals) // Optimistic update
     
-    const res = await toggleGoalCompletion(id, !isCompleted)
-    if (!res.success) {
-      toast.error(t('goals.toast.status_failed'))
-      fetchGoals() // revert
+    try {
+      const res = await toggleGoalCompletion(id, !isCompleted)
+      if (!res.success) {
+        toast.error(t('goals.toast.status_failed'))
+        fetchGoals() // revert
+      }
+    } finally {
+      togglingIds.current.delete(id)
     }
   }
 
@@ -270,9 +281,9 @@ export default function GoalsPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
-            <AlertDialogAction onClick={executeDelete} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+            <Button onClick={executeDelete} loading={isDeleting} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
               {t('common.confirm_delete')}
-            </AlertDialogAction>
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -313,14 +324,22 @@ export default function GoalsPage() {
                       <LinkIcon className="w-4 h-4 text-orange-500" /> {t('goals.form.sync')}
                     </label>
                     <p className="text-xs text-muted-foreground mb-2">{t('goals.form.sync_desc')}</p>
-                    <select name="trackCategory" value={formData.trackCategory} onChange={e => setFormData({...formData, trackCategory: e.target.value})} className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-muted/50 px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
-                      <option value="">{t('goals.form.sync_none')}</option>
-                      <option value="DAILY_BALANCE">{t('goals.form.sync_daily')}</option>
-                      <option value="Investment">{t('goals.form.sync_investment')}</option>
-                      <option value="Saving">{t('goals.form.sync_saving')}</option>
-                      <option value="Income">{t('goals.form.sync_income')}</option>
-                      <option value="Expense">{t('goals.form.sync_expense')}</option>
-                    </select>
+                    {/* Hidden input carries the value into the FormData; "" means manual tracking */}
+                    <input type="hidden" name="trackCategory" value={formData.trackCategory} />
+                    <Select
+                      aria-label={t('goals.form.sync')}
+                      className="h-10 bg-muted/50"
+                      value={formData.trackCategory || "NONE"}
+                      onValueChange={v => setFormData({...formData, trackCategory: v === "NONE" ? "" : v})}
+                      options={[
+                        { value: "NONE", label: t('goals.form.sync_none') },
+                        { value: "DAILY_BALANCE", label: t('goals.form.sync_daily') },
+                        { value: "Investment", label: t('goals.form.sync_investment') },
+                        { value: "Saving", label: t('goals.form.sync_saving') },
+                        { value: "Income", label: t('goals.form.sync_income') },
+                        { value: "Expense", label: t('goals.form.sync_expense') },
+                      ]}
+                    />
                   </div>
                 )}
               </>
@@ -352,8 +371,7 @@ export default function GoalsPage() {
             </div>
             
             <SheetFooter className="mt-8">
-              <Button type="submit" disabled={isSubmitLoading} className="w-full">
-                {isSubmitLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              <Button type="submit" loading={isSubmitLoading} className="w-full">
                 {t('goals.form.submit')}
               </Button>
             </SheetFooter>
