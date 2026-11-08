@@ -6,6 +6,7 @@
 import type { messagingApi } from "@line/bot-sdk"
 import { th } from "@/i18n/messages"
 import { buildMorningBrief, summarizeDay } from "@/lib/morning-brief"
+import { encodeSummaryAnswer, SUMMARY_PERIODS, type Summary, type SummaryPeriod } from "@/lib/summary"
 
 type FlexMessage = messagingApi.FlexMessage
 type FlexBox = messagingApi.FlexBox
@@ -264,4 +265,101 @@ export function loginCard(liffUrl: string, webLoginUrl: string): FlexMessage {
     ], { spacing: "sm", paddingAll: "16px" }),
     footer: box("vertical", [uriButton("เปิดแดชบอร์ด", liffUrl)]),
   }))
+}
+
+// ---------- summary ("สรุป") ----------
+
+const PERIOD_LABEL: Record<SummaryPeriod, string> = { DAY: "วันนี้", MONTH: "เดือนนี้", YEAR: "ปีนี้" }
+
+const periodAction = (p: SummaryPeriod, label = PERIOD_LABEL[p]): messagingApi.PostbackAction =>
+  ({ type: "postback", label, data: encodeSummaryAnswer(p), displayText: `สรุป${PERIOD_LABEL[p]}` })
+
+const periodQuickReply = (): messagingApi.QuickReply =>
+  ({ items: SUMMARY_PERIODS.map(p => ({ type: "action" as const, action: periodAction(p, `สรุป${PERIOD_LABEL[p]}`) })) })
+
+/** Reply to "สรุป": pick today, this month or this year. */
+export function summaryPickerCard(): FlexMessage {
+  return flex("ดูสรุปรายรับรายจ่าย: เลือกวันนี้ เดือนนี้ หรือปีนี้", bubble({
+    header: header("📊 ดูสรุปรายรับรายจ่าย"),
+    body: box("vertical", [text("อยากดูสรุปช่วงไหนครับ")], { paddingAll: "16px" }),
+    footer: box("vertical", SUMMARY_PERIODS.map((p, i) => actionButton(periodAction(p, `สรุป${PERIOD_LABEL[p]}`), i === 1)), { spacing: "sm" }),
+  }), periodQuickReply())
+}
+
+const CHART_HEIGHT = 64
+
+/** One vertical bar, bottom-aligned in a fixed-height column. Zero draws a hairline so the axis reads. */
+function vbar(value: number, max: number, color: string): FlexBox {
+  const h = value > 0 ? Math.max(3, Math.round((value / max) * CHART_HEIGHT)) : 1
+  return box("vertical", [box("vertical", [], { height: `${h}px`, backgroundColor: value > 0 ? color : COLORS.border, cornerRadius: "2px" })],
+    { height: `${CHART_HEIGHT}px`, justifyContent: "flex-end", flex: 1 })
+}
+
+/** Daily spending for the month: one bar per day, labelled at the start, middle and end. */
+function monthChart(buckets: { label: string; expense: number }[]): FlexComponent[] {
+  const max = Math.max(...buckets.map(b => b.expense), 1)
+  return [
+    text("รายจ่ายรายวัน", { size: "xs", color: COLORS.muted, margin: "lg" }),
+    box("horizontal", buckets.map(b => vbar(b.expense, max, COLORS.expense)), { spacing: "xs", margin: "sm" }),
+    box("horizontal", [
+      text("1", { size: "xxs", color: COLORS.muted, flex: 1 }),
+      text(String(Math.ceil(buckets.length / 2)), { size: "xxs", color: COLORS.muted, align: "center", flex: 1 }),
+      text(String(buckets.length), { size: "xxs", color: COLORS.muted, align: "end", flex: 1 }),
+    ], { margin: "xs" }),
+  ]
+}
+
+/** Income vs expense per month: a green and a red bar per month. */
+function yearChart(buckets: { label: string; income: number; expense: number }[]): FlexComponent[] {
+  const max = Math.max(...buckets.flatMap(b => [b.income, b.expense]), 1)
+  return [
+    box("horizontal", [
+      text("รายรับ vs รายจ่าย รายเดือน", { size: "xs", color: COLORS.muted, flex: 1 }),
+      text("● รับ", { size: "xxs", color: COLORS.income, flex: 0, wrap: false }),
+      text("● จ่าย", { size: "xxs", color: COLORS.expense, flex: 0, wrap: false, margin: "sm" }),
+    ], { margin: "lg" }),
+    box("horizontal", buckets.map(b => box("horizontal", [vbar(b.income, max, COLORS.income), vbar(b.expense, max, COLORS.expense)], { flex: 1, spacing: "none" })), { spacing: "sm", margin: "sm" }),
+    box("horizontal", buckets.map(b => text(b.label, { size: "xxs", color: COLORS.muted, align: "center", flex: 1, wrap: false, adjustMode: "shrink-to-fit" })), { spacing: "sm", margin: "xs" }),
+  ]
+}
+
+/** The summary for a period: totals, a chart and the biggest expense categories. */
+export function summaryCard(summary: Summary, dashboardUrl: string): FlexMessage {
+  const { period, title, income, expense, net, count, buckets, topCategories } = summary
+  const stat = (label: string, value: string, color: string): FlexBox =>
+    box("vertical", [text(label, { size: "xs", color: COLORS.muted }), text(value, { size: "lg", weight: "bold", color, wrap: false, adjustMode: "shrink-to-fit" })], { flex: 1 })
+  const round = (n: number) => baht(Math.round(n))
+
+  const body: FlexComponent[] = count === 0
+    ? [text(`ยังไม่มีรายการ${PERIOD_LABEL[period]}`, { weight: "bold" }), text(`พิมพ์บันทึกได้เลย เช่น "กาแฟ 65"`, { size: "xs", color: COLORS.muted })]
+    : [
+        box("horizontal", [stat("รายรับ", round(income), COLORS.income), stat("รายจ่าย", round(expense), COLORS.expense)], { spacing: "md" }),
+        box("horizontal", [
+          text("คงเหลือ", { color: COLORS.muted, flex: 1 }),
+          text(`${net < 0 ? "−" : "+"}${round(Math.abs(net))}`, { weight: "bold", align: "end", color: net < 0 ? COLORS.expense : COLORS.income }),
+        ], { margin: "md" }),
+        ...(period === "MONTH" ? monthChart(buckets) : period === "YEAR" ? yearChart(buckets) : []),
+        ...(topCategories.length ? [
+          { type: "separator" as const, color: COLORS.border, margin: "lg" },
+          text("จ่ายมากสุด", { size: "xs", color: COLORS.muted, margin: "lg" }),
+          ...topCategories.slice(0, period === "DAY" ? 5 : 4).map(c => box("vertical", [
+            box("horizontal", [text(categoryLabel(c.name), { flex: 1 }), text(round(c.amount), { align: "end", weight: "bold", flex: 0, wrap: false })]),
+            progressBar((c.amount / topCategories[0].amount) * 100, c.color || COLORS.primary),
+          ], { margin: "md" })),
+        ] : []),
+        text(`${count} รายการ`, { size: "xxs", color: COLORS.muted, align: "end", margin: "lg" }),
+      ]
+
+  const others = SUMMARY_PERIODS.filter(p => p !== period)
+  const alt = count === 0
+    ? `สรุป${PERIOD_LABEL[period]} (${title}): ยังไม่มีรายการ`
+    : `สรุป${PERIOD_LABEL[period]} (${title}) รับ ${round(income)} จ่าย ${round(expense)} คงเหลือ ${net < 0 ? "−" : "+"}${round(Math.abs(net))}`
+  return flex(alt, bubble({
+    header: header(`📊 สรุป${PERIOD_LABEL[period]}`, title),
+    body: box("vertical", body, { paddingAll: "16px" }),
+    footer: box("vertical", [
+      box("horizontal", others.map(p => ({ ...actionButton(periodAction(p, `ดู${PERIOD_LABEL[p]}`)), flex: 1 })), { spacing: "sm" }),
+      uriButton("ดูแดชบอร์ด", dashboardUrl, false),
+    ], { spacing: "sm" }),
+  }), periodQuickReply())
 }

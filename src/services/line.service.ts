@@ -11,7 +11,8 @@ import { proPlanFor, verifySlipImage } from "@/lib/slip-verify";
 import { startProTrial } from "@/lib/trial";
 import { billReference, parseBillAnswer } from "@/lib/bills";
 import { siteUrl } from "@/lib/site";
-import { budgetTone, categoryLabel, duplicateCard, loginCard, proActivatedCard, recordedCard, upsellCard } from "@/lib/line-cards";
+import { budgetTone, categoryLabel, duplicateCard, loginCard, proActivatedCard, recordedCard, summaryCard, summaryPickerCard, upsellCard } from "@/lib/line-cards";
+import { buildSummary, isSummaryRequest, parseSummaryAnswer, summaryRange, type SummaryPeriod } from "@/lib/summary";
 import { isTrialEligible } from "@/lib/subscription";
 import type { messagingApi } from "@line/bot-sdk";
 import { consumeDailyUsage } from "@/lib/usage";
@@ -71,6 +72,8 @@ const imageQueue = new Map<string, BatchQueue>();
  */
 export async function handleLineEvent(event: any) {
   if (event.type === "postback" && event.source?.userId && typeof event.postback?.data === "string") {
+    const period = parseSummaryAnswer(event.postback.data);
+    if (period) return handleSummaryAnswer(event.source.userId, event.replyToken, period);
     return handleBillAnswer(event.source.userId, event.replyToken, event.postback.data);
   }
   if (event.type !== "message" || !event.message || !event.source.userId) {
@@ -104,6 +107,10 @@ export async function handleLineEvent(event: any) {
 
         // One-tap button inside LINE; on a computer the user signs in with LINE Login on the website
         return reply(actualReplyToken, [loginCard(liffUrl, `${siteUrl()}/login`)], `เปิดแดชบอร์ด: ${liffUrl}\nบนคอมพิวเตอร์ เข้า ${siteUrl()}/login แล้วกด "เข้าสู่ระบบด้วย LINE"`);
+      }
+
+      if (isSummaryRequest(text)) {
+        return reply(actualReplyToken, [summaryPickerCard()], `ดูสรุปรายรับรายจ่าย: แตะ "สรุปวันนี้" "สรุปเดือนนี้" หรือ "สรุปปีนี้" ด้านล่างได้เลยครับ`);
       }
 
       if (text === "ทดลองใช้" || text === "ทดลองใช้ pro" || text === "trial") {
@@ -385,6 +392,21 @@ function freePlanImageMessage(wasOtherSlip: boolean) {
     `ยังไม่เคยลอง? พิมพ์ "ทดลองใช้" เพื่อใช้ Pro ฟรี ${TRIAL_DAYS} วัน`,
     `อัปเกรด: โอนผ่านพร้อมเพย์ตามหน้านี้ แล้วส่งสลิปมาในแชทนี้ ${subscriptionUrl()}`,
   ].filter(Boolean).join("\n\n");
+}
+
+/** A tap on "สรุปวันนี้ / เดือนนี้ / ปีนี้": totals, a chart and top categories for that Bangkok period. */
+async function handleSummaryAnswer(lineId: string, replyToken: string, period: SummaryPeriod) {
+  const user = await prisma.user.findUnique({ where: { lineId } });
+  const now = new Date();
+  const transactions = user
+    ? await prisma.transaction.findMany({
+        where: { userId: user.id, date: summaryRange(period, now) },
+        select: { type: true, amount: true, date: true, category: { select: { name: true, color: true } } },
+      })
+    : [];
+  const summary = buildSummary(period, transactions, now);
+  const card = summaryCard(summary, appUrl("/"));
+  return reply(replyToken, [card], card.altText);
 }
 
 /**
