@@ -54,13 +54,21 @@ model User {
   lineId           String           @unique
   name             String?
   avatarUrl        String?
+  /// Deprecated: auto deductions were removed. Unused by the code; dropped in a follow-up migration (docs/database.md)
   salaryDeduction  Float            @default(875)
+  /// Deprecated: see salaryDeduction
   freelanceTaxRate Float            @default(3.0)
-  /// HMAC of the current sign-in code (never the code itself)
+  /// Deprecated: OTP sign-in was replaced by LINE Login. Unused; dropped in a follow-up migration (docs/database.md)
   otp              String?
+  /// Deprecated: see otp
   otpExpiresAt     DateTime?
   hasAcceptedPDPA  Boolean          @default(false)
   subscriptionTier SubscriptionTier @default(FREE)
+  /// End of the paid Pro period. Pro only counts while this is in the future (src/lib/subscription.ts)
+  proExpiresAt     DateTime?
+  /// When the one-time free Pro trial was started (null = never)
+  trialStartedAt   DateTime?
+  /// Slip images read by AI this month (Pro fair-use cap); reset on aiQuotaResetDate
   aiSlipsUsed      Int              @default(0)
   aiQuotaResetDate DateTime?
   paoPoints        Int              @default(0)
@@ -73,6 +81,8 @@ model User {
   rewardClaims     RewardClaim[]
   questClaims      QuestClaim[]
   subscriptionPayments SubscriptionPayment[]
+  usageEvents      UsageEvent[]
+  recurringBills   RecurringBill[]
 
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @default(now()) @updatedAt
@@ -128,6 +138,8 @@ model SubscriptionPayment {
   reference String   @unique
   slipHash  String?  @unique
   amount    Float
+  /// MONTHLY or YEARLY (src/lib/subscription.ts PRO_PLANS)
+  plan      String   @default("MONTHLY")
   createdAt DateTime @default(now())
 
   @@index([userId])
@@ -227,7 +239,7 @@ model QuestClaim {
   @@index([userId])
 }
 
-/// One OTP sign-in attempt, used to rate-limit guessing (per IP and across the whole system)
+/// One admin password attempt, used to rate-limit guessing per IP
 model LoginAttempt {
   id        String   @id @default(uuid())
   ip        String
@@ -236,4 +248,46 @@ model LoginAttempt {
 
   @@index([ip, createdAt])
   @@index([createdAt])
+}
+
+/// One use of a metered feature (e.g. a statement import or a slip verification), for daily limits
+model UsageEvent {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      String
+  createdAt DateTime @default(now())
+
+  @@index([userId, kind, createdAt])
+}
+
+enum BillFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+/// A recurring bill or expense (rent, electricity…) that PaoPao asks about on LINE when it is due (Pro)
+model RecurringBill {
+  id          String        @id @default(uuid())
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  /// Category name used when the bill is recorded
+  category    String
+  /// The usual amount, offered as a one-tap answer; updated to the last amount recorded
+  amount      Float?
+  frequency   BillFrequency
+  /// WEEKLY: 0 = Sunday … 6 = Saturday (Bangkok)
+  dayOfWeek   Int?
+  /// MONTHLY: 1–31; months without that day use their last day
+  dayOfMonth  Int?
+  active      Boolean       @default(true)
+  /// Bangkok day (YYYY-MM-DD) the bill was last asked about, so a re-run cron doesn't ask twice
+  lastAskedOn String?
+
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @default(now()) @updatedAt
+
+  @@index([userId])
 }
