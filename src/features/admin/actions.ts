@@ -96,9 +96,16 @@ export async function getAdminRewards() {
   return prisma.reward.findMany({ orderBy: { createdAt: 'desc' } })
 }
 
-export async function createReward(data: { name: string, points: number, iconString: string, description: string }) {
+type RewardInput = { name: string, points: number, iconString: string, description: string, nameEn?: string, descriptionEn?: string }
+
+/** Blank English fields are stored as null so the English UI falls back to the Thai text. */
+function rewardData(data: RewardInput) {
+  return { ...data, nameEn: data.nameEn?.trim() || null, descriptionEn: data.descriptionEn?.trim() || null }
+}
+
+export async function createReward(data: RewardInput) {
   if (!await isAdmin()) return { error: "Unauthorized" }
-  await prisma.reward.create({ data })
+  await prisma.reward.create({ data: rewardData(data) })
   return { success: true }
 }
 
@@ -108,9 +115,9 @@ export async function updateRewardStatus(id: string, status: string) {
   return { success: true }
 }
 
-export async function updateReward(id: string, data: { name: string, points: number, iconString: string, description: string }) {
+export async function updateReward(id: string, data: RewardInput) {
   if (!await isAdmin()) return { error: "Unauthorized" }
-  await prisma.reward.update({ where: { id }, data })
+  await prisma.reward.update({ where: { id }, data: rewardData(data) })
   return { success: true }
 }
 
