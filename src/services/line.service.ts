@@ -6,7 +6,7 @@ import { FALLBACK_CATEGORY } from "@/lib/categories";
 import { hashImage, normalizeReference } from "@/lib/slip";
 import { Prisma } from "@prisma/client";
 import { bangkokDate, bangkokParts } from "@/lib/dates";
-import { extendProExpiry, isProActive, LIMITS, PRO_PLANS, TRIAL_DAYS, type ProPlan } from "@/lib/subscription";
+import { extendProExpiry, isProActive, LIMITS, planForAmount, PRO_PLANS, TRIAL_DAYS, type ProPlan } from "@/lib/subscription";
 import { proPlanFor, verifySlipImage } from "@/lib/slip-verify";
 import { startProTrial } from "@/lib/trial";
 import { billReference, parseBillAnswer } from "@/lib/bills";
@@ -91,6 +91,7 @@ export async function handleLineEvent(event: any) {
     let extractedDataArray: SlipTransaction[] = [];
     let duplicateNotice = "";
     let duplicateList: { date: Date; amount: number }[] = [];
+    const slipNotices: string[] = [];
 
     if (messageEvent.message.type === "text") {
       const textMessage = messageEvent.message as any;
@@ -161,6 +162,7 @@ export async function handleLineEvent(event: any) {
         // with the bank (no AI call); anything else gets the upgrade explanation.
         const result = await redeemProPaymentFromImages(user.id, buffersToProcess);
         if (result.kind === "reply") return reply(actualReplyToken, result.card ? [result.card] : [], result.text);
+        if (result.kind === "receiver_mismatch") return replyText(actualReplyToken, RECEIVER_MISMATCH_NOTICE);
         const hasPaid = (await prisma.subscriptionPayment.count({ where: { userId: user.id } })) > 0;
         const wasOtherSlip = result.kind === "not_payment";
         return reply(actualReplyToken, [upsellCard({
@@ -194,6 +196,8 @@ export async function handleLineEvent(event: any) {
       if (slips.some(s => s.isSubscriptionPayment)) {
         const result = await redeemProPaymentFromImages(user.id, buffersToProcess);
         if (result.kind === "reply") return reply(actualReplyToken, result.card ? [result.card] : [], result.text);
+        // A real transfer, so it is still recorded, but the user must know Pro wasn't renewed
+        if (result.kind === "receiver_mismatch") slipNotices.push(RECEIVER_MISMATCH_NOTICE);
       }
 
       const { fresh, duplicates } = await splitDuplicateSlips(user.id, slips);
@@ -257,6 +261,7 @@ export async function handleLineEvent(event: any) {
         extractedDataArray.map((d, i) => `${i + 1}. ${d.type === "INCOME" ? "➕" : "➖"} ฿${d.amount} | ${categoryLabel(d.category)}`).join("\n");
     }
     if (duplicateNotice) statusText += `\n\n${duplicateNotice}`;
+    for (const notice of slipNotices) statusText += `\n\n${notice}`;
 
     // This month's spending as a share of income (Bangkok month)
     let budgetRatio: number | null = null;
@@ -280,6 +285,7 @@ export async function handleLineEvent(event: any) {
       dashboardUrl: appUrl("/"),
       budgetRatio,
       duplicates: duplicateList,
+      notices: slipNotices,
     });
     return reply(actualReplyToken, [card], statusText);
 
@@ -412,7 +418,14 @@ async function handleBillAnswer(lineId: string, replyToken: string, data: string
   return reply(replyToken, [card], `บันทึกแล้ว ✅ ${bill.name} ${bahtText(answer.amount)}`);
 }
 
-type RedeemResult = { kind: "reply"; text: string; card?: messagingApi.FlexMessage } | { kind: "not_payment" } | { kind: "not_slip" };
+type RedeemResult =
+  | { kind: "reply"; text: string; card?: messagingApi.FlexMessage }
+  /** The bank confirmed a transfer of exactly a plan price, but not to the account registered in EasySlip */
+  | { kind: "receiver_mismatch" }
+  | { kind: "not_payment" }
+  | { kind: "not_slip" };
+
+const RECEIVER_MISMATCH_NOTICE = "⚠️ ยอดตรงกับค่า Pro แต่ตรวจกับธนาคารแล้ว บัญชีผู้รับไม่ตรงกับบัญชีรับชำระของเป๋าเป๋า จึงยังไม่ได้เปิด/ต่ออายุ Pro ครับ\nถ้าโอนตาม QR ในหน้าแพ็กเกจแล้ว ทักแอดมินพร้อมสลิปนี้ได้เลย เราจะตรวจและเปิดให้ครับ";
 
 /**
  * Looks for a Pro payment among the images by checking them with the bank (third-party slip
@@ -420,6 +433,7 @@ type RedeemResult = { kind: "reply"; text: string; card?: messagingApi.FlexMessa
  */
 async function redeemProPaymentFromImages(userId: string, images: Buffer[]): Promise<RedeemResult> {
   let sawOtherSlip = false;
+  let receiverMismatch = false;
   for (const image of images.slice(0, 3)) {
     if (!await consumeDailyUsage(userId, "slip_verification", LIMITS.slipVerificationsPerDay)) {
       return { kind: "reply", text: `⚠️ วันนี้ส่งสลิปให้ตรวจสอบครบ ${LIMITS.slipVerificationsPerDay} ครั้งแล้ว ลองใหม่พรุ่งนี้ครับ` };
@@ -427,6 +441,12 @@ async function redeemProPaymentFromImages(userId: string, images: Buffer[]): Pro
     const result = await verifySlipImage(image);
     const plan = proPlanFor(result);
     if (plan && result.ok) return redeemVerifiedPayment(userId, result.transRef, result.amount, hashImage(image), plan);
+    if (result.ok && planForAmount(result.amount)) {
+      // Usually a setup problem: the PromptPay account isn't registered/linked in EasySlip
+      console.warn(`Pro payment not credited: ฿${result.amount} to a receiver EasySlip didn't match (ref …${result.transRef.slice(-4)}). Check the bank account linked to the EasySlip branch.`);
+      receiverMismatch = true;
+      continue;
+    }
     if (result.ok) { sawOtherSlip = true; continue; }
     if (result.reason === "NOT_CONFIGURED") {
       console.error("EASYSLIP_API_KEY is not set; Pro payments can't be verified.");
@@ -435,7 +455,7 @@ async function redeemProPaymentFromImages(userId: string, images: Buffer[]): Pro
     if (result.reason === "PENDING") return { kind: "reply", text: "⏳ ธนาคารยังไม่ยืนยันรายการนี้ รอประมาณ 5 นาทีแล้วส่งสลิปอีกครั้งครับ" };
     if (result.reason === "UNAVAILABLE") return { kind: "reply", text: "⚠️ ตรวจสอบสลิปกับธนาคารไม่สำเร็จชั่วคราว ลองส่งใหม่อีกครั้งในอีกสักครู่ครับ" };
   }
-  return { kind: sawOtherSlip ? "not_payment" : "not_slip" };
+  return { kind: receiverMismatch ? "receiver_mismatch" : sawOtherSlip ? "not_payment" : "not_slip" };
 }
 
 /**

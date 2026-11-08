@@ -106,8 +106,8 @@ export function budgetTone(ratioPercent: number) {
 }
 
 /** Reply after recording one or more transactions (typed, slip photo or a bill answer). */
-export function recordedCard(opts: { items: RecordedItem[]; dashboardUrl: string; now?: Date; budgetRatio?: number | null; duplicates?: Duplicate[] }): FlexMessage {
-  const { items, dashboardUrl, now = new Date(), budgetRatio, duplicates = [] } = opts
+export function recordedCard(opts: { items: RecordedItem[]; dashboardUrl: string; now?: Date; budgetRatio?: number | null; duplicates?: Duplicate[]; notices?: string[] }): FlexMessage {
+  const { items, dashboardUrl, now = new Date(), budgetRatio, duplicates = [], notices = [] } = opts
   const shown = items.slice(0, FLEX_LIMITS.rows)
   const rows: FlexComponent[] = shown.map(item => {
     const sign = item.type === "INCOME" ? "+" : "−"
@@ -133,6 +133,7 @@ export function recordedCard(opts: { items: RecordedItem[]; dashboardUrl: string
   const budget = budgetRatio != null ? budgetTone(budgetRatio) : null
   if (budget) rows.push(callout(budget.message, budget.tone, [progressBar(budgetRatio!, budget.color)]))
   if (duplicates.length) rows.push(callout(duplicateLines(duplicates), "warn"))
+  for (const notice of notices) rows.push(callout(notice, "warn"))
 
   const title = items.length === 1 ? "บันทึกแล้ว ✓" : `บันทึกแล้ว ${items.length} รายการ ✓`
   const alt = items.length === 1
