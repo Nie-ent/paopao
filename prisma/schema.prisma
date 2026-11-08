@@ -167,8 +167,11 @@ model ChatSession {
 
 model Reward {
   id          String         @id @default(uuid())
+  /// Thai (default) name and description; the *En fields are shown in the English UI
   name        String
   description String?
+  nameEn        String?
+  descriptionEn String?
   points      Int
   iconString  String         @default("🎁")
   status      RewardStatus   @default(AVAILABLE)

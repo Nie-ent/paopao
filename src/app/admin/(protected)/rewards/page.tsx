@@ -25,6 +25,8 @@ export default function AdminRewardsPage() {
   // Form State
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
+  const [nameEn, setNameEn] = useState("")
+  const [descriptionEn, setDescriptionEn] = useState("")
   const [points, setPoints] = useState("")
   const [iconString, setIconString] = useState("🎁")
 
@@ -43,9 +45,9 @@ export default function AdminRewardsPage() {
     
     let res: any;
     if (isEditMode && editId) {
-      res = await updateReward(editId, { name, description, points: Number(points), iconString })
+      res = await updateReward(editId, { name, description, nameEn, descriptionEn, points: Number(points), iconString })
     } else {
-      res = await createReward({ name, description, points: Number(points), iconString })
+      res = await createReward({ name, description, nameEn, descriptionEn, points: Number(points), iconString })
     }
 
     if (res?.success) {
@@ -60,6 +62,8 @@ export default function AdminRewardsPage() {
   const openEditModal = (r: any) => {
     setName(r.name)
     setDescription(r.description || '')
+    setNameEn(r.nameEn || '')
+    setDescriptionEn(r.descriptionEn || '')
     setPoints(r.points?.toString() || "0")
     setIconString(r.iconString || "🎁")
     setEditId(r.id)
@@ -70,6 +74,8 @@ export default function AdminRewardsPage() {
   const openCreateModal = () => {
     setName("")
     setDescription("")
+    setNameEn("")
+    setDescriptionEn("")
     setPoints("")
     setIconString("🎁")
     setEditId(null)
@@ -126,6 +132,11 @@ export default function AdminRewardsPage() {
                 <label className="text-sm font-medium">รายละเอียดเพิ่มเติม</label>
                 <Input value={description} onChange={e => setDescription(e.target.value)} placeholder="เงื่อนไข หรือรายละเอียด (ใส่หรือไม่ใส่ก็ได้)" />
               </div>
+              <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+                <p className="text-xs font-medium text-slate-600">English (shown to users with the English UI; falls back to Thai if empty)</p>
+                <Input value={nameEn} onChange={e => setNameEn(e.target.value)} placeholder="Name, e.g. ฿100 Starbucks card" />
+                <Input value={descriptionEn} onChange={e => setDescriptionEn(e.target.value)} placeholder="Description" />
+              </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">ราคาแต้ม</label>
                 <Input type="number" value={points} onChange={e => setPoints(e.target.value)} placeholder="เช่น 500" />
@@ -154,6 +165,11 @@ export default function AdminRewardsPage() {
                 <TableCell>
                   <p className="font-semibold text-slate-900">{r.name}</p>
                   <p className="text-xs text-slate-500 line-clamp-1">{r.description || "-"}</p>
+                  {r.nameEn ? (
+                    <p className="text-xs text-slate-400 mt-1">EN: {r.nameEn}{r.descriptionEn ? ` — ${r.descriptionEn}` : ''}</p>
+                  ) : (
+                    <p className="text-[10px] text-amber-600 mt-1">No English translation (English UI shows the Thai text)</p>
+                  )}
                 </TableCell>
                 <TableCell className="font-bold">{r.points}</TableCell>
                 <TableCell>

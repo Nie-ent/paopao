@@ -15,7 +15,7 @@ import { claimDynamicQuest, getActiveQuests } from "@/features/quests/actions"
 import { useLanguage } from "@/contexts/LanguageContext"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
-import { questText } from "@/lib/quests"
+import { questText } from "@/lib/localized"
 
 type Timeframe = 'ALL' | 'YTD' | 'MONTH' | 'WEEK'
 

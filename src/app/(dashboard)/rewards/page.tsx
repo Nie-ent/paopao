@@ -10,9 +10,10 @@ import { fetchProfileDataCached } from "@/lib/clientCache"
 import { getAvailableRewards, redeemReward, getUserClaims } from "@/features/quests/actions"
 import { toast } from "sonner"
 import { useLanguage } from "@/contexts/LanguageContext"
+import { rewardText } from "@/lib/localized"
 
 export default function RewardsPage() {
-  const { t, locale } = useLanguage()
+  const { t, locale, language } = useLanguage()
   const [points, setPoints] = useState<number | null>(null)
   const [rewards, setRewards] = useState<any[]>([])
   const [claims, setClaims] = useState<any[]>([])
@@ -42,7 +43,7 @@ export default function RewardsPage() {
     try {
       const res = await redeemReward(item.id)
       if (res.success) {
-        toast.success(t('rewards.redeemed', { name: item.name }), { description: t('rewards.redeemed_desc') })
+        toast.success(t('rewards.redeemed', { name: rewardText(item, language).name }), { description: t('rewards.redeemed_desc') })
         setPoints(prev => prev! - item.points)
         window.dispatchEvent(new Event('points_updated')) // Notify Header
         loadData() // Refresh list of claims
@@ -81,8 +82,8 @@ export default function RewardsPage() {
                 {item.iconString}
               </div>
               <CardHeader className="pb-2">
-                <CardTitle className="text-lg line-clamp-2 leading-tight">{item.name}</CardTitle>
-                {item.description && <CardDescription className="text-xs line-clamp-1">{item.description}</CardDescription>}
+                <CardTitle className="text-lg line-clamp-2 leading-tight">{rewardText(item, language).name}</CardTitle>
+                {rewardText(item, language).description && <CardDescription className="text-xs line-clamp-1">{rewardText(item, language).description}</CardDescription>}
               </CardHeader>
               <CardContent className="flex-1 flex items-end">
                 <p className="text-orange-500 font-bold text-xl flex items-center gap-1">
@@ -124,7 +125,7 @@ export default function RewardsPage() {
                       {claim.reward.iconString}
                     </div>
                     <div>
-                      <p className="font-bold text-slate-900 dark:text-slate-100">{claim.reward.name}</p>
+                      <p className="font-bold text-slate-900 dark:text-slate-100">{rewardText(claim.reward, language).name}</p>
                       <p className="text-xs text-slate-500">{new Date(claim.createdAt).toLocaleString(locale)}</p>
                     </div>
                   </div>
