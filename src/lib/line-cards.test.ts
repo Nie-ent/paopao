@@ -64,6 +64,12 @@ describe("recordedCard", () => {
     expect(JSON.stringify(msg.contents)).toContain('"width":"100%"')
   })
 
+  it("shows extra notices as warning boxes", () => {
+    const msg = recordedCard({ items: [{ type: "EXPENSE", amount: 59, category: "Other Expense" }], dashboardUrl: URL, now, notices: ["ยอดตรงกับค่า Pro แต่บัญชีผู้รับไม่ตรง"] })
+    expect(lineViolations(msg)).toEqual([])
+    expect(JSON.stringify(msg.contents)).toContain("บัญชีผู้รับไม่ตรง")
+  })
+
   it("a long batch stays within LINE's size limit", () => {
     const items = Array.from({ length: 40 }, (_, i) => ({ type: "EXPENSE" as const, amount: i + 1, category: "Shopping", note: "รายการยาวมาก ".repeat(10) }))
     const msg = recordedCard({ items, dashboardUrl: URL, now, duplicates: [{ date: now, amount: 99 }] })
