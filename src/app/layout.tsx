@@ -36,6 +36,7 @@ export const metadata: Metadata = {
 
 import { Toaster } from "@/components/ui/sonner";
 import { LanguageProvider } from "@/contexts/LanguageContext";
+import { WebAnalytics } from "@/components/analytics/WebAnalytics";
 
 export default function RootLayout({
   children,
@@ -50,6 +51,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <LanguageProvider>{children}</LanguageProvider>
         <Toaster position="top-right" richColors closeButton />
+        <WebAnalytics />
       </body>
     </html>
   );
