@@ -5,12 +5,21 @@ import { DashboardSidebar } from "@/components/layouts/DashboardSidebar"
 import { DashboardHeader } from "@/components/layouts/DashboardHeader"
 
 import { MobileMenuBar } from "@/components/layouts/MobileMenuBar"
+import { useState } from "react"
+import { readSavedLanguage } from "@/contexts/LanguageContext"
+import { prefetchApp } from "@/lib/data-cache"
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  // Starts during the first render, before the page's own effects ask for data, so the
+  // page waits for this one request instead of sending several of its own. The language is
+  // read directly because during hydration the context still reports the server default.
+  useState(() => {
+    if (typeof window !== "undefined") prefetchApp(readSavedLanguage() === "th" ? "th-TH" : "en-US")
+  })
   return (
       <SidebarProvider>
         <div className="flex min-h-screen w-full bg-background selection:bg-primary/20">

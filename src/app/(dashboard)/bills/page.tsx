@@ -14,6 +14,8 @@ import { Card, CardContent } from "@/components/ui/card"
 import { getBills, saveBill, deleteBill, type BillInput } from "@/features/bills/actions"
 import { EXPENSE_CATEGORIES } from "@/lib/categories"
 import { useLanguage } from "@/contexts/LanguageContext"
+import { cacheKeys } from "@/lib/cache-keys"
+import { invalidateAll, load as loadCached, peek } from "@/lib/data-cache"
 
 type Bill = Awaited<ReturnType<typeof getBills>>["bills"][number]
 type Frequency = BillInput["frequency"]
@@ -22,18 +24,20 @@ const EMPTY = { name: "", category: "Utilities", amount: "", frequency: "MONTHLY
 
 export default function BillsPage() {
   const { t } = useLanguage()
-  const [bills, setBills] = useState<Bill[]>([])
-  const [isPro, setIsPro] = useState(false)
-  const [limit, setLimit] = useState(20)
-  const [loaded, setLoaded] = useState(false)
+  // Cached data from another page or the app snapshot shows at once, then refreshes
+  const cached = peek<Awaited<ReturnType<typeof getBills>>>(cacheKeys.bills)
+  const [bills, setBills] = useState<Bill[]>(cached?.bills ?? [])
+  const [isPro, setIsPro] = useState(cached?.isPro ?? false)
+  const [limit, setLimit] = useState(cached?.limit ?? 20)
+  const [loaded, setLoaded] = useState(!!cached)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<typeof EMPTY | null>(null)
   const { run: runSave, pending: saving } = useSingleFlight()
   const { run: runDelete, pending: deleting } = useSingleFlight()
   const [billToDelete, setBillToDelete] = useState<Bill | null>(null)
 
-  const load = async () => {
-    const res = await getBills()
+  const load = async (force = false) => {
+    const res = await loadCached(cacheKeys.bills, getBills, { force })
     setBills(res.bills); setIsPro(res.isPro); setLimit(res.limit); setLoaded(true)
   }
   useEffect(() => { load() }, [])
@@ -62,7 +66,7 @@ export default function BillsPage() {
       dayOfWeek: form.frequency === "WEEKLY" ? Number(form.dayOfWeek) : null,
       dayOfMonth: form.frequency === "MONTHLY" ? Number(form.dayOfMonth) : null,
     })
-    if ("success" in res) { toast.success(t('bills.saved')); setForm(null); load() }
+    if ("success" in res) { toast.success(t('bills.saved')); setForm(null); invalidateAll(); load(true) }
     else toast.error(t(`bills.error.${res.error}`))
     })
   }
@@ -70,7 +74,7 @@ export default function BillsPage() {
   const confirmDelete = () => runDelete(async () => {
     if (!billToDelete) return
     const res = await deleteBill(billToDelete.id)
-    if ("success" in res) { toast.success(t('bills.deleted')); load() }
+    if ("success" in res) { toast.success(t('bills.deleted')); invalidateAll(); load(true) }
     else toast.error(t(`bills.error.${res.error}`))
     setBillToDelete(null)
   })

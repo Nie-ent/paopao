@@ -10,18 +10,20 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { getSubscriptionData, startTrial } from "@/features/subscription/actions"
 import { useLanguage } from "@/contexts/LanguageContext"
+import { cacheKeys } from "@/lib/cache-keys"
+import { invalidateAll, load as loadCached, peek } from "@/lib/data-cache"
 
 type SubscriptionData = NonNullable<Awaited<ReturnType<typeof getSubscriptionData>>>
 type Billing = "MONTHLY" | "YEARLY"
 
 export default function SubscriptionPage() {
   const { t, language } = useLanguage()
-  const [data, setData] = useState<SubscriptionData | null>(null)
+  const [data, setData] = useState<SubscriptionData | null>(() => peek<SubscriptionData>(cacheKeys.subscription) ?? null)
   const [billing, setBilling] = useState<Billing>("MONTHLY")
   const [showQR, setShowQR] = useState(false)
   const [startingTrial, setStartingTrial] = useState(false)
 
-  const load = () => getSubscriptionData().then(res => { if (res) setData(res) })
+  const load = (force = false) => loadCached(cacheKeys.subscription, getSubscriptionData, { force }).then(res => { if (res) setData(res) })
   useEffect(() => { load() }, [])
 
   const plans = data?.plans ?? { MONTHLY: { priceThb: 59, days: 30 }, YEARLY: { priceThb: 590, days: 365 } }
@@ -49,7 +51,8 @@ export default function SubscriptionPage() {
     const res = await startTrial().finally(() => { setStartingTrial(false); trialLock.current = false })
     if ("expiresAt" in res && res.expiresAt) {
       toast.success(t('sub.trial_started', { date: formatDate(res.expiresAt) }))
-      load()
+      invalidateAll()
+      load(true)
     } else {
       toast.error(t('sub.trial_not_eligible'))
     }

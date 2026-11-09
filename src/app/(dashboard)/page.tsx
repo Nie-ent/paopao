@@ -19,6 +19,8 @@ import { useSingleFlight } from "@/hooks/use-single-flight"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import { questText } from "@/lib/localized"
+import { cacheKeys } from "@/lib/cache-keys"
+import { invalidateAll, load as loadCached, peek } from "@/lib/data-cache"
 
 type Timeframe = 'ALL' | 'YTD' | 'MONTH' | 'WEEK'
 
@@ -27,28 +29,32 @@ const EXPENSE_COLORS = ['#ef4444', '#f97316', '#eab308', '#06b6d4', '#6366f1', '
 const DONUT_COLORS = ['#10b981', '#ef4444'] // Income, Expense
 
 export default function DashboardOverview() {
-  const { t, tc, language, locale } = useLanguage()
+  const { t, tc, language, locale, hydrated } = useLanguage()
   const router = useRouter()
   const [timeframe, setTimeframe] = useState<Timeframe>('MONTH')
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1)
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear())
-  const [dbData, setDbData] = useState<any>(null)
+  // This month's numbers from the cache (an earlier visit or the app snapshot) show at once
+  const [dbData, setDbData] = useState<any>(() => peek(cacheKeys.dashboard('MONTH', new Date().getMonth() + 1, new Date().getFullYear(), locale)) ?? null)
   const [insight, setInsight] = useState<string | null>(null)
   const [modalConfig, setModalConfig] = useState<{isOpen: boolean, title: string, data: any[], colors: string[]}>({
     isOpen: false, title: '', data: [], colors: []
   })
-  const [activeQuests, setActiveQuests] = useState<any[]>([])
+  const [activeQuests, setActiveQuests] = useState<any[]>(() => peek<Awaited<ReturnType<typeof getActiveQuests>>>(cacheKeys.quests) ?? [])
   const { run: runClaim, pendingKey: claimingId } = useSingleFlight()
   
   // Fetch Quests
-  const loadQuests = () => getActiveQuests().then(setActiveQuests)
+  const loadQuests = (force = false) => loadCached(cacheKeys.quests, getActiveQuests, { force }).then(setActiveQuests)
   useEffect(() => { loadQuests() }, [])
 
   
   // Fetch Data Payload
   useEffect(() => {
-    setDbData(null)
-    getDashboardData(timeframe, selectedMonth, selectedYear, locale).then((data) => {
+    // Wait for the saved language: before hydration ends it is always Thai
+    if (!hydrated) return
+    const key = cacheKeys.dashboard(timeframe, selectedMonth, selectedYear, locale)
+    setDbData(peek(key) ?? null)
+    loadCached(key, () => getDashboardData(timeframe, selectedMonth, selectedYear, locale)).then((data) => {
       setDbData(data)
       if (data && data.lastDailyQuestAt) {
         // legacy daily quest check ignored
@@ -56,15 +62,16 @@ export default function DashboardOverview() {
     }).catch((err) => {
       setDbData({ error: "Failed to connect to AI Core." })
     })
-  }, [timeframe, selectedMonth, selectedYear, locale])
+  }, [timeframe, selectedMonth, selectedYear, locale, hydrated])
 
   const handleClaimDynamicQuest = (questId: string) => runClaim(async () => {
       const res = await claimDynamicQuest(questId);
       if (res.success) {
         toast.success(t('dashboard.quests.claim_success'));
-        loadQuests()
+        invalidateAll()
+        loadQuests(true)
         // Refresh dbData locally without full page reload
-        getDashboardData(timeframe, selectedMonth, selectedYear, locale).then(setDbData);
+        loadCached(cacheKeys.dashboard(timeframe, selectedMonth, selectedYear, locale), () => getDashboardData(timeframe, selectedMonth, selectedYear, locale), { force: true }).then(setDbData);
         window.dispatchEvent(new Event('points_updated'));
       } else {
         toast.error(t(res.error || 'common.something_wrong'));
@@ -73,6 +80,8 @@ export default function DashboardOverview() {
 
   // Lazy Load AI Insight (Once per day/language)
   useEffect(() => {
+    // One insight in the user's language, not a Thai one first (see `hydrated`)
+    if (!hydrated) return
     generateDashboardInsight(language, 'MONTH').then(res => {
       if (res?.advice) {
         setInsight(res.advice)
@@ -86,7 +95,7 @@ export default function DashboardOverview() {
     }).catch(() => {
       setInsight(t('dashboard.insight.connection'))
     })
-  }, [language, t])
+  }, [language, t, hydrated])
 
   if (!dbData) {
     return (

@@ -17,6 +17,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { getTransactions, createTransactionServer, updateTransactionServer, deleteTransactionServer } from "@/features/transactions/actions"
 import { updateCategoryColors } from "@/features/settings/actions"
 import { useLanguage } from "@/contexts/LanguageContext"
+import { cacheKeys, defaultTransactionQuery, type TransactionQuery } from "@/lib/cache-keys"
+import { invalidateAll, load as loadCached, peek } from "@/lib/data-cache"
 import { toast } from "sonner"
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, DEFAULT_CATEGORY_COLORS } from "@/lib/categories"
 import { StatementImportDialog } from "@/components/transactions/StatementImportDialog"
@@ -27,14 +29,23 @@ type TransactionType = 'ALL' | 'INCOME' | 'EXPENSE'
 const toDateInput = (d: Date) => d.toLocaleDateString('en-CA')
 type SortBy = 'DATE_DESC' | 'DATE_ASC' | 'CATEGORY'
 
+type TransactionsResult = Awaited<ReturnType<typeof getTransactions>>
+
+/** This month's first page from the cache (another visit or the app snapshot), if any */
+function cachedFirstPage() {
+  const now = new Date()
+  return peek<TransactionsResult>(cacheKeys.transactions(defaultTransactionQuery(now.getMonth() + 1, now.getFullYear())))
+}
+
 export default function TransactionsPage() {
   const { t, tc, locale } = useLanguage()
-  const [data, setData] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+  const [initial] = useState(cachedFirstPage)
+  const [data, setData] = useState<any[]>(initial?.data ?? [])
+  const [loading, setLoading] = useState(!initial?.data)
   const [loadingMore, setLoadingMore] = useState(false)
   const [page, setPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(1)
-  const [categoryColors, setCategoryColors] = useState<Record<string, string>>({})
+  const [totalPages, setTotalPages] = useState(initial?.totalPages ?? 1)
+  const [categoryColors, setCategoryColors] = useState<Record<string, string>>(initial?.categoryColors ?? {})
   const [filterType, setFilterType] = useState<TransactionType>('ALL')
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL')
   const [sortBy, setSortBy] = useState<SortBy>('DATE_DESC')
@@ -67,10 +78,19 @@ export default function TransactionsPage() {
     fetchInitialData()
   }, [filterType, selectedMonth, selectedYear, sortBy, selectedCategory])
 
-  const fetchInitialData = async () => {
-    setLoading(true)
+  const fetchInitialData = async (force = false) => {
+    const query: TransactionQuery = { page: 1, limit: 15, type: filterType, month: selectedMonth, year: selectedYear, sortBy, filterCategoryId: selectedCategory }
+    const key = cacheKeys.transactions(query)
+    // Show what we already have for these filters while it refreshes; spinner only when empty
+    const cached = peek<TransactionsResult>(key)
+    if (cached?.data) {
+      setData(cached.data)
+      setTotalPages(cached.totalPages)
+    } else {
+      setLoading(true)
+    }
     setPage(1)
-    const res = await getTransactions({ page: 1, limit: 15, type: filterType, month: selectedMonth, year: selectedYear, sortBy, filterCategoryId: selectedCategory })
+    const res = await loadCached(key, () => getTransactions(query), { force })
     if (res.data) {
       setData(res.data)
       setTotalPages(res.totalPages)
@@ -208,7 +228,8 @@ export default function TransactionsPage() {
       }
       toast.success(t('transactions.action.save'), { description: t('transactions.action.saved_desc') })
       setIsSheetOpen(false)
-      fetchInitialData()
+      invalidateAll()
+      fetchInitialData(true)
     } else {
       toast.error(t('common.error'), { description: res.error || t('transactions.action.failed') })
     }
@@ -226,7 +247,8 @@ export default function TransactionsPage() {
     if (res.success) {
        toast.success(t('transactions.delete.success'))
        setIsSheetOpen(false)
-       fetchInitialData()
+       invalidateAll()
+       fetchInitialData(true)
     } else {
        toast.error(t('common.error'), { description: res.error || t('transactions.delete.failed') })
     }
@@ -410,7 +432,7 @@ export default function TransactionsPage() {
         </CardContent>
       </Card>
 
-      <StatementImportDialog open={importOpen} onOpenChange={setImportOpen} onImported={fetchInitialData} />
+      <StatementImportDialog open={importOpen} onOpenChange={setImportOpen} onImported={() => { invalidateAll(); fetchInitialData(true) }} />
 
       {/* CRUD Sheet */}
       <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
