@@ -2,13 +2,18 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { createSessionToken, verifySessionToken, SESSION_COOKIE, sessionCookieOptions } from '@/lib/session'
 import { RETURN_PATH_COOKIE, safeReturnPath } from '@/lib/return-path'
+import { canonicalRedirect } from '@/lib/site'
 
-const PUBLIC_PAGES = ['/welcome', '/en', '/pricing', '/privacy']
+const PUBLIC_PAGES = ['/welcome', '/en', '/pricing', '/privacy', '/guides', '/r']
 
 /** LINE's in-app browser, where LIFF runs ("Line/<version>" in the user agent) */
 const isLineInAppBrowser = (request: NextRequest) => /\bLine\//i.test(request.headers.get('user-agent') ?? '')
 
 export async function proxy(request: NextRequest) {
+  // One address for search engines: *.vercel.app copies of production redirect to the real domain
+  const canonical = canonicalRedirect(request.nextUrl.host, request.nextUrl.pathname)
+  if (canonical) return NextResponse.redirect(new URL(request.nextUrl.pathname + request.nextUrl.search, canonical), 308)
+
   const response = NextResponse.next({ request: { headers: request.headers } })
 
   const isDemoUser = request.cookies.get('demo_mode_bypass')?.value === 'true'

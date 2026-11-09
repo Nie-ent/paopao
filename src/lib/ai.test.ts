@@ -46,3 +46,14 @@ describe("isAiBusyError", () => {
     expect(isAiBusyError(new Error("x"))).toBe(false)
   })
 })
+
+describe("modelsForPlan", () => {
+  it("Pro uses the main models; Free tries the lite model first and keeps the others as fallback", async () => {
+    const { AI_MODELS, AI_LITE_MODEL, modelsForPlan } = await import("./ai")
+    expect(modelsForPlan("PRO")).toEqual(AI_MODELS)
+    const free = modelsForPlan("FREE")
+    expect(free[0]).toBe(AI_LITE_MODEL)
+    expect(new Set(free)).toEqual(new Set([AI_LITE_MODEL, ...AI_MODELS]))
+    expect(free.filter(m => m === AI_LITE_MODEL)).toHaveLength(1)
+  })
+})

@@ -3,6 +3,7 @@
  * Pure: takes transactions, returns totals, chart buckets and top categories.
  */
 import { bangkokDate, bangkokParts } from "@/lib/dates"
+import { roundMoney, sumMoney } from "@/lib/money"
 
 export type SummaryPeriod = "DAY" | "MONTH" | "YEAR"
 export const SUMMARY_PERIODS: SummaryPeriod[] = ["DAY", "MONTH", "YEAR"]
@@ -39,8 +40,8 @@ export function summaryRange(period: SummaryPeriod, now = new Date()) {
 
 export function buildSummary(period: SummaryPeriod, transactions: Tx[], now = new Date()): Summary {
   const { year, month, day } = bangkokParts(now)
-  const income = transactions.filter(t => t.type === "INCOME").reduce((s, t) => s + t.amount, 0)
-  const expense = transactions.filter(t => t.type === "EXPENSE").reduce((s, t) => s + t.amount, 0)
+  const income = sumMoney(transactions.filter(t => t.type === "INCOME").map(t => t.amount))
+  const expense = sumMoney(transactions.filter(t => t.type === "EXPENSE").map(t => t.amount))
 
   // Chart columns
   let buckets: SummaryBucket[] = []
@@ -67,13 +68,14 @@ export function buildSummary(period: SummaryPeriod, transactions: Tx[], now = ne
     entry.amount += t.amount
     byCategory.set(name, entry)
   }
-  const topCategories = [...byCategory.values()].sort((a, b) => b.amount - a.amount)
+  const topCategories = [...byCategory.values()].map(c => ({ ...c, amount: roundMoney(c.amount) })).sort((a, b) => b.amount - a.amount)
+  for (const b of buckets) { b.income = roundMoney(b.income); b.expense = roundMoney(b.expense) }
 
   const title = period === "DAY"
     ? `${day} ${TH_MONTHS[month]} ${buddhistYear(year)}`
     : period === "MONTH" ? `${TH_MONTHS_LONG[month]} ${buddhistYear(year)}` : `ปี ${buddhistYear(year)}`
 
-  return { period, title, income, expense, net: income - expense, count: transactions.length, buckets, topCategories }
+  return { period, title, income, expense, net: roundMoney(income - expense), count: transactions.length, buckets, topCategories }
 }
 
 // Postback data for the period buttons: "summary|DAY" etc.

@@ -25,6 +25,7 @@ export function MarketingHeader() {
         <div className="flex items-center gap-1 text-sm sm:gap-3">
           <Link href={en ? "/en#pricing" : "/pricing"} className="rounded-lg px-2 py-2 text-muted-foreground hover:text-foreground">{c.nav.pricing}</Link>
           <Link href={en ? "/en#faq" : "/#faq"} className="hidden rounded-lg px-2 py-2 text-muted-foreground hover:text-foreground sm:inline">{c.nav.faq}</Link>
+          {!en && <Link href="/guides" className="hidden rounded-lg px-2 py-2 text-muted-foreground hover:text-foreground md:inline">{c.nav.guides}</Link>}
           <Link href={en ? "/" : "/en"} hrefLang={en ? "th" : "en"}
             className="inline-flex items-center gap-1 rounded-lg px-2 py-2 text-muted-foreground hover:text-foreground">
             <Globe className="h-4 w-4" aria-hidden />
@@ -49,6 +50,7 @@ export function MarketingFooter() {
         <nav aria-label={c.nav.footer} className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground">
           <Link href={en ? "/en#pricing" : "/pricing"} className="hover:text-foreground">{c.nav.pricing}</Link>
           <Link href={en ? "/en#faq" : "/#faq"} className="hover:text-foreground">{c.nav.faq}</Link>
+          <Link href="/guides" className="hover:text-foreground">{c.nav.guides}</Link>
           <Link href="/privacy" className="hover:text-foreground">{c.nav.privacy}</Link>
           <Link href="/login" className="hover:text-foreground">{c.nav.login}</Link>
           <Link href={en ? "/" : "/en"} hrefLang={en ? "th" : "en"} className="hover:text-foreground">{c.nav.switchTo}</Link>

@@ -7,6 +7,7 @@ import { z } from "zod"
 import { FALLBACK_CATEGORY } from "@/lib/categories"
 import { statementRowTimestamp } from "@/lib/statement"
 import { normalizeReference } from "@/lib/slip"
+import { MAX_AMOUNT } from "@/lib/money"
 
 
 export async function getTransactions(options: { 
@@ -94,7 +95,7 @@ export async function getTransactions(options: {
 const MAX_CUSTOM_CATEGORIES = 50
 
 const transactionFormSchema = z.object({
-  amount: z.coerce.number().positive().max(100_000_000),
+  amount: z.coerce.number().positive().max(MAX_AMOUNT),
   type: z.enum(['INCOME', 'EXPENSE']).default('EXPENSE'),
   category: z.string().trim().min(1).max(40),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -199,7 +200,7 @@ const statementRowsSchema = z.array(z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   time: z.string().regex(/^\d{1,2}:\d{2}$/).optional(),
   type: z.enum(['INCOME', 'EXPENSE']),
-  amount: z.number().positive().max(100_000_000),
+  amount: z.number().positive().max(MAX_AMOUNT),
   category: z.string().min(1).max(60),
   note: z.string().max(200),
   reference: z.string().max(64).nullish(),

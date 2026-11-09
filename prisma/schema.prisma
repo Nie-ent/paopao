@@ -78,6 +78,10 @@ model User {
   pendingEntry     PendingEntry?
   /// Newest "what's new" release the user dismissed (src/features/releases/notes.ts)
   lastSeenRelease  String?
+  /// Code in the user's invite link (/r/<code>), created the first time they open "invite friends"
+  referralCode     String?          @unique
+  referralsMade    Referral[]       @relation("referrer")
+  referredBy       Referral?        @relation("referee")
 
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @default(now()) @updatedAt
@@ -105,7 +109,8 @@ model Transaction {
   userId    String
   user      User            @relation(fields: [userId], references: [id])
   type      TransactionType
-  amount    Float
+  /// Baht, exact to the satang (read as a number: src/lib/money.ts)
+  amount    Decimal         @db.Decimal(12, 2)
   categoryId String
   category  Category        @relation(fields: [categoryId], references: [id])
   note      String?
@@ -132,7 +137,7 @@ model SubscriptionPayment {
   user      User     @relation(fields: [userId], references: [id])
   reference String   @unique
   slipHash  String?  @unique
-  amount    Float
+  amount    Decimal  @db.Decimal(12, 2)
   /// MONTHLY or YEARLY (src/lib/subscription.ts PRO_PLANS)
   plan      String   @default("MONTHLY")
   createdAt DateTime @default(now())
@@ -145,8 +150,8 @@ model Goal {
   userId        String
   user          User      @relation(fields: [userId], references: [id])
   type          GoalType  @default(FINANCIAL)
-  targetAmount  Float     @default(0)
-  currentAmount Float     @default(0)
+  targetAmount  Decimal   @default(0) @db.Decimal(12, 2)
+  currentAmount Decimal   @default(0) @db.Decimal(12, 2)
   trackCategory String?
   title         String
   description   String?
@@ -271,7 +276,7 @@ model RecurringBill {
   /// Category name used when the bill is recorded
   category    String
   /// The usual amount, offered as a one-tap answer; updated to the last amount recorded
-  amount      Float?
+  amount      Decimal?      @db.Decimal(12, 2)
   frequency   BillFrequency
   /// WEEKLY: 0 = Sunday … 6 = Saturday (Bangkok)
   dayOfWeek   Int?
@@ -301,4 +306,29 @@ model PendingEntry {
   expiresAt DateTime
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
+}
+
+enum ReferralStatus {
+  PENDING
+  QUALIFIED
+  EXPIRED
+}
+
+/// A friend who signed up through someone's invite link. Rules: src/lib/referral.ts
+model Referral {
+  id          String         @id @default(uuid())
+  referrerId  String
+  referrer    User           @relation("referrer", fields: [referrerId], references: [id], onDelete: Cascade)
+  refereeId   String         @unique
+  referee     User           @relation("referee", fields: [refereeId], references: [id], onDelete: Cascade)
+  status      ReferralStatus @default(PENDING)
+  /// When the friend qualified (logged entries on enough different days in time)
+  qualifiedAt DateTime?
+  /// When the referrer got their free Pro month; stays null if they had already reached the limit
+  rewardedAt  DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @default(now()) @updatedAt
+
+  @@index([referrerId])
+  @@index([status, createdAt])
 }

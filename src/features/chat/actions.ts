@@ -3,10 +3,11 @@
 import prisma from "@/lib/db"
 import { getProfileData } from "@/features/user/actions"
 import { Type } from "@google/genai"
-import { generateContent, startChat, isQuotaError } from "@/lib/ai"
+import { generateContent, modelsForPlan, startChat, isQuotaError } from "@/lib/ai"
 import { DEMO_LINE_ID } from "@/lib/auth-user"
-import { startOfBangkokDay } from "@/lib/dates"
+import { bangkokDate, bangkokParts, startOfBangkokDay } from "@/lib/dates"
 import { effectivePlan, LIMITS } from "@/lib/subscription"
+import { MAX_AMOUNT } from "@/lib/money"
 
 
 const SYSTEM_INSTRUCTION = `You are PaoPao, a friendly and expert financial assistant.
@@ -17,9 +18,8 @@ If you and the user agree on a clear action plan, you can use the 'createTaskOrG
 const MAX_REPLY_TOKENS = 800
 
 
-/** Counts the user's chat messages sent today, using the `at` timestamp stored on each message. */
-async function countMessagesToday(userId: string) {
-  const since = startOfBangkokDay()
+/** Counts the user's chat messages sent since `since`, using the `at` timestamp stored on each message. */
+async function countMessagesSince(userId: string, since: Date) {
   const sessions = await prisma.chatSession.findMany({
     where: { userId, updatedAt: { gte: since } },
     select: { messages: true }
@@ -68,9 +68,15 @@ export async function sendChatMessage(sessionId: string | null, message: string,
   const user = await getProfileData()
   if (!user) return { error: "Unauthorized" }
 
-  const dailyLimit = user.lineId === DEMO_LINE_ID ? LIMITS.chatPerDay.DEMO : LIMITS.chatPerDay[effectivePlan(user)]
-  if (await countMessagesToday(user.id) >= dailyLimit) {
-    return { error: "Daily chat limit reached", limitReached: true, limit: dailyLimit }
+  // Free and Pro: a monthly allowance (Bangkok calendar month); the shared demo: a daily one
+  const isDemo = user.lineId === DEMO_LINE_ID
+  const { year, month } = bangkokParts(new Date())
+  const limit = isDemo ? LIMITS.demoChatPerDay : LIMITS.chatPerMonth[effectivePlan(user)]
+  const limitPeriod = isDemo ? "day" as const : "month" as const
+  // Free chats use the cheaper model first; the demo shows the full experience
+  const models = modelsForPlan(isDemo ? "PRO" : effectivePlan(user))
+  if (await countMessagesSince(user.id, isDemo ? startOfBangkokDay() : bangkokDate(year, month, 1)) >= limit) {
+    return { error: "Chat limit reached", limitReached: true, limit, limitPeriod }
   }
 
   let activeSessionId = sessionId
@@ -92,7 +98,7 @@ export async function sendChatMessage(sessionId: string | null, message: string,
       const titleRes = await generateContent({
         config: { maxOutputTokens: 30, thinkingConfig: { thinkingBudget: 0 } },
         contents: `Generate a 3-word ${language === 'en' ? 'English' : 'Thai'} title with 1 emoji, reply with the title only: "${message.substring(0, 50)}"`
-      })
+      }, { models })
       if (titleRes.text) title = titleRes.text.trim()
     } catch (titleErr) {
       console.warn("Title generation failed, likely quota exceeded. Using default title.")
@@ -121,7 +127,7 @@ export async function sendChatMessage(sessionId: string | null, message: string,
     const { chat, response } = await startChat({
       config: { systemInstruction: `${SYSTEM_INSTRUCTION}\nReply in ${language === 'en' ? 'English' : 'Thai'} unless the user writes in another language. Keep replies concise.`, tools, temperature: 0.7, maxOutputTokens: MAX_REPLY_TOKENS, thinkingConfig: { thinkingBudget: 0 } },
       history: formattedHistory
-    }, { message })
+    }, { message }, { models })
     historyMessages.push({ role: 'user', content: message, at: new Date().toISOString() })
 
     let botReply = response.text || ""
@@ -140,7 +146,7 @@ export async function sendChatMessage(sessionId: string | null, message: string,
             type: args.type || "TODO",
             title: args.title || "แผนงาน",
             description: args.description || "สร้างโดย PaoPao AI",
-            targetAmount: Number(args.targetAmount) || 0,
+            targetAmount: Math.min(MAX_AMOUNT, Math.max(0, Number(args.targetAmount) || 0)),
             currentAmount: 0
           }
         })

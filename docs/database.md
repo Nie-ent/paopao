@@ -75,6 +75,15 @@ not the transaction pooler.
 (auto deductions were removed) and `User.otp`, `User.otpExpiresAt` (OTP sign-in was replaced by
 LINE Login). Deploy the code that no longer reads them first, then the migration.
 
+## Money columns
+
+Baht amounts (`Transaction.amount`, `SubscriptionPayment.amount`, `Goal.targetAmount` /
+`currentAmount`, `RecurringBill.amount`) are `Decimal(12, 2)`: stored values, SQL sums and
+comparisons are exact to the satang. The Prisma client in `src/lib/db.ts` reads them as plain
+numbers, so app code and server actions keep using `number`; totals added up in JavaScript go
+through `roundMoney` / `sumMoney` (`src/lib/money.ts`). Every input is capped at `MAX_AMOUNT`
+(100,000,000). Raw `pg` queries get numeric values as strings (`pg.types.setTypeParser(1700, parseFloat)`).
+
 ## Encrypted columns and retention
 
 Free text users write is encrypted in the app before it reaches the database (AES-256-GCM,

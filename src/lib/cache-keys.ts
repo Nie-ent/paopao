@@ -25,6 +25,7 @@ export const cacheKeys = {
   claims: "claims",
   quests: "quests",
   releases: "releases",
+  referral: "referral",
   dashboard: (timeframe: Timeframe, month: number, year: number, locale: Locale) => `dashboard:${timeframe}:${year}-${month}:${locale}`,
   transactions: (q: TransactionQuery) =>
     `transactions:${q.page}:${q.limit}:${q.type ?? "ALL"}:${q.year ?? ""}-${q.month ?? ""}:${q.sortBy ?? "DATE_DESC"}:${q.filterCategoryId ?? "ALL"}`,
