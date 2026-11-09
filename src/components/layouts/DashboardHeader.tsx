@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Bell, Search, Settings, LogOut, Globe, Sparkles } from "lucide-react"
+import { Bell, Search, Settings, LogOut, Globe, Sparkles, Crown, Gift } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
 import { signOut } from "@/features/auth/actions"
@@ -136,6 +136,23 @@ export function DashboardHeader() {
               <Settings className="mr-2 h-4 w-4" />
               <span>{t('header.settings')}</span>
             </DropdownMenuItem>
+            {/* Plans and invites: on phones the sidebar is hidden, so these are the way in */}
+            <DropdownMenuItem 
+              className="cursor-pointer hover:bg-primary/10 hover:text-primary transition-colors focus:bg-primary/10 focus:text-primary"
+              onClick={() => router.push('/subscription')}
+            >
+              <Crown className="mr-2 h-4 w-4" />
+              <span>{t('header.plans')}</span>
+            </DropdownMenuItem>
+            {!isDemo && (
+              <DropdownMenuItem 
+                className="cursor-pointer hover:bg-primary/10 hover:text-primary transition-colors focus:bg-primary/10 focus:text-primary"
+                onClick={() => router.push('/subscription#invite')}
+              >
+                <Gift className="mr-2 h-4 w-4" />
+                <span>{t('invite.title')}</span>
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem 
               className="cursor-pointer hover:bg-primary/10 hover:text-primary transition-colors focus:bg-primary/10 focus:text-primary"
               onClick={() => router.push('/updates')}

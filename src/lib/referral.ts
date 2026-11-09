@@ -28,6 +28,9 @@ const DAY_MS = 24 * 60 * 60 * 1000
 const DEMO_LINE_IDS = ["demo", "demo_line_id", ""]
 
 const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+/** LINE messages asking for the invite link */
+export const isInviteRequest = (text: string) => /^(ชวนเพื่อน|แนะนำเพื่อน|ชวนเพื่อนรับ ?pro|invite|referral|refer)$/i.test(text.trim())
+
 export const isReferralCode = (s: unknown): s is string => typeof s === "string" && /^[A-HJ-NP-Z2-9]{8}$/.test(s)
 const newCode = () => Array.from({ length: 8 }, () => ALPHABET[crypto.randomInt(ALPHABET.length)]).join("")
 

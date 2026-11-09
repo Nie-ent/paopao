@@ -11,7 +11,7 @@ import { proPlanFor, verifySlipImage } from "@/lib/slip-verify";
 import { startProTrial } from "@/lib/trial";
 import { billReference, parseBillAnswer } from "@/lib/bills";
 import { siteUrl } from "@/lib/site";
-import { askAmountMessage, budgetTone, categoryLabel, categoryPickerMessage, confirmCard, duplicateCard, loginCard, proActivatedCard, recordedCard, summaryCard, summaryPickerCard, upsellCard } from "@/lib/line-cards";
+import { askAmountMessage, budgetTone, categoryLabel, categoryPickerMessage, confirmCard, duplicateCard, inviteCard, loginCard, proActivatedCard, recordedCard, summaryCard, summaryPickerCard, upsellCard } from "@/lib/line-cards";
 import { normalizeAmountText, parseAmountOnly } from "@/lib/amount-text";
 import { categoryChoices, DRAFT_TTL_MS, editItem, parseDraftItems, parseEntryAction, typeForCategory, type DraftItem, type EntryAction } from "@/lib/pending-entry";
 import { buildSummary, isSummaryRequest, parseSummaryAnswer, summaryRange, type SummaryPeriod } from "@/lib/summary";
@@ -19,6 +19,7 @@ import { isTrialEligible } from "@/lib/subscription";
 import type { messagingApi } from "@line/bot-sdk";
 import { consumeDailyUsage } from "@/lib/usage";
 import { isValidAmount } from "@/lib/money";
+import { ensureReferralCode, isInviteRequest, referralSummary } from "@/lib/referral";
 
 /**
  * Prepares the user entry in the DB.
@@ -125,6 +126,15 @@ export async function handleLineEvent(event: any) {
 
         // One-tap button inside LINE; on a computer the user signs in with LINE Login on the website
         return reply(actualReplyToken, [loginCard(liffUrl, `${siteUrl()}/login`)], `เปิดแดชบอร์ด: ${liffUrl}\nบนคอมพิวเตอร์ เข้า ${siteUrl()}/login แล้วกด "เข้าสู่ระบบด้วย LINE"`);
+      }
+
+      // "Invite friends": the user's own invite link with a share button (src/lib/referral.ts)
+      if (isInviteRequest(text)) {
+        const code = await ensureReferralCode(user.id);
+        const s = await referralSummary(user.id);
+        const link = `${siteUrl()}/r/${code}`;
+        return reply(actualReplyToken, [inviteCard({ link, rewarded: s.rewardedCount, maxRewards: s.maxRewards, rewardDays: s.rewardDays, friendTrialDays: s.friendTrialDays, qualifyDays: s.qualifyDays, qualifyWindowDays: s.qualifyWindowDays, progressUrl: appUrl("/subscription#invite") })],
+          `ชวนเพื่อน รับ Pro ฟรี ${s.rewardDays} วันต่อเพื่อน 1 คน (สูงสุด ${s.maxRewards} คน) ส่งลิงก์นี้ให้เพื่อน: ${link}`);
       }
 
       if (isSummaryRequest(text)) {
