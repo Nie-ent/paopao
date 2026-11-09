@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useState, useTransition, Suspense } from "react"
+import React, { useEffect, useRef, useState, useTransition, Suspense } from "react"
 import Link from "next/link"
 import { motion } from "framer-motion"
 import { MessageCircle } from "lucide-react"
@@ -33,9 +33,14 @@ function ErrorMessageHandler() {
   return null
 }
 
+/** Remembers (for this tab) that a LIFF sign-in was started, so it isn't started again automatically */
+const LIFF_TRIED_KEY = "paopao_liff_login_tried"
+
 export default function LoginPage() {
   const { t } = useLanguage()
   const [isLiffLoading, setIsLiffLoading] = useState(false);
+  // Set once LIFF is ready inside the LINE app (LIFF or LINE's in-app browser): the button uses it
+  const liffLoginRef = useRef<(() => void) | null>(null);
   const [isPending, startTransition] = useTransition();
 
   // Every sign-in (and every sign-out) passes through this page: drop the previous user's cached
@@ -50,12 +55,23 @@ export default function LoginPage() {
         try {
           const { default: liff } = await import('@line/liff');
           await liff.init({ liffId });
-          
-          if (liff.isInClient()) {
+
+          // Inside the LINE app: a LIFF link (isInClient) or any web link opened from a chat, like an
+          // invite link (LINE's in-app browser). Both sign in through LIFF; the web LINE Login button
+          // would only come back here.
+          const inLineApp = liff.isInClient() || /\bLine\//i.test(navigator.userAgent);
+          if (inLineApp) {
+            const login = () => liff.login({ redirectUri: `${window.location.origin}/login` });
+            liffLoginRef.current = login;
             if (!liff.isLoggedIn()) {
-              liff.login();
+              // Automatically once per visit: after a cancelled or failed sign-in, wait for the button
+              // instead of sending the user back to LINE in a loop
+              let tried = false;
+              try { tried = !!sessionStorage.getItem(LIFF_TRIED_KEY); sessionStorage.setItem(LIFF_TRIED_KEY, "1") } catch {}
+              if (!tried && !new URLSearchParams(window.location.search).has("error")) login();
               return;
             }
+            try { sessionStorage.removeItem(LIFF_TRIED_KEY) } catch {}
             
             setIsLiffLoading(true);
             // Send the LIFF access token, not the profile: the server asks LINE whose token it is
@@ -120,6 +136,7 @@ export default function LoginPage() {
           <div className="space-y-3">
             <a
               href="/api/auth/line"
+              onClick={e => { if (liffLoginRef.current) { e.preventDefault(); liffLoginRef.current() } }}
               className="flex w-full h-12 items-center justify-center gap-3 rounded-lg bg-[#06C755] text-base font-semibold text-white shadow-lg shadow-[#06C755]/25 transition-colors hover:bg-[#05b34c]"
             >
               <MessageCircle className="w-5 h-5 fill-current" aria-hidden />

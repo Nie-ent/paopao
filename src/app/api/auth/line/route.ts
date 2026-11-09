@@ -4,7 +4,7 @@ import { authorizeUrl, encodeOAuthCookie, loginChannel, newOAuthSession, OAUTH_C
 /** Starts "Sign in with LINE": remembers state/nonce/PKCE verifier in a short-lived cookie and sends the user to LINE. */
 export async function GET(req: Request) {
   const origin = new URL(req.url).origin
-  // Inside LINE's in-app browser, LIFF signs in with one tap (LINE Login isn't supported there)
+  // Inside the LINE app, /login signs in through LIFF (liff.login), which also works in LINE's in-app browser
   if (/\bLine\//i.test(req.headers.get("user-agent") ?? "")) return NextResponse.redirect(`${origin}/login`)
   const channel = loginChannel()
   if (!channel) {
