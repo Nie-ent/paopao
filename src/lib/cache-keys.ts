@@ -24,6 +24,7 @@ export const cacheKeys = {
   rewards: "rewards",
   claims: "claims",
   quests: "quests",
+  releases: "releases",
   referral: "referral",
   dashboard: (timeframe: Timeframe, month: number, year: number, locale: Locale) => `dashboard:${timeframe}:${year}-${month}:${locale}`,
   transactions: (q: TransactionQuery) =>

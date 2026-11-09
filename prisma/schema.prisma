@@ -76,6 +76,8 @@ model User {
   usageEvents      UsageEvent[]
   recurringBills   RecurringBill[]
   pendingEntry     PendingEntry?
+  /// Newest "what's new" release the user dismissed (src/features/releases/notes.ts)
+  lastSeenRelease  String?
   /// Code in the user's invite link (/r/<code>), created the first time they open "invite friends"
   referralCode     String?          @unique
   referralsMade    Referral[]       @relation("referrer")
