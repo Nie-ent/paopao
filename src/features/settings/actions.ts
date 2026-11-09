@@ -72,3 +72,14 @@ export async function getCategoryColors() {
   }
 }
 
+
+const BRIEF_FREQUENCIES = ["WEEKLY", "DAILY", "OFF"] as const
+
+/** How often Pro users get their LINE summary (src/lib/brief.ts). */
+export async function setBriefFrequency(frequency: string) {
+  const user = await getCurrentUser()
+  if (!user) return { error: "Unauthorized" }
+  if (!BRIEF_FREQUENCIES.includes(frequency as (typeof BRIEF_FREQUENCIES)[number])) return { error: "Invalid" }
+  await prisma.user.update({ where: { id: user.id }, data: { briefFrequency: frequency as (typeof BRIEF_FREQUENCIES)[number] } })
+  return { success: true }
+}

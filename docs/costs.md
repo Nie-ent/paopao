@@ -66,7 +66,11 @@ ate most of what a Pro user contributes.
 
 - **Free users' AI** is the biggest variable: free chat and insights run on Flash-Lite, chat is
   capped per month (`LIMITS.chatPerMonth`).
-- **LINE pushes** decide when the ฿1,370 plan is needed: the morning brief only goes out after a
-  day with entries.
+- **LINE pushes** decide when the ฿1,370 plan is needed: the LINE summary is weekly (Mondays) by
+  default, daily or off by choice in Settings, and only sent for a period with entries. Weekly
+  summaries plus bill questions keep the free 300 pushes enough for roughly 25–30 Pro users.
+- **Statement imports** are capped per month (20) instead of per day: each one costs ≈ ฿1.3.
+- **Cash flow**: the plan page opens on the yearly plan (฿590 up front), and trials get one LINE
+  reminder two days before they end.
 - **Price**: ฿59 per 30 days (under ฿2 a day) with ฿590 a year is kept low on purpose so Pro is
   an easy yes; the margin comes from cost control, not price.

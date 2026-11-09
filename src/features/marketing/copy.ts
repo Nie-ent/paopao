@@ -124,7 +124,7 @@ const TH: MarketingCopy = {
 }
 
 const EN_DESCRIPTION =
-  `PaoPao is a money tracker that lives in LINE. Type "coffee 65" and it's recorded and categorized, with a web dashboard, savings goals and an AI money coach. Free to use; Pro adds slip photos, recurring-bill reminders and a morning summary for ฿${MONTHLY.priceThb}/${MONTHLY.days} days.`
+  `PaoPao is a money tracker that lives in LINE. Type "coffee 65" and it's recorded and categorized, with a web dashboard, savings goals and an AI money coach. Free to use; Pro adds slip photos, recurring-bill reminders and a weekly money summary for ฿${MONTHLY.priceThb}/${MONTHLY.days} days.`
 
 const EN: MarketingCopy = {
   locale: "en",
@@ -161,8 +161,8 @@ const EN: MarketingCopy = {
     { title: "Log by typing", body: "Type items and amounts in LINE, several in one message. Each is sorted into one of 24 categories, or your own, and you confirm before it's saved." },
     { title: "Send a slip, it's logged", body: `Snap or forward a transfer slip. PaoPao reads the amount, direction and reference, and never records the same slip twice (up to ${LIMITS.proSlipsPerMonth} a month).`, pro: true },
     { title: "Recurring bills, PaoPao asks", body: `Set rent, electricity or internet once. When a bill is due, daily, weekly or monthly, PaoPao asks in LINE and one tap records it (up to ${LIMITS.proRecurringBills} bills).`, pro: true },
-    { title: "A summary every morning", body: "Yesterday's income and spending, delivered in LINE each morning. No app to open.", pro: true },
-    { title: "Import bank statements", body: `Upload a PDF (password-protected ones too), Excel/CSV or a screenshot. Duplicates are flagged before saving (${LIMITS.statementImportsPerDay.PRO} a day).`, pro: true },
+    { title: "Money summary in LINE", body: "Your income and spending delivered in LINE every Monday, or every morning if you prefer. No app to open.", pro: true },
+    { title: "Import bank statements", body: `Upload a PDF (password-protected ones too), Excel/CSV or a screenshot. Duplicates are flagged before saving (${LIMITS.statementImportsPerMonth.PRO} a month).`, pro: true },
     { title: "Goals that fill themselves", body: "Savings or debt-payoff goals track progress from a category, e.g. a ฿7,000 debt goal fills up as you log repayments. Plus to-dos with LINE reminders." },
     { title: "AI money coach", body: `Ask how to save or pay off debt, and the AI can set up goals for you (Free ${LIMITS.chatPerMonth.FREE} messages a month, Pro ${LIMITS.chatPerMonth.PRO}).` },
     { title: "Your data stays yours", body: "Export to Excel on any plan, ask for deletion under Thailand's PDPA, and we never sell your data." },
@@ -187,8 +187,8 @@ const EN: MarketingCopy = {
   proFeatures: [
     `Send slip photos, logged automatically (${LIMITS.proSlipsPerMonth} a month)`,
     `Recurring bills PaoPao asks about in LINE (${LIMITS.proRecurringBills} bills)`,
-    "A morning summary in LINE",
-    `Bank statement import, ${LIMITS.statementImportsPerDay.PRO} a day`,
+    "A weekly or daily money summary in LINE",
+    `Bank statement import, ${LIMITS.statementImportsPerMonth.PRO} a month`,
     `AI chat, ${LIMITS.chatPerMonth.PRO} messages a month`,
   ],
   pricingLabels: PRICING_LABELS_EN,
@@ -196,7 +196,7 @@ const EN: MarketingCopy = {
   faqs: [
     { q: "What is PaoPao?", a: "PaoPao is an income and expense tracker you use through LINE. Type something like \"coffee 65\" in the chat, confirm it, and it's recorded and categorized. Then see your overview, charts and savings goals on the web." },
     { q: "Is it free?", a: `Yes. The Free plan is free forever: log by typing, use the dashboard, set goals, export to Excel and chat with the AI ${LIMITS.chatPerMonth.FREE} times a day.` },
-    { q: "How much is Pro and what do I get?", a: `฿${MONTHLY.priceThb} for ${MONTHLY.days} days or ฿${YEARLY.priceThb} a year (2 months free). Pro adds slip photos that log themselves, recurring bills PaoPao asks about in LINE, a morning summary and bank statement import.` },
+    { q: "How much is Pro and what do I get?", a: `฿${MONTHLY.priceThb} for ${MONTHLY.days} days or ฿${YEARLY.priceThb} a year (2 months free). Pro adds slip photos that log themselves, recurring bills PaoPao asks about in LINE, a weekly or daily LINE summary and bank statement import.` },
     { q: "Can I try Pro for free?", a: `Yes. Every account can try Pro free for ${TRIAL_DAYS} days, once. Type "trial" in the LINE chat or tap it on the plans page. No card needed, and it goes back to Free on its own.` },
     { q: "How do I pay? Will I be charged automatically?", a: "Pay with a PromptPay QR from any banking app, then send the slip in the LINE chat. The slip is checked with the bank and Pro turns on right away. Nothing is charged automatically; if you don't renew, you're back on Free." },
     { q: "Does PaoPao speak English?", a: "The web dashboard is in Thai and English (switch with the TH/EN toggle). In the LINE chat you can type in either language, e.g. \"coffee 65\" or \"กาแฟ 65\"; replies are in Thai for now." },

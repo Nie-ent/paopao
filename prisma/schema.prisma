@@ -76,6 +76,10 @@ model User {
   usageEvents      UsageEvent[]
   recurringBills   RecurringBill[]
   pendingEntry     PendingEntry?
+  /// LINE summary for Pro: weekly (Mondays) by default to save LINE pushes, daily or off by choice
+  briefFrequency   BriefFrequency   @default(WEEKLY)
+  /// When the "your trial ends soon" LINE message was sent (once per account)
+  trialReminderSentAt DateTime?
 
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @default(now()) @updatedAt
@@ -299,4 +303,10 @@ model PendingEntry {
   expiresAt DateTime
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
+}
+
+enum BriefFrequency {
+  WEEKLY
+  DAILY
+  OFF
 }

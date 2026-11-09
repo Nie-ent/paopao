@@ -1,5 +1,5 @@
 import prisma from "@/lib/db"
-import { startOfBangkokDay } from "@/lib/dates"
+import { bangkokDate, bangkokParts, startOfBangkokDay } from "@/lib/dates"
 
 export type UsageKind = "statement_import" | "slip_verification"
 
@@ -9,9 +9,19 @@ export type UsageKind = "statement_import" | "slip_verification"
  * Returns the recorded event's id, or null when the limit is already reached.
  */
 export async function consumeDailyUsage(userId: string, kind: UsageKind, limit: number) {
+  return consumeUsageSince(userId, kind, limit, startOfBangkokDay())
+}
+
+/** Like consumeDailyUsage, for a limit per Bangkok calendar month. */
+export async function consumeMonthlyUsage(userId: string, kind: UsageKind, limit: number, now = new Date()) {
+  const { year, month } = bangkokParts(now)
+  return consumeUsageSince(userId, kind, limit, bangkokDate(year, month, 1))
+}
+
+async function consumeUsageSince(userId: string, kind: UsageKind, limit: number, since: Date) {
   return prisma.$transaction(async tx => {
     await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`
-    const used = await tx.usageEvent.count({ where: { userId, kind, createdAt: { gte: startOfBangkokDay() } } })
+    const used = await tx.usageEvent.count({ where: { userId, kind, createdAt: { gte: since } } })
     if (used >= limit) return null
     return (await tx.usageEvent.create({ data: { userId, kind } })).id
   })

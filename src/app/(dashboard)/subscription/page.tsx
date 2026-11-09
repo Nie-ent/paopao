@@ -19,7 +19,8 @@ type Billing = "MONTHLY" | "YEARLY"
 export default function SubscriptionPage() {
   const { t, language } = useLanguage()
   const [data, setData] = useState<SubscriptionData | null>(() => peek<SubscriptionData>(cacheKeys.subscription) ?? null)
-  const [billing, setBilling] = useState<Billing>("MONTHLY")
+  // Yearly first: ฿590 up front (2 months free) is the better deal for the user and steadier for us
+  const [billing, setBilling] = useState<Billing>("YEARLY")
   const [showQR, setShowQR] = useState(false)
   const [startingTrial, setStartingTrial] = useState(false)
 
@@ -39,7 +40,7 @@ export default function SubscriptionPage() {
     t('sub.pro.f1', { slips: limits?.proSlipsPerMonth ?? 300 }),
     t('sub.pro.f5', { bills: limits?.proRecurringBills ?? 20 }),
     t('sub.pro.f2'),
-    t('sub.pro.f3', { imports: limits?.statementImportsPerDay ?? 5 }),
+    t('sub.pro.f3', { imports: limits?.statementImportsPerMonth ?? 20 }),
     t('sub.pro.f4', { chat: limits?.chatPro ?? 300 }),
   ]
 
