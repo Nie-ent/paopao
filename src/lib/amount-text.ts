@@ -1,3 +1,4 @@
+import { isValidAmount } from "@/lib/money"
 /**
  * Makes amounts in a LINE message easy to read for both the rule-based parser and the AI:
  * "1,500" → "1500", Thai digits "๑๕๐" → "150", "1.5k" → "1500", "฿1,200" → "฿1200".
@@ -21,5 +22,5 @@ export function parseAmountOnly(text: string): number | null {
   const s = normalizeAmountText(text.trim()).replace(/฿|บาท|thb|baht/gi, "").replace(/\s+/g, "")
   if (!/^\d+(?:\.\d{1,2})?$/.test(s)) return null
   const n = Number(s)
-  return n > 0 && n < 100_000_000 ? n : null
+  return isValidAmount(n) ? n : null
 }

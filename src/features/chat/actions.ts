@@ -7,6 +7,7 @@ import { generateContent, startChat, isQuotaError } from "@/lib/ai"
 import { DEMO_LINE_ID } from "@/lib/auth-user"
 import { startOfBangkokDay } from "@/lib/dates"
 import { effectivePlan, LIMITS } from "@/lib/subscription"
+import { MAX_AMOUNT } from "@/lib/money"
 
 
 const SYSTEM_INSTRUCTION = `You are PaoPao, a friendly and expert financial assistant.
@@ -140,7 +141,7 @@ export async function sendChatMessage(sessionId: string | null, message: string,
             type: args.type || "TODO",
             title: args.title || "แผนงาน",
             description: args.description || "สร้างโดย PaoPao AI",
-            targetAmount: Number(args.targetAmount) || 0,
+            targetAmount: Math.min(MAX_AMOUNT, Math.max(0, Number(args.targetAmount) || 0)),
             currentAmount: 0
           }
         })

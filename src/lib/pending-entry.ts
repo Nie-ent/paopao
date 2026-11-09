@@ -4,6 +4,7 @@
  * Only "confirm" writes transactions. Pure helpers; the database side lives in line.service.
  */
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from "@/lib/categories"
+import { isValidAmount } from "@/lib/money"
 
 export type DraftItem = {
   type: "INCOME" | "EXPENSE"
@@ -84,5 +85,5 @@ export function parseDraftItems(json: unknown): DraftItem[] {
   if (!Array.isArray(json)) return []
   return json.filter((x): x is DraftItem =>
     !!x && typeof x === "object" && (x.type === "INCOME" || x.type === "EXPENSE") &&
-    typeof x.amount === "number" && x.amount > 0 && typeof x.category === "string")
+    isValidAmount(x.amount) && typeof x.category === "string")
 }
