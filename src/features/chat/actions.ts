@@ -80,7 +80,9 @@ export async function sendChatMessage(sessionId: string | null, message: string,
   
   if (activeSessionId) {
     const session = await prisma.chatSession.findFirst({ where: { id: activeSessionId, userId: user.id } })
-    if (session && session.messages) {
+    // Someone else's (or a deleted) conversation: never write to it
+    if (!session) return { error: "Conversation not found" }
+    if (session.messages) {
       historyMessages = typeof session.messages === 'string' ? JSON.parse(session.messages) : session.messages as any[]
     }
   } else {
@@ -162,7 +164,7 @@ export async function sendChatMessage(sessionId: string | null, message: string,
     historyMessages.push({ role: 'model', content: botReply, at: new Date().toISOString() })
 
     await prisma.chatSession.update({
-      where: { id: activeSessionId },
+      where: { id: activeSessionId, userId: user.id },
       data: { messages: historyMessages as any }
     })
 

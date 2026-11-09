@@ -8,7 +8,7 @@
  */
 export const RETURN_PATH_COOKIE = "return_to"
 
-const BLOCKED = ["/api", "/login", "/pdpa", "/admin", "/_next"]
+const BLOCKED = ["/api", "/login", "/pdpa", "/admin", "/_next", "/_vercel"]
 
 /** A same-site path we may redirect to, or null. Rejects other hosts ("//x", "/\\x", "https:") and auth pages. */
 export function safeReturnPath(raw: string | null | undefined): string | null {
@@ -23,5 +23,7 @@ export function safeReturnPath(raw: string | null | undefined): string | null {
   const pathname = path.split(/[?#]/)[0]
   if (pathname === "/") return null
   if (BLOCKED.some(b => pathname === b || pathname.startsWith(b + "/"))) return null
+  // Files (scripts, source maps…) are never a page to land on, e.g. an analytics script requested before sign-in
+  if (/\.[a-z0-9]+$/i.test(pathname)) return null
   return path.length > 512 ? null : path
 }

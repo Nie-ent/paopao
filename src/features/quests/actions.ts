@@ -1,7 +1,6 @@
 "use server"
 
 import prisma from "@/lib/db"
-import { Prisma } from "@prisma/client"
 import { getProfileData } from "@/features/user/actions"
 import { bangkokDayKey, startOfBangkokDay } from "@/lib/dates"
 
@@ -12,7 +11,7 @@ class ClaimError extends Error {}
  * Locks the user's row for the rest of the transaction, so concurrent claims and redemptions by the
  * same user run one after another and each sees the previous one's result.
  */
-async function lockUser(tx: Prisma.TransactionClient, userId: string) {
+async function lockUser(tx: Pick<typeof prisma, "$queryRaw">, userId: string) {
   await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`
 }
 
