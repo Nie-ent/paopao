@@ -13,6 +13,16 @@ export type ReleaseNote = {
 
 export const RELEASES: ReleaseNote[] = [
   {
+    id: "2026-11-09b",
+    title: { th: "ชวนเพื่อน รับ Pro ฟรี และอื่นๆ", en: "Invite friends for free Pro, and more" },
+    items: [
+      { th: "ชวนเพื่อน รับ Pro ฟรี: เพื่อนที่สมัครผ่านลิงก์ของคุณได้ทดลอง Pro 30 วัน และเมื่อเพื่อนจดครบ 3 วัน คุณได้ Pro ฟรี 30 วัน (สูงสุด 3 คน) ดูลิงก์ได้ที่หน้าแพ็กเกจ", en: "Invite friends, get Pro free: friends who join through your link get a 30-day Pro trial, and once they've logged on 3 days you get 30 days of Pro (up to 3 friends). Your link is on the plans page" },
+      { th: "เลือกได้ว่าจะรับสรุปการเงินทาง LINE แบบรายสัปดาห์ (ทุกวันจันทร์) ทุกเช้า หรือปิด ได้ที่หน้าตั้งค่า", en: "Choose your LINE money summary in Settings: weekly (Mondays), every morning, or off" },
+      { th: "ภารกิจที่รับแต้มแล้วจะหายไปจากหน้าแรก ไม่ค้างการ์ดไว้", en: "Quests you've claimed now disappear from the dashboard" },
+      { th: "แชทกับ AI นับเป็นรายเดือน: Free 30 ข้อความ, Pro 300 ข้อความ และนำเข้า Statement ได้ 20 ครั้งต่อเดือน", en: "AI chat now has a monthly allowance (Free 30, Pro 300 messages), and statement imports are 20 a month" },
+    ],
+  },
+  {
     id: "2026-11-09",
     title: { th: "อัปเดตใหม่ของเป๋าเป๋า", en: "What's new in PaoPao" },
     items: [
