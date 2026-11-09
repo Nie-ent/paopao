@@ -1,11 +1,14 @@
 "use client"
 
 import * as React from "react"
-import { Bell, Search, Settings, LogOut, Globe } from "lucide-react"
+import { Bell, Search, Settings, LogOut, Globe, Sparkles } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
 import { signOut } from "@/features/auth/actions"
 import { fetchProfileDataCached } from "@/lib/clientCache"
+import { getReleaseNotes } from "@/features/releases/actions"
+import { cacheKeys } from "@/lib/cache-keys"
+import { load as loadCached } from "@/lib/data-cache"
 import { useLanguage } from "@/contexts/LanguageContext"
 import { LanguageToggle } from "@/components/layouts/LanguageToggle"
 
@@ -24,6 +27,14 @@ export function DashboardHeader() {
   const [paoPoints, setPaoPoints] = React.useState<number>(0)
   const [isDemo, setIsDemo] = React.useState(false)
   const [searchQuery, setSearchQuery] = React.useState<string>("")
+  // A dot on the bell while there are updates the user hasn't read (src/features/releases)
+  const [hasUnread, setHasUnread] = React.useState(false)
+  React.useEffect(() => {
+    loadCached(cacheKeys.releases, getReleaseNotes).then(list => setHasUnread(!!list?.length)).catch(() => {})
+    const seen = () => setHasUnread(false)
+    window.addEventListener("releases_seen", seen)
+    return () => window.removeEventListener("releases_seen", seen)
+  }, [])
   
   React.useEffect(() => {
     const fetchUserData = (force = false) => {
@@ -91,12 +102,15 @@ export function DashboardHeader() {
             <img src="/favicon.png" alt="PaoPao Point" className="w-5 h-5 rounded-full object-cover" />
           </div>
         </Link>
-        <button 
+        <Link
+          href="/updates"
+          aria-label={t('updates.title')}
+          title={t('updates.title')}
           className="relative rounded-full p-2 text-muted-foreground hover:bg-muted/50 transition-colors"
-          onClick={() => toast.info(t('header.no_alerts'), { description: t('header.no_alerts_desc') })}
         >
           <Bell className="h-5 w-5" />
-        </button>
+          {hasUnread && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-primary ring-2 ring-background" />}
+        </Link>
 
         <DropdownMenu>
           <DropdownMenuTrigger className="outline-none border-none bg-transparent p-0 flex items-center justify-center cursor-pointer select-none">
@@ -121,6 +135,13 @@ export function DashboardHeader() {
             >
               <Settings className="mr-2 h-4 w-4" />
               <span>{t('header.settings')}</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem 
+              className="cursor-pointer hover:bg-primary/10 hover:text-primary transition-colors focus:bg-primary/10 focus:text-primary"
+              onClick={() => router.push('/updates')}
+            >
+              <Sparkles className="mr-2 h-4 w-4" />
+              <span>{t('updates.title')}</span>
             </DropdownMenuItem>
             <DropdownMenuItem 
               className="cursor-pointer hover:bg-primary/10 hover:text-primary transition-colors focus:bg-primary/10 focus:text-primary"

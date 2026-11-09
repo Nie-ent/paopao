@@ -13,6 +13,14 @@ export type ReleaseNote = {
 
 export const RELEASES: ReleaseNote[] = [
   {
+    id: "2026-11-09c",
+    title: { th: "อ่านอัปเดตย้อนหลังได้ และแชท AI สำหรับ Pro", en: "Read past updates, and AI chat for Pro" },
+    items: [
+      { th: "อ่านอัปเดตทั้งหมดย้อนหลังได้ทุกเมื่อที่ไอคอน 🔔 ด้านบน (มีจุดสีส้มเมื่อมีอัปเดตที่ยังไม่ได้อ่าน)", en: "Read every update again any time from the 🔔 bell at the top (it shows a dot when there's something new)" },
+      { th: "แชทปรึกษาการเงินกับ AI เป็นฟีเจอร์ของแพ็กเกจ Pro (300 ข้อความ/เดือน) ส่วนแพ็กเกจ Free ยังได้คำแนะนำการเงินจาก AI บนแดชบอร์ด และทดลอง Pro ฟรีได้", en: "The AI money chat is now part of Pro (300 messages a month). Free still gets AI money tips on the dashboard, and you can try Pro free" },
+    ],
+  },
+  {
     id: "2026-11-09b",
     title: { th: "ชวนเพื่อน รับ Pro ฟรี และอื่นๆ", en: "Invite friends for free Pro, and more" },
     items: [

@@ -164,7 +164,7 @@ const EN: MarketingCopy = {
     { title: "Money summary in LINE", body: "Your income and spending delivered in LINE every Monday, or every morning if you prefer. No app to open.", pro: true },
     { title: "Import bank statements", body: `Upload a PDF (password-protected ones too), Excel/CSV or a screenshot. Duplicates are flagged before saving (${LIMITS.statementImportsPerMonth.PRO} a month).`, pro: true },
     { title: "Goals that fill themselves", body: "Savings or debt-payoff goals track progress from a category, e.g. a ฿7,000 debt goal fills up as you log repayments. Plus to-dos with LINE reminders." },
-    { title: "AI money coach", body: `Ask how to save or pay off debt, and the AI can set up goals for you (Free ${LIMITS.chatPerMonth.FREE} messages a month, Pro ${LIMITS.chatPerMonth.PRO}).` },
+    { title: "AI money coach", body: `Ask how to save or pay off debt; the AI looks at your real entries and can set up goals for you (${LIMITS.chatPerMonth.PRO} messages a month).`, pro: true },
     { title: "Your data stays yours", body: "Export to Excel on any plan, ask for deletion under Thailand's PDPA, and we never sell your data." },
   ],
   screensTitle: "Your money at a glance on the web",
@@ -181,7 +181,7 @@ const EN: MarketingCopy = {
     "Log income and expenses by typing in LINE",
     "Dashboard, all transactions and Excel export",
     "Savings goals and to-dos with reminders",
-    `AI money chat, ${LIMITS.chatPerMonth.FREE} messages a month`,
+    `AI money tips on your dashboard`,
     `Try Pro free for ${TRIAL_DAYS} days`,
   ],
   proFeatures: [
@@ -195,7 +195,7 @@ const EN: MarketingCopy = {
   faqTitle: "Frequently asked questions",
   faqs: [
     { q: "What is PaoPao?", a: "PaoPao is an income and expense tracker you use through LINE. Type something like \"coffee 65\" in the chat, confirm it, and it's recorded and categorized. Then see your overview, charts and savings goals on the web." },
-    { q: "Is it free?", a: `Yes. The Free plan is free forever: log by typing, use the dashboard, set goals, export to Excel and chat with the AI ${LIMITS.chatPerMonth.FREE} times a day.` },
+    { q: "Is it free?", a: `Yes. The Free plan is free forever: log by typing, use the dashboard, set goals, export to Excel and get AI money tips on your dashboard. The AI money chat is a Pro feature.` },
     { q: "How much is Pro and what do I get?", a: `฿${MONTHLY.priceThb} for ${MONTHLY.days} days or ฿${YEARLY.priceThb} a year (2 months free). Pro adds slip photos that log themselves, recurring bills PaoPao asks about in LINE, a weekly or daily LINE summary and bank statement import.` },
     { q: "Can I try Pro for free?", a: `Yes. Every account can try Pro free for ${TRIAL_DAYS} days, once. Type "trial" in the LINE chat or tap it on the plans page. No card needed, and it goes back to Free on its own.` },
     { q: "How do I pay? Will I be charged automatically?", a: "Pay with a PromptPay QR from any banking app, then send the slip in the LINE chat. The slip is checked with the bank and Pro turns on right away. Nothing is charged automatically; if you don't renew, you're back on Free." },
