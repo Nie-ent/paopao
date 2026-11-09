@@ -54,14 +54,6 @@ model User {
   lineId           String           @unique
   name             String?
   avatarUrl        String?
-  /// Deprecated: auto deductions were removed. Unused by the code; dropped in a follow-up migration (docs/database.md)
-  salaryDeduction  Float            @default(875)
-  /// Deprecated: see salaryDeduction
-  freelanceTaxRate Float            @default(3.0)
-  /// Deprecated: OTP sign-in was replaced by LINE Login. Unused; dropped in a follow-up migration (docs/database.md)
-  otp              String?
-  /// Deprecated: see otp
-  otpExpiresAt     DateTime?
   hasAcceptedPDPA  Boolean          @default(false)
   subscriptionTier SubscriptionTier @default(FREE)
   /// End of the paid Pro period. Pro only counts while this is in the future (src/lib/subscription.ts)
