@@ -69,14 +69,11 @@ not the transaction pooler.
 6. **Deploy the app.** Migrate first, then deploy: the new code needs the new column and table,
    while the old code is unaffected by them.
 
-## Pending follow-up: drop unused columns
+## Dropped columns
 
-`User.salaryDeduction` and `User.freelanceTaxRate` (auto deductions were removed) and `User.otp` and
-`User.otpExpiresAt` (OTP sign-in was replaced by LINE Login) are no longer used, but stay in the
-schema until the new code is live everywhere, because the old code still selects them.
-Once it is deployed, remove these fields from `schema.prisma` and run
-`npx prisma migrate dev --name drop_unused_columns` (generates the `DROP COLUMN`s), then deploy
-that migration the usual way.
+`20261109100000_drop_unused_columns` removed `User.salaryDeduction`, `User.freelanceTaxRate`
+(auto deductions were removed) and `User.otp`, `User.otpExpiresAt` (OTP sign-in was replaced by
+LINE Login). Deploy the code that no longer reads them first, then the migration.
 
 ## Encrypted columns and retention
 
