@@ -8,6 +8,7 @@ import { verifySessionToken, SESSION_COOKIE } from "@/lib/session"
 import { verifyLiffAccessToken } from "@/lib/line-login"
 import { resolveLineId } from "@/lib/auth-user"
 import { signInCookies, upsertLineUser } from "@/lib/line-user"
+import { attachReferral, REFERRAL_COOKIE } from "@/lib/referral"
 
 /**
  * Sign-in is LINE only: inside LINE through LIFF (this action), on the web through LINE Login
@@ -22,6 +23,12 @@ export async function signInWithLiffAction(accessToken: string) {
   if (!signIn) return redirect("/login?error=line_not_configured")
 
   const cookieStore = await cookies()
+  // Signed up through a friend's invite link: link the new account (no-op for existing ones)
+  const refCode = cookieStore.get(REFERRAL_COOKIE)?.value
+  if (refCode) {
+    await attachReferral(user, refCode).catch(e => console.error("[referral] attach", e))
+    cookieStore.delete(REFERRAL_COOKIE)
+  }
   for (const c of signIn) cookieStore.set(c.name, c.value, c.options)
   cookieStore.delete("demo_mode_bypass")
   redirect(user.hasAcceptedPDPA ? "/" : "/pdpa")

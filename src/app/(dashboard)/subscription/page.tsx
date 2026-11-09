@@ -9,6 +9,7 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { getSubscriptionData, startTrial } from "@/features/subscription/actions"
+import { InviteFriendsCard } from "@/components/referral/InviteFriendsCard"
 import { useLanguage } from "@/contexts/LanguageContext"
 import { cacheKeys } from "@/lib/cache-keys"
 import { invalidateAll, load as loadCached, peek } from "@/lib/data-cache"
@@ -101,6 +102,8 @@ export default function SubscriptionPage() {
           </div>
         </div>
       )}
+
+      <InviteFriendsCard />
 
       {/* Monthly / yearly */}
       <div className="flex justify-center">

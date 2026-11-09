@@ -4,6 +4,7 @@ import prisma from "@/lib/db"
 import { getCurrentUser } from "@/lib/current-user"
 import { effectivePlan, isTrialEligible, LIMITS, PRO_PLANS, TRIAL_DAYS } from "@/lib/subscription"
 import { startProTrial } from "@/lib/trial"
+import { DEMO_LINE_ID } from "@/lib/auth-user"
 
 export async function getSubscriptionData() {
   const user = await getCurrentUser()
@@ -18,7 +19,7 @@ export async function getSubscriptionData() {
     proExpired: plan === "FREE" && !!user.proExpiresAt,
     /** Currently on the free trial (never paid) */
     onTrial: plan === "PRO" && !!user.trialStartedAt && paidCount === 0,
-    trialEligible: isTrialEligible(user, paidCount > 0),
+    trialEligible: user.lineId !== DEMO_LINE_ID && isTrialEligible(user, paidCount > 0),
     trialDays: TRIAL_DAYS,
     plans: PRO_PLANS,
     limits: {

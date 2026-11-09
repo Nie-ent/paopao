@@ -7,6 +7,7 @@ import { appLink } from "@/lib/site";
 import { isAuthorizedCron } from "@/lib/cron-auth";
 import { purgeExpiredData } from "@/lib/retention";
 import { lastWeekRange, TRIAL_REMINDER_DAYS, trialReminderText, yesterdayRange, type BriefRange } from "@/lib/brief";
+import { processReferrals, referralRewardText } from "@/lib/referral";
 
 // This endpoint should be triggered by Vercel Cron every morning (e.g. 08:00 AM)
 export async function GET(req: Request) {
@@ -18,6 +19,13 @@ export async function GET(req: Request) {
 
     // Daily clean-up of data past its retention period; a failure here must not stop the digest
     const purged = await purgeExpiredData().catch(e => { console.error("Retention purge failed:", e); return null });
+
+    // Invited friends who qualified: reward the inviter with Pro and tell them on LINE
+    const referrals = await processReferrals().catch(e => { console.error("Referral processing failed:", e); return null });
+    for (const r of referrals?.rewarded ?? []) {
+      await lineClient.pushMessage({ to: r.lineId, messages: [{ type: "text", text: referralRewardText(r.expiresAt, r.total) }] })
+        .catch(e => console.error("Referral reward message failed:", e?.status ?? e));
+    }
 
     const now = new Date();
 
@@ -81,7 +89,7 @@ export async function GET(req: Request) {
         .catch(e => console.error(`Failed to send trial reminder to user ${u.id}:`, e?.status ?? e));
     }
 
-    return NextResponse.json({ success: true, usersMessaged: sentCount, trialReminders, purged }, { status: 200 });
+    return NextResponse.json({ success: true, usersMessaged: sentCount, trialReminders, purged, referrals: referrals && { checked: referrals.checked, qualified: referrals.qualified, expired: referrals.expired, rewarded: referrals.rewarded.length } }, { status: 200 });
 
   } catch (error) {
     console.error("Cron Digest Error:", error);

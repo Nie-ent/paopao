@@ -80,6 +80,12 @@ model User {
   briefFrequency   BriefFrequency   @default(WEEKLY)
   /// When the "your trial ends soon" LINE message was sent (once per account)
   trialReminderSentAt DateTime?
+  /// Newest "what's new" release the user dismissed (src/features/releases/notes.ts)
+  lastSeenRelease  String?
+  /// Code in the user's invite link (/r/<code>), created the first time they open "invite friends"
+  referralCode     String?          @unique
+  referralsMade    Referral[]       @relation("referrer")
+  referredBy       Referral?        @relation("referee")
 
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @default(now()) @updatedAt
@@ -310,4 +316,29 @@ enum BriefFrequency {
   WEEKLY
   DAILY
   OFF
+}
+
+enum ReferralStatus {
+  PENDING
+  QUALIFIED
+  EXPIRED
+}
+
+/// A friend who signed up through someone's invite link. Rules: src/lib/referral.ts
+model Referral {
+  id          String         @id @default(uuid())
+  referrerId  String
+  referrer    User           @relation("referrer", fields: [referrerId], references: [id], onDelete: Cascade)
+  refereeId   String         @unique
+  referee     User           @relation("referee", fields: [refereeId], references: [id], onDelete: Cascade)
+  status      ReferralStatus @default(PENDING)
+  /// When the friend qualified (logged entries on enough different days in time)
+  qualifiedAt DateTime?
+  /// When the referrer got their free Pro month; stays null if they had already reached the limit
+  rewardedAt  DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @default(now()) @updatedAt
+
+  @@index([referrerId])
+  @@index([status, createdAt])
 }
