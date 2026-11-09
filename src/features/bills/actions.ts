@@ -4,11 +4,12 @@ import { z } from "zod"
 import prisma from "@/lib/db"
 import { getCurrentUser } from "@/lib/current-user"
 import { isProActive, LIMITS } from "@/lib/subscription"
+import { MAX_AMOUNT } from "@/lib/money"
 
 const billSchema = z.object({
   name: z.string().trim().min(1).max(40),
   category: z.string().trim().min(1).max(40),
-  amount: z.number().positive().max(100_000_000).nullable(),
+  amount: z.number().positive().max(MAX_AMOUNT).nullable(),
   frequency: z.enum(["DAILY", "WEEKLY", "MONTHLY"]),
   dayOfWeek: z.number().int().min(0).max(6).nullable(),
   dayOfMonth: z.number().int().min(1).max(31).nullable(),

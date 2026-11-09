@@ -4,6 +4,7 @@ import prisma from "@/lib/db"
 import { getCurrentUser } from "@/lib/current-user"
 import { trackedGoalAmount } from "@/lib/goal-progress"
 import { parseBangkokDateTime } from "@/lib/dates"
+import { isValidAmount } from "@/lib/money"
 
 export async function getGoals() {
   const prismaUser = await getCurrentUser()
@@ -39,6 +40,7 @@ export async function createGoal(formData: FormData) {
   const deadlineStr = formData.get('deadline') as string
   
   if (!title || (type === "FINANCIAL" && !targetAmount)) return { error: 'Missing required fields' }
+  if (type === "FINANCIAL" && !isValidAmount(targetAmount)) return { error: 'Invalid amount' }
 
   await prisma.goal.create({
     data: {
@@ -91,6 +93,7 @@ export async function updateGoal(goalId: string, formData: FormData) {
   const deadlineStr = formData.get('deadline') as string
   
   if (!title || (type === "FINANCIAL" && !targetAmount)) return { error: 'Missing required fields' }
+  if (type === "FINANCIAL" && !isValidAmount(targetAmount)) return { error: 'Invalid amount' }
 
   await prisma.goal.update({
     where: { 

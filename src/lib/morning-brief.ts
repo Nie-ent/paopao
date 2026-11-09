@@ -1,4 +1,5 @@
 import { th } from "@/i18n/messages"
+import { roundMoney, sumMoney } from '@/lib/money'
 
 // Short saving tip per top expense category (keys match DB category names)
 const CATEGORY_TIPS: Record<string, string> = {
@@ -22,8 +23,8 @@ const categoryLabel = (name: string) => (th as Record<string, string>)[`category
 /** Yesterday's totals, top spending categories (Thai labels) and a saving tip. Shared by the card and the text. */
 export function summarizeDay(transactions: DigestTx[]) {
   const expenses = transactions.filter(t => t.type === 'EXPENSE')
-  const spent = expenses.reduce((sum, t) => sum + t.amount, 0)
-  const income = transactions.filter(t => t.type === 'INCOME').reduce((sum, t) => sum + t.amount, 0)
+  const spent = sumMoney(expenses.map(t => t.amount))
+  const income = sumMoney(transactions.filter(t => t.type === 'INCOME').map(t => t.amount))
   const byCategory = new Map<string, { amount: number; color: string | null }>()
   for (const t of expenses) {
     const name = t.category?.name || 'Other Expense'
@@ -33,7 +34,7 @@ export function summarizeDay(transactions: DigestTx[]) {
   }
   const topCategories = [...byCategory.entries()]
     .sort((a, b) => b[1].amount - a[1].amount)
-    .map(([name, v]) => ({ name, label: categoryLabel(name), amount: v.amount, color: v.color }))
+    .map(([name, v]) => ({ name, label: categoryLabel(name), amount: roundMoney(v.amount), color: v.color }))
   const tip = spent === 0
     ? '✨ รักษาโมเมนตัมนี้ไว้ แล้วเงินเก็บจะโตขึ้นเรื่อยๆ ครับ'
     : CATEGORY_TIPS[topCategories[0].name] || DEFAULT_TIP
