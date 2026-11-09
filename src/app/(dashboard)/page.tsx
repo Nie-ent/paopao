@@ -12,13 +12,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { getDashboardData } from "@/features/dashboard/actions"
 import { generateDashboardInsight } from "@/features/ai/actions"
 import { claimDynamicQuest, getActiveQuests } from "@/features/quests/actions"
-import { bangkokDayKey } from "@/lib/dates"
 import { useLanguage } from "@/contexts/LanguageContext"
 import { Select } from "@/components/ui/select"
 import { useSingleFlight } from "@/hooks/use-single-flight"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import { questText } from "@/lib/localized"
+import { openQuests } from "@/lib/quests"
 import { cacheKeys } from "@/lib/cache-keys"
 import { invalidateAll, load as loadCached, peek } from "@/lib/data-cache"
 
@@ -42,6 +42,8 @@ export default function DashboardOverview() {
   })
   const [activeQuests, setActiveQuests] = useState<any[]>(() => peek<Awaited<ReturnType<typeof getActiveQuests>>>(cacheKeys.quests) ?? [])
   const { run: runClaim, pendingKey: claimingId } = useSingleFlight()
+  // Claimed quests disappear; with nothing left to claim the quest card is hidden
+  const questsToShow = openQuests(activeQuests)
   
   // Fetch Quests
   const loadQuests = (force = false) => loadCached(cacheKeys.quests, getActiveQuests, { force }).then(setActiveQuests)
@@ -184,7 +186,7 @@ export default function DashboardOverview() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <motion.div 
-          className="md:col-span-2 h-full"
+          className={`${questsToShow.length > 0 ? 'md:col-span-2' : 'md:col-span-3'} h-full`}
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
@@ -207,6 +209,7 @@ export default function DashboardOverview() {
             </AlertDescription>
           </Alert>
         </motion.div>
+        {questsToShow.length > 0 && (
         <motion.div 
           className="h-full"
           initial={{ opacity: 0, y: 10 }}
@@ -218,14 +221,7 @@ export default function DashboardOverview() {
               <span className="text-xl">🎯</span> {t('dashboard.quests.title')}
             </h3>
             <div className="flex-1 flex overflow-x-auto snap-x snap-mandatory gap-4 pb-2 no-scrollbar" style={{ minHeight: '120px' }}>
-              {activeQuests.map(q => {
-                 let isClaimed = false;
-                 if (q.claims?.length > 0) {
-                   if (q.type === 'ONETIME') isClaimed = true;
-                   else if (q.type === 'DAILY') {
-                     if (bangkokDayKey(new Date(q.claims[0].createdAt)) === bangkokDayKey(new Date())) isClaimed = true;
-                   }
-                 }
+              {questsToShow.map(q => {
                  return (
                    <div key={q.id} className="min-w-[260px] max-w-[300px] snap-center shrink-0 h-full bg-white/80 dark:bg-black/40 p-4 rounded-xl border border-orange-200/50 dark:border-orange-900/50 flex flex-col justify-between gap-3 shadow-sm hover:shadow-md transition-shadow">
                      <div className="flex-1">
@@ -239,23 +235,19 @@ export default function DashboardOverview() {
                      </div>
                      <Button 
                        size="sm"
-                       disabled={isClaimed || claimingId !== null}
+                       disabled={claimingId !== null}
                        onClick={() => handleClaimDynamicQuest(q.id)}
-                       className={`w-full rounded-lg font-bold shadow-sm transition-all ${isClaimed ? 'bg-muted text-muted-foreground border border-border' : 'bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-orange-500/20 shadow-lg'}`}
+                       className="w-full rounded-lg font-bold shadow-sm transition-all bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-orange-500/20 shadow-lg"
                      >
-                       {claimingId === q.id ? <Loader2 className="w-4 h-4 animate-spin" /> : isClaimed ? t('dashboard.quests.claimed') : t('dashboard.quests.claim', { points: q.points })}
+                       {claimingId === q.id ? <Loader2 className="w-4 h-4 animate-spin" /> : t('dashboard.quests.claim', { points: q.points })}
                      </Button>
                    </div>
                  )
               })}
-              {activeQuests.length === 0 && (
-                <div className="text-center text-muted-foreground text-sm py-4">
-                  {t('dashboard.quests.empty')}
-                </div>
-              )}
             </div>
           </Card>
         </motion.div>
+        )}
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">

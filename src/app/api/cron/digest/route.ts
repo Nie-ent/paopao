@@ -39,9 +39,9 @@ export async function GET(req: Request) {
     const startOfYesterdayUtc = new Date(yesterdayStartBkk.getTime() - 7 * 60 * 60 * 1000);
     const endOfYesterdayUtc = new Date(yesterdayEndBkk.getTime() - 7 * 60 * 60 * 1000);
 
-    // 2. Only Pro users who logged something in the last 7 days. Push messages count against the
-    //    LINE OA quota, so inactive users are skipped.
-    const activeSince = new Date(startOfYesterdayUtc.getTime() - 6 * 24 * 60 * 60 * 1000);
+    // 2. Only Pro users who logged something yesterday: the brief summarises yesterday, and every
+    //    push counts against the LINE OA message quota (docs/costs.md), so empty days send nothing.
+    const activeSince = startOfYesterdayUtc;
     // The morning brief is a Pro feature: only users whose paid period is still running
     const activeUsers = await prisma.user.findMany({
       where: {

@@ -57,7 +57,7 @@ export function PricingCards({ plans, freeFeatures, proFeatures, trialDays, head
             ฿{plan.priceThb}<span className="ml-1 text-base font-normal text-muted-foreground">{yearly ? L.perYear : L.perDays(plan.days)}</span>
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {yearly ? L.averagePerMonth(Math.round(plans.YEARLY.priceThb / 12)) : L.orYearly(plans.YEARLY.priceThb)} · {L.promptPayNote}
+            <span className="font-medium text-primary">{L.perDayNote(plan.priceThb / plan.days)}</span> · {yearly ? L.averagePerMonth(Math.round(plans.YEARLY.priceThb / 12)) : L.orYearly(plans.YEARLY.priceThb)} · {L.promptPayNote}
           </p>
           <ul className="mt-6 flex-1 space-y-3">
             {proFeatures.map(f => (

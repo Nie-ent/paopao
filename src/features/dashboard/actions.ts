@@ -4,6 +4,7 @@ import prisma from "@/lib/db"
 import { Prisma } from "@prisma/client"
 import { getCurrentUser } from "@/lib/current-user"
 import { bangkokDate, bangkokDayKey, bangkokMonthRange, bangkokParts } from "@/lib/dates"
+import { roundMoney } from '@/lib/money'
 
 const BKK = "Asia/Bangkok"
 
@@ -111,10 +112,10 @@ export async function getDashboardData(timeframe: 'ALL' | 'YTD' | 'MONTH' | 'WEE
     }
   }
 
-  const incomeByCategory = Object.entries(incomeCategoryMap).map(([name, data]) => ({ name, value: data.value, color: data.color })).sort((a,b) => b.value - a.value)
-  const expenseByCategory = Object.entries(expenseCategoryMap).map(([name, data]) => ({ name, value: data.value, color: data.color })).sort((a,b) => b.value - a.value)
+  const incomeByCategory = Object.entries(incomeCategoryMap).map(([name, data]) => ({ name, value: roundMoney(data.value), color: data.color })).sort((a,b) => b.value - a.value)
+  const expenseByCategory = Object.entries(expenseCategoryMap).map(([name, data]) => ({ name, value: roundMoney(data.value), color: data.color })).sort((a,b) => b.value - a.value)
 
-  let chartDataValues: any[] = Object.values(chartDataMap);
+  let chartDataValues: any[] = Object.values(chartDataMap).map(d => ({ ...d, income: roundMoney(d.income), expense: roundMoney(d.expense) }));
   if (timeframe === 'ALL') {
     chartDataValues.sort((a, b) => a._sortKey.localeCompare(b._sortKey));
     chartDataValues = chartDataValues.map(({ _sortKey, ...rest }) => rest);
@@ -125,9 +126,9 @@ export async function getDashboardData(timeframe: 'ALL' | 'YTD' | 'MONTH' | 'WEE
     incomeByCategory,
     expenseByCategory,
     stats: {
-      totalBalance: totalIncome - totalExpense,
-      totalIncome: totalIncome,
-      totalExpense: totalExpense,
+      totalBalance: roundMoney(totalIncome - totalExpense),
+      totalIncome: roundMoney(totalIncome),
+      totalExpense: roundMoney(totalExpense),
     },
     paoPoints: prismaUser.paoPoints,
     lastDailyQuestAt: prismaUser.lastDailyQuestAt
