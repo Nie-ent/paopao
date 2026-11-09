@@ -4,7 +4,7 @@ import { createSessionToken, verifySessionToken, SESSION_COOKIE, sessionCookieOp
 import { RETURN_PATH_COOKIE, safeReturnPath } from '@/lib/return-path'
 import { canonicalRedirect } from '@/lib/site'
 
-const PUBLIC_PAGES = ['/welcome', '/en', '/pricing', '/privacy', '/guides']
+const PUBLIC_PAGES = ['/welcome', '/en', '/pricing', '/privacy', '/guides', '/r']
 
 /** LINE's in-app browser, where LIFF runs ("Line/<version>" in the user agent) */
 const isLineInAppBrowser = (request: NextRequest) => /\bLine\//i.test(request.headers.get('user-agent') ?? '')

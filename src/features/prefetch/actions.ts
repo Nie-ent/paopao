@@ -9,6 +9,7 @@ import { getSubscriptionData } from "@/features/subscription/actions"
 import { getActiveQuests, getAvailableRewards, getUserClaims } from "@/features/quests/actions"
 import { getDashboardData } from "@/features/dashboard/actions"
 import { getTransactions } from "@/features/transactions/actions"
+import { getReferralInfo } from "@/features/referral/actions"
 
 /**
  * The first screen of every dashboard page, loaded in parallel in one request. Server Actions
@@ -32,6 +33,7 @@ export async function getAppSnapshot(input: { month: number; year: number; local
     [cacheKeys.quests, getActiveQuests],
     [cacheKeys.rewards, getAvailableRewards],
     [cacheKeys.claims, getUserClaims],
+    [cacheKeys.referral, getReferralInfo],
     [cacheKeys.dashboard("MONTH", month, year, locale), () => getDashboardData("MONTH", month, year, locale)],
     [cacheKeys.transactions(txQuery), () => getTransactions(txQuery)],
   ]
