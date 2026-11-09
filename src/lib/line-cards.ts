@@ -5,6 +5,7 @@
  */
 import type { messagingApi } from "@line/bot-sdk"
 import { th } from "@/i18n/messages"
+import { siteUrl } from "@/lib/site"
 import { buildMorningBrief, summarizeDay } from "@/lib/morning-brief"
 import { encodeSummaryAnswer, SUMMARY_PERIODS, type Summary, type SummaryPeriod } from "@/lib/summary"
 import { EDITABLE_ITEMS, encodeEntryAction, type DraftItem } from "@/lib/pending-entry"
@@ -290,10 +291,15 @@ export function welcomeCard(opts: { name?: string | null; proUntil: Date | null;
     { type: "action", action: { type: "message", label: "ชวนเพื่อน", text: "ชวนเพื่อน" } },
   ] }
   return flex(`${hello} เป๋าเป๋าช่วยจดรายรับรายจ่ายใน LINE: พิมพ์ "กาแฟ 65" แล้วแตะบันทึก พิมพ์ "สรุป" เพื่อดูยอด`, bubble({
-    header: box("vertical", [
-      text("🐱 ยินดีต้อนรับสู่เป๋าเป๋า", { weight: "bold", size: "lg", color: "#FFFFFF" }),
-      text(hello, { size: "sm", color: "#FFFFFF" }),
-    ], { backgroundColor: COLORS.primary, paddingAll: "18px" }),
+    header: box("horizontal", [
+      // PaoPao's face (public/line/paopao-face.png, 240px so LINE loads it fast)
+      box("vertical", [{ type: "image", url: `${siteUrl()}/line/paopao-face.png`, size: "full", aspectMode: "cover", aspectRatio: "1:1" }],
+        { width: "56px", height: "56px", cornerRadius: "16px", flex: 0 }),
+      box("vertical", [
+        text("ยินดีต้อนรับสู่เป๋าเป๋า", { weight: "bold", size: "lg", color: "#FFFFFF" }),
+        text(hello, { size: "sm", color: "#FFFFFF" }),
+      ], { justifyContent: "center" }),
+    ], { spacing: "md", backgroundColor: COLORS.primary, paddingAll: "16px" }),
     body: box("vertical", [
       text("จดรายรับรายจ่ายได้ในแชทนี้เลย แค่ 3 ขั้น", { size: "sm", wrap: true }),
       step(1, "พิมพ์รายการกับยอดเงิน", `เช่น "กาแฟ 65" หรือ "ข้าว 50 ชาไทย 35" รายรับก็พิมพ์ได้ เช่น "เงินเดือน 25000"`),
