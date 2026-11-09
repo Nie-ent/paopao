@@ -5,6 +5,14 @@ export function siteUrl() {
 
 export const SITE_NAME = "PaoPao (เป๋าเป๋า)"
 
+/** The LINE Official Account's basic ID (from the Messaging API's bot info) */
+export const LINE_OA_ID = process.env.NEXT_PUBLIC_LINE_OA_ID || "@401xmdoq"
+
+/** Opens PaoPao's LINE OA with "Add friend" (in LINE, or LINE's web page elsewhere). */
+export function lineAddFriendUrl() {
+  return `https://line.me/R/ti/p/${LINE_OA_ID}`
+}
+
 /**
  * The production deployment also answers on *.vercel.app addresses (the project alias and each
  * deployment's own URL). Those are duplicates of the site for search engines, so pages there

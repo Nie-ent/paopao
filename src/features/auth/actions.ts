@@ -9,6 +9,8 @@ import { verifyLiffAccessToken } from "@/lib/line-login"
 import { resolveLineId } from "@/lib/auth-user"
 import { signInCookies, upsertLineUser } from "@/lib/line-user"
 import { attachReferral, REFERRAL_COOKIE } from "@/lib/referral"
+import { lineAddFriendUrl } from "@/lib/site"
+import { lineClient } from "@/config/line"
 
 /**
  * Sign-in is LINE only: inside LINE through LIFF (this action), on the web through LINE Login
@@ -25,12 +27,16 @@ export async function signInWithLiffAction(accessToken: string) {
   const cookieStore = await cookies()
   // Signed up through a friend's invite link: link the new account (no-op for existing ones)
   const refCode = cookieStore.get(REFERRAL_COOKIE)?.value
+  let attached = false
   if (refCode) {
-    await attachReferral(user, refCode).catch(e => console.error("[referral] attach", e))
+    attached = (await attachReferral(user, refCode).catch(e => { console.error("[referral] attach", e); return null })) === "ATTACHED"
     cookieStore.delete(REFERRAL_COOKIE)
   }
   for (const c of signIn) cookieStore.set(c.name, c.value, c.options)
   cookieStore.delete("demo_mode_bypass")
+  // A friend who came through an invite link uses PaoPao by chatting with the LINE OA: if they
+  // haven't added it yet, open "Add friend" (their Pro trial has already started)
+  if (attached && !(await isLineOaFriend(profile.userId))) redirect(lineAddFriendUrl())
   redirect(user.hasAcceptedPDPA ? "/" : "/pdpa")
 }
 
@@ -88,4 +94,15 @@ export async function getUser() {
   }
 
   return null
+}
+
+/** Whether the user has added PaoPao's LINE OA (the Messaging API only returns friends' profiles). */
+async function isLineOaFriend(lineUserId: string) {
+  try {
+    await lineClient.getProfile(lineUserId)
+    return true
+  } catch (e) {
+    // 404: not a friend. Anything else (LINE down, no token): don't send them away
+    return (e as { status?: number })?.status !== 404
+  }
 }
