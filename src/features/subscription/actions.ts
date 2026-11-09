@@ -22,8 +22,8 @@ export async function getSubscriptionData() {
     trialDays: TRIAL_DAYS,
     plans: PRO_PLANS,
     limits: {
-      chatFree: LIMITS.chatPerDay.FREE,
-      chatPro: LIMITS.chatPerDay.PRO,
+      chatFree: LIMITS.chatPerMonth.FREE,
+      chatPro: LIMITS.chatPerMonth.PRO,
       proSlipsPerMonth: LIMITS.proSlipsPerMonth,
       statementImportsPerDay: LIMITS.statementImportsPerDay.PRO,
       proRecurringBills: LIMITS.proRecurringBills,

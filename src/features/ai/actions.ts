@@ -3,14 +3,16 @@
 import prisma from "@/lib/db"
 import { getCurrentUser } from "@/lib/current-user"
 import { bangkokDate, bangkokParts } from "@/lib/dates"
-import { generateContent, isQuotaError } from "@/lib/ai"
+import { AI_MODELS, generateContent, isQuotaError, modelsForPlan } from "@/lib/ai"
+import { effectivePlan } from "@/lib/subscription"
 import { unstable_cache } from "next/cache"
 import { roundMoney } from '@/lib/money'
 
 
+// `lite`: a Free account's insight uses the cheaper model first (docs/costs.md); it is part of the cache key
 const getCachedInsight = unstable_cache(
-  async (prompt: string, cacheDateString: string) => {
-    const response = await generateContent({ contents: prompt, config: { temperature: 0.7 } })
+  async (prompt: string, cacheDateString: string, lite: boolean) => {
+    const response = await generateContent({ contents: prompt, config: { temperature: 0.7 } }, { models: lite ? modelsForPlan("FREE") : AI_MODELS })
     return response.text
   },
   ['gemini-dashboard-insight'],
@@ -18,8 +20,8 @@ const getCachedInsight = unstable_cache(
 )
 
 const getCachedFinancialAdvice = unstable_cache(
-  async (prompt: string, cacheDateString: string) => {
-    const response = await generateContent({ contents: prompt, config: { temperature: 0.7 } })
+  async (prompt: string, cacheDateString: string, lite: boolean) => {
+    const response = await generateContent({ contents: prompt, config: { temperature: 0.7 } }, { models: lite ? modelsForPlan("FREE") : AI_MODELS })
     return response.text
   },
   ['gemini-financial-advice'],
@@ -112,7 +114,7 @@ Reply entirely in English.
 
   try {
     const today = new Date().toISOString().split('T')[0]
-    const insightText = await getCachedFinancialAdvice(prompt, today)
+    const insightText = await getCachedFinancialAdvice(prompt, today, effectivePlan(prismaUser) === "FREE")
     return { advice: insightText, error: null }
   } catch (error) {
     console.error("AI Generation Error", error)
@@ -175,7 +177,7 @@ Provide EXACTLY ONE short, friendly, punchy sentence (max 20 words) giving an in
 
   try {
     const today = new Date().toISOString().split('T')[0] // "2026-04-20"
-    const adviceText = await getCachedInsight(prompt, today)
+    const adviceText = await getCachedInsight(prompt, today, effectivePlan(prismaUser) === "FREE")
     return { advice: adviceText, error: null }
   } catch (error: any) {
     console.error("AI Generation Error", error)

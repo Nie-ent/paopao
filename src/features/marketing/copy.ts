@@ -53,6 +53,7 @@ export type PricingLabels = {
   cycle: string; monthly: string; yearly: string; twoMonthsFree: string
   freeLead: string; proLead: string; recommended: string; perYear: string; perDays: (days: number) => string
   averagePerMonth: (thb: number) => string; orYearly: (thb: number) => string; promptPayNote: string
+  perDayNote: (thb: number) => string
   startFree: string; tryPro: (days: number) => string
 }
 
@@ -61,6 +62,7 @@ export const PRICING_LABELS_TH: PricingLabels = {
   freeLead: "สำหรับคนที่อยากเริ่มจดเงินแบบง่ายที่สุด", proLead: "ทุกอย่างใน Free และเพิ่ม", recommended: "แนะนำ",
   perYear: "/ปี", perDays: d => `/${d} วัน`,
   averagePerMonth: thb => `เฉลี่ยประมาณเดือนละ ฿${thb}`, orYearly: thb => `หรือ ฿${thb}/ปี`, promptPayNote: "จ่ายผ่านพร้อมเพย์ ไม่ตัดเงินอัตโนมัติ",
+  perDayNote: thb => `ตกวันละไม่ถึง ฿${Math.ceil(thb)}`,
   startFree: "เริ่มใช้งานฟรี", tryPro: d => `ทดลองใช้ Pro ฟรี ${d} วัน`,
 }
 
@@ -69,6 +71,7 @@ const PRICING_LABELS_EN: PricingLabels = {
   freeLead: "The simplest way to start tracking your money", proLead: "Everything in Free, plus", recommended: "Popular",
   perYear: "/year", perDays: d => `/${d} days`,
   averagePerMonth: thb => `About ฿${thb} a month`, orYearly: thb => `or ฿${thb}/year`, promptPayNote: "Pay by PromptPay, never auto-charged",
+  perDayNote: thb => `Under ฿${Math.ceil(thb)} a day`,
   startFree: "Start free", tryPro: d => `Try Pro free for ${d} days`,
 }
 
@@ -161,7 +164,7 @@ const EN: MarketingCopy = {
     { title: "A summary every morning", body: "Yesterday's income and spending, delivered in LINE each morning. No app to open.", pro: true },
     { title: "Import bank statements", body: `Upload a PDF (password-protected ones too), Excel/CSV or a screenshot. Duplicates are flagged before saving (${LIMITS.statementImportsPerDay.PRO} a day).`, pro: true },
     { title: "Goals that fill themselves", body: "Savings or debt-payoff goals track progress from a category, e.g. a ฿7,000 debt goal fills up as you log repayments. Plus to-dos with LINE reminders." },
-    { title: "AI money coach", body: `Ask how to save or pay off debt, and the AI can set up goals for you (Free ${LIMITS.chatPerDay.FREE} messages a day, Pro ${LIMITS.chatPerDay.PRO}).` },
+    { title: "AI money coach", body: `Ask how to save or pay off debt, and the AI can set up goals for you (Free ${LIMITS.chatPerMonth.FREE} messages a month, Pro ${LIMITS.chatPerMonth.PRO}).` },
     { title: "Your data stays yours", body: "Export to Excel on any plan, ask for deletion under Thailand's PDPA, and we never sell your data." },
   ],
   screensTitle: "Your money at a glance on the web",
@@ -178,7 +181,7 @@ const EN: MarketingCopy = {
     "Log income and expenses by typing in LINE",
     "Dashboard, all transactions and Excel export",
     "Savings goals and to-dos with reminders",
-    `AI money chat, ${LIMITS.chatPerDay.FREE} messages a day`,
+    `AI money chat, ${LIMITS.chatPerMonth.FREE} messages a month`,
     `Try Pro free for ${TRIAL_DAYS} days`,
   ],
   proFeatures: [
@@ -186,13 +189,13 @@ const EN: MarketingCopy = {
     `Recurring bills PaoPao asks about in LINE (${LIMITS.proRecurringBills} bills)`,
     "A morning summary in LINE",
     `Bank statement import, ${LIMITS.statementImportsPerDay.PRO} a day`,
-    `AI chat, ${LIMITS.chatPerDay.PRO} messages a day`,
+    `AI chat, ${LIMITS.chatPerMonth.PRO} messages a month`,
   ],
   pricingLabels: PRICING_LABELS_EN,
   faqTitle: "Frequently asked questions",
   faqs: [
     { q: "What is PaoPao?", a: "PaoPao is an income and expense tracker you use through LINE. Type something like \"coffee 65\" in the chat, confirm it, and it's recorded and categorized. Then see your overview, charts and savings goals on the web." },
-    { q: "Is it free?", a: `Yes. The Free plan is free forever: log by typing, use the dashboard, set goals, export to Excel and chat with the AI ${LIMITS.chatPerDay.FREE} times a day.` },
+    { q: "Is it free?", a: `Yes. The Free plan is free forever: log by typing, use the dashboard, set goals, export to Excel and chat with the AI ${LIMITS.chatPerMonth.FREE} times a day.` },
     { q: "How much is Pro and what do I get?", a: `฿${MONTHLY.priceThb} for ${MONTHLY.days} days or ฿${YEARLY.priceThb} a year (2 months free). Pro adds slip photos that log themselves, recurring bills PaoPao asks about in LINE, a morning summary and bank statement import.` },
     { q: "Can I try Pro for free?", a: `Yes. Every account can try Pro free for ${TRIAL_DAYS} days, once. Type "trial" in the LINE chat or tap it on the plans page. No card needed, and it goes back to Free on its own.` },
     { q: "How do I pay? Will I be charged automatically?", a: "Pay with a PromptPay QR from any banking app, then send the slip in the LINE chat. The slip is checked with the bank and Pro turns on right away. Nothing is charged automatically; if you don't renew, you're back on Free." },

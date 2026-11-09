@@ -34,13 +34,13 @@ export default function SubscriptionPage() {
   const expiry = data?.proExpiresAt ? formatDate(data.proExpiresAt) : ""
   const limits = data?.limits
 
-  const freeFeatures = [t('sub.free.f1'), t('sub.free.f2'), t('sub.free.f3'), t('sub.free.f4', { chat: limits?.chatFree ?? 10 })]
+  const freeFeatures = [t('sub.free.f1'), t('sub.free.f2'), t('sub.free.f3'), t('sub.free.f4', { chat: limits?.chatFree ?? 30 })]
   const proFeatures = [
     t('sub.pro.f1', { slips: limits?.proSlipsPerMonth ?? 300 }),
     t('sub.pro.f5', { bills: limits?.proRecurringBills ?? 20 }),
     t('sub.pro.f2'),
     t('sub.pro.f3', { imports: limits?.statementImportsPerDay ?? 5 }),
-    t('sub.pro.f4', { chat: limits?.chatPro ?? 100 }),
+    t('sub.pro.f4', { chat: limits?.chatPro ?? 300 }),
   ]
 
   const trialLock = useRef(false)
@@ -158,9 +158,10 @@ export default function SubscriptionPage() {
                 {billing === "YEARLY" ? t('sub.per_year') : t('sub.per_period', { days: selected.days })}
               </span>
             </div>
-            {billing === "YEARLY" && (
-              <p className="text-xs text-primary mt-1">{t('sub.yearly_note', { monthly: Math.round(selected.priceThb / 12) })}</p>
-            )}
+            <p className="text-xs text-primary mt-1">
+              {t('sub.per_day_note', { thb: Math.ceil(selected.priceThb / selected.days) })}
+              {billing === "YEARLY" && <> · {t('sub.yearly_note', { monthly: Math.round(selected.priceThb / 12) })}</>}
+            </p>
           </div>
           <ul className="space-y-4 mb-8 flex-1">
             {proFeatures.map((feature, i) => (
