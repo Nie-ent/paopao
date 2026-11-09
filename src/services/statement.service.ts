@@ -1,7 +1,7 @@
 import * as XLSX from "xlsx"
 import { extractText, getDocumentProxy } from "unpdf"
 import prisma from "@/lib/db"
-import { extractStatementRows, type StatementInput } from "@/services/ai.service"
+import { chunkStatementText, extractStatementRows, type RawStatementRow, type StatementInput } from "@/services/ai.service"
 import { isEncryptedPdf, markDuplicates, normalizeStatementDate, statementRowTimestamp, type StatementPreviewRow, type StatementRow } from "@/lib/statement"
 import { normalizeReference } from "@/lib/slip"
 import { isValidAmount } from "@/lib/money"
@@ -22,13 +22,17 @@ async function toStatementInput(file: File, password: string | undefined): Promi
   const name = file.name.toLowerCase()
 
   if (file.type === "application/pdf" || name.endsWith(".pdf")) {
-    if (!isEncryptedPdf(bytes)) return { kind: "file", data: bytes, mimeType: "application/pdf" }
-    // The AI can't open protected PDFs, so decrypt and read the text layer here
-    if (!password) throw new StatementError("PASSWORD_REQUIRED")
+    // Read the text layer here (decrypting protected PDFs), so long statements can be read in
+    // chunks; only a scanned PDF with no text goes to the AI as a file
+    const encrypted = isEncryptedPdf(bytes)
+    if (encrypted && !password) throw new StatementError("PASSWORD_REQUIRED")
     try {
-      const pdf = await getDocumentProxy(new Uint8Array(bytes), { password })
-      const { text } = await extractText(pdf, { mergePages: true })
-      return { kind: "text", text }
+      const pdf = await getDocumentProxy(new Uint8Array(bytes), encrypted ? { password } : {})
+      const { text } = await extractText(pdf, { mergePages: false })
+      const joined = (text as string[]).join("\n")
+      if (joined.replace(/\s+/g, "").length >= 40) return { kind: "text", text: joined }
+      if (encrypted) throw new StatementError("NO_ROWS")
+      return { kind: "file", data: bytes, mimeType: "application/pdf" }
     } catch (error) {
       if ((error as { name?: string })?.name === "PasswordException") throw new StatementError("WRONG_PASSWORD")
       throw error
@@ -47,14 +51,38 @@ async function toStatementInput(file: File, password: string | undefined): Promi
   throw new StatementError("UNSUPPORTED")
 }
 
-/** Reads a statement and flags rows that look like transactions the user already recorded. */
+/** The user's own category names, which the AI may also use. */
+export async function userCategoryNames(userId: string) {
+  return (await prisma.category.findMany({ where: { userId }, select: { name: true } })).map(c => c.name)
+}
+
+/**
+ * First step of an import: reads the file (no AI). Text statements come back as chunks for the
+ * AI to read one request at a time; images and scanned PDFs are read here in one AI call.
+ */
+export async function prepareStatement(userId: string, file: File, password?: string): Promise<{ chunks: string[] } | { rows: StatementPreviewRow[] }> {
+  if (file.size > MAX_STATEMENT_BYTES) throw new StatementError("TOO_LARGE")
+  const input = await toStatementInput(file, password)
+  if (input.kind === "text") {
+    const chunks = chunkStatementText(input.text)
+    if (chunks.length === 0) throw new StatementError("NO_ROWS")
+    return { chunks }
+  }
+  return { rows: await finalizeStatement(userId, await extractStatementRows(input, await userCategoryNames(userId))) }
+}
+
+/** Reads a statement in one request and flags rows that look like transactions the user already recorded. */
 export async function previewStatement(userId: string, file: File, password?: string): Promise<StatementPreviewRow[]> {
   if (file.size > MAX_STATEMENT_BYTES) throw new StatementError("TOO_LARGE")
 
   // Read the file first so a bad file or password fails before any database or AI work
   const input = await toStatementInput(file, password)
-  const customCategories = (await prisma.category.findMany({ where: { userId }, select: { name: true } })).map(c => c.name)
-  const raw = await extractStatementRows(input, customCategories)
+  const raw = await extractStatementRows(input, await userCategoryNames(userId))
+  return finalizeStatement(userId, raw)
+}
+
+/** Last step: cleans the AI's rows and flags likely duplicates of what the user already recorded. */
+export async function finalizeStatement(userId: string, raw: RawStatementRow[]): Promise<StatementPreviewRow[]> {
 
   const rows: StatementRow[] = raw.flatMap(r => {
     const date = normalizeStatementDate(r.date)

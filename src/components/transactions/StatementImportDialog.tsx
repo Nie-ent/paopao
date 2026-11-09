@@ -11,11 +11,13 @@ import { Badge } from "@/components/ui/badge"
 import { useLanguage } from "@/contexts/LanguageContext"
 import { importStatementRows } from "@/features/transactions/actions"
 import type { StatementPreviewRow } from "@/lib/statement"
+import { ImportError, runStatementImport, type ImportProgress } from "@/lib/statement-runner"
+import { StatementProgress } from "@/components/transactions/StatementProgress"
 
 type Props = { open: boolean; onOpenChange: (open: boolean) => void; onImported: () => void }
 
 const ACCEPT = ".pdf,.csv,.xlsx,.xls,image/png,image/jpeg,image/webp"
-const KNOWN_ERRORS = ["TOO_LARGE", "UNSUPPORTED", "PASSWORD_REQUIRED", "WRONG_PASSWORD", "NO_ROWS", "AI_BUSY", "PRO_ONLY", "DAILY_LIMIT", "MONTHLY_LIMIT"]
+const KNOWN_ERRORS = ["TOO_LARGE", "UNSUPPORTED", "PASSWORD_REQUIRED", "WRONG_PASSWORD", "NO_ROWS", "AI_BUSY", "PRO_ONLY", "DAILY_LIMIT", "MONTHLY_LIMIT", "EXPIRED"]
 
 export function StatementImportDialog({ open, onOpenChange, onImported }: Props) {
   const { t, tc, locale } = useLanguage()
@@ -27,9 +29,12 @@ export function StatementImportDialog({ open, onOpenChange, onImported }: Props)
   const [busy, setBusy] = useState<"reading" | "importing" | null>(null)
   // Set synchronously, so a second click before the re-render can't read (AI + quota) or import (duplicate rows) twice
   const busyRef = useRef(false)
+  const [progress, setProgress] = useState<ImportProgress | null>(null)
+  const [startedAt, setStartedAt] = useState(0)
+  const abortRef = useRef<AbortController | null>(null)
 
   const reset = () => {
-    setFile(null); setPassword(""); setNeedsPassword(false); setRows(null); setSelected(new Set()); setBusy(null)
+    setFile(null); setPassword(""); setNeedsPassword(false); setRows(null); setSelected(new Set()); setBusy(null); setProgress(null)
   }
 
   const close = (next: boolean) => {
@@ -42,25 +47,26 @@ export function StatementImportDialog({ open, onOpenChange, onImported }: Props)
     if (!file || busyRef.current) return
     busyRef.current = true
     setBusy("reading")
+    setStartedAt(Date.now())
+    const abort = new AbortController()
+    abortRef.current = abort
     try {
-      const body = new FormData()
-      body.append("file", file)
-      if (password) body.append("password", password)
-      const res = await fetch("/api/statements/preview", { method: "POST", body })
-      const data = await res.json()
-      if (!res.ok) {
-        if (data.error === "PASSWORD_REQUIRED" || data.error === "WRONG_PASSWORD") setNeedsPassword(true)
-        toast.error(t(KNOWN_ERRORS.includes(data.error) ? `statement.error.${data.error}` : "statement.error.FAILED"))
-        return
-      }
-      const preview = data.rows as StatementPreviewRow[]
+      const { rows: preview, failedChunks } = await runStatementImport({ file, password: password || undefined, onProgress: setProgress, signal: abort.signal })
+      // Let the last tick show for a moment before the list replaces the checklist
+      await new Promise(r => setTimeout(r, 600))
       setRows(preview)
       // Rows that look already recorded start unticked
       setSelected(new Set(preview.flatMap((r, i) => (r.duplicateOf ? [] : [i]))))
-    } catch {
-      toast.error(t("statement.error.FAILED"))
+      if (failedChunks > 0) toast.warning(t("statement.partial", { count: failedChunks }))
+    } catch (error) {
+      if ((error as { name?: string })?.name === "AbortError") return
+      const code = error instanceof ImportError ? error.code : "FAILED"
+      if (code === "PASSWORD_REQUIRED" || code === "WRONG_PASSWORD") setNeedsPassword(true)
+      toast.error(t(KNOWN_ERRORS.includes(code) ? `statement.error.${code}` : "statement.error.FAILED"))
     } finally {
       setBusy(null)
+      setProgress(null)
+      abortRef.current = null
       busyRef.current = false
     }
   }
@@ -99,7 +105,9 @@ export function StatementImportDialog({ open, onOpenChange, onImported }: Props)
           <DialogDescription>{rows ? t("statement.preview_desc") : t("statement.desc")}</DialogDescription>
         </DialogHeader>
 
-        {!rows ? (
+        {busy === "reading" && progress ? (
+          <StatementProgress progress={progress} isImage={!!file?.type.startsWith("image/")} startedAt={startedAt} />
+        ) : !rows ? (
           <div className="space-y-4 py-2">
             <label className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border p-8 text-center cursor-pointer hover:bg-muted/40 transition-colors">
               <FileUp className="h-8 w-8 text-primary" />
@@ -160,9 +168,11 @@ export function StatementImportDialog({ open, onOpenChange, onImported }: Props)
               </Button>
             </>
           ) : (
-            <Button onClick={readStatement} disabled={!file || !!busy} loading={busy === "reading"} className="w-full sm:w-auto">
-              {busy === "reading" ? t("statement.reading") : t("statement.read")}
-            </Button>
+            busy === "reading" ? (
+              <Button variant="outline" onClick={() => abortRef.current?.abort()} className="w-full sm:w-auto">{t("statement.cancel")}</Button>
+            ) : (
+              <Button onClick={readStatement} disabled={!file || !!busy} className="w-full sm:w-auto">{t("statement.read")}</Button>
+            )
           )}
         </DialogFooter>
       </DialogContent>
