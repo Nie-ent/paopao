@@ -12,7 +12,7 @@ const { MONTHLY, YEARLY } = PRO_PLANS
 
 export const metadata: Metadata = {
   title: "ราคาแพ็กเกจ Free และ Pro",
-  description: `เป๋าเป๋าใช้ฟรีได้ตลอด Pro ฿${MONTHLY.priceThb}/${MONTHLY.days} วัน หรือ ฿${YEARLY.priceThb}/ปี ส่งรูปสลิป บิลประจำที่ถามให้ทาง LINE สรุปทุกเช้า นำเข้า Statement จ่ายผ่านพร้อมเพย์ ไม่ตัดเงินอัตโนมัติ ทดลองใช้ฟรี ${TRIAL_DAYS} วัน`,
+  description: `เป๋าเป๋าใช้ฟรีได้ตลอด Pro ฿${MONTHLY.priceThb}/${MONTHLY.days} วัน หรือ ฿${YEARLY.priceThb}/ปี ส่งรูปสลิป บิลประจำที่ถามให้ทาง LINE สรุปการเงินทาง LINE นำเข้า Statement จ่ายผ่านพร้อมเพย์ ไม่ตัดเงินอัตโนมัติ ทดลองใช้ฟรี ${TRIAL_DAYS} วัน`,
   alternates: { canonical: "/pricing" },
 }
 

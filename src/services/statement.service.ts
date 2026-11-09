@@ -4,6 +4,7 @@ import prisma from "@/lib/db"
 import { extractStatementRows, type StatementInput } from "@/services/ai.service"
 import { isEncryptedPdf, markDuplicates, normalizeStatementDate, statementRowTimestamp, type StatementPreviewRow, type StatementRow } from "@/lib/statement"
 import { normalizeReference } from "@/lib/slip"
+import { isValidAmount } from "@/lib/money"
 
 export const MAX_STATEMENT_BYTES = 4 * 1024 * 1024 // Vercel caps request bodies at 4.5 MB
 
@@ -58,7 +59,7 @@ export async function previewStatement(userId: string, file: File, password?: st
   const rows: StatementRow[] = raw.flatMap(r => {
     const date = normalizeStatementDate(r.date)
     const amount = Math.abs(Number(r.amount))
-    if (!date || !Number.isFinite(amount) || amount <= 0) return []
+    if (!date || !isValidAmount(amount)) return []
     return [{ date, time: r.time || undefined, type: r.type, amount, category: r.category, note: r.note?.trim() || "-", reference: normalizeReference(r.reference) }]
   })
   if (rows.length === 0) throw new StatementError("NO_ROWS")

@@ -18,6 +18,7 @@ import { buildSummary, isSummaryRequest, parseSummaryAnswer, summaryRange, type 
 import { isTrialEligible } from "@/lib/subscription";
 import type { messagingApi } from "@line/bot-sdk";
 import { consumeDailyUsage } from "@/lib/usage";
+import { isValidAmount } from "@/lib/money";
 
 /**
  * Prepares the user entry in the DB.
@@ -254,7 +255,7 @@ export async function handleLineEvent(event: any) {
     }
 
     // Filter out logically invalid transactions (like 0 THB or negative) parsed by AI
-    extractedDataArray = extractedDataArray.filter(d => d && d.amount > 0);
+    extractedDataArray = extractedDataArray.filter(d => d && isValidAmount(d.amount));
 
     if (extractedDataArray.length === 0) {
       return replyText(actualReplyToken, "ผมไม่สามารถอ่านจำนวนเงินที่ชัดเจนจากข้อความ/รูปภาพของคุณได้ รบกวนพิมพ์ให้ชัดเจนขึ้นหรือส่งสลิปมาอีกครั้งนะครับ! 🙏");
@@ -382,7 +383,7 @@ async function recordAndReply(
       const today = bangkokParts(new Date());
       const startOfMonth = bangkokDate(today.year, today.month, 1);
       const mtd = await prisma.transaction.groupBy({ by: ['type'], where: { userId: userId, date: { gte: startOfMonth } }, _sum: { amount: true } });
-      const total = (type: string) => mtd.find(t => t.type === type)?._sum.amount || 0;
+      const total = (type: string) => Number(mtd.find(t => t.type === type)?._sum.amount ?? 0);
       if (total("INCOME") > 0 && items.some(d => d.type === "EXPENSE")) {
         budgetRatio = (total("EXPENSE") / total("INCOME")) * 100;
         const tone = budgetTone(budgetRatio);

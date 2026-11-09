@@ -6,6 +6,7 @@ import { bangkokDate, bangkokParts } from "@/lib/dates"
 import { AI_MODELS, generateContent, isQuotaError, modelsForPlan } from "@/lib/ai"
 import { effectivePlan } from "@/lib/subscription"
 import { unstable_cache } from "next/cache"
+import { roundMoney } from '@/lib/money'
 
 
 // `lite`: a Free account's insight uses the cheaper model first (docs/costs.md); it is part of the cache key
@@ -64,6 +65,10 @@ export async function generateFinancialAdvice(language: string = 'en') {
       categoryTotals[catName] = (categoryTotals[catName] || 0) + t.amount
     }
   })
+
+  totalIncome = roundMoney(totalIncome)
+  totalExpense = roundMoney(totalExpense)
+  for (const k of Object.keys(categoryTotals)) categoryTotals[k] = roundMoney(categoryTotals[k])
 
   // Format data for AI natively in the localized tongue to avoid interpretation drift
   const expensesList = Object.entries(categoryTotals).map(([cat, amount]) => `- ${cat}: ฿${amount.toLocaleString()}`).join('\n')
@@ -150,6 +155,7 @@ export async function generateDashboardInsight(language: string = 'en', timefram
     if (t.type === 'INCOME') income += Number(t.amount)
     else expense += Number(t.amount)
   })
+  income = roundMoney(income); expense = roundMoney(expense)
 
   if (income === 0 && expense === 0) {
     return { advice: null, reason: 'NO_DATA' as const }

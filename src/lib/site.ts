@@ -5,6 +5,19 @@ export function siteUrl() {
 
 export const SITE_NAME = "PaoPao (เป๋าเป๋า)"
 
+/**
+ * The production deployment also answers on *.vercel.app addresses (the project alias and each
+ * deployment's own URL). Those are duplicates of the site for search engines, so pages there
+ * redirect to the real domain. API routes stay put (webhooks and crons may call them there).
+ */
+export function canonicalRedirect(host: string, pathname: string, vercelEnv = process.env.VERCEL_ENV): string | null {
+  if (vercelEnv !== "production" || !host.endsWith(".vercel.app") || pathname.startsWith("/api/")) return null
+  return siteUrl()
+}
+
+/** IndexNow key (https://www.indexnow.org), served at /<key>.txt from public/. Not a secret. */
+export const INDEXNOW_KEY = "3dcf93349bc31298ae1223fed7049010"
+
 /** Link to an app page: through LIFF when configured (opens signed in inside LINE), else the website. */
 export function appLink(path: string) {
   const liff = process.env.NEXT_PUBLIC_LIFF_ID

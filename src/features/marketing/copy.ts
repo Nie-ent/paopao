@@ -46,7 +46,7 @@ export type MarketingCopy = {
   faqs: Faq[]
   finalTitle: string
   finalBody: string
-  nav: { pricing: string; faq: string; privacy: string; login: string; footerTag: string; switchTo: string; main: string; footer: string }
+  nav: { pricing: string; guides: string; faq: string; privacy: string; login: string; footerTag: string; switchTo: string; main: string; footer: string }
 }
 
 export type PricingLabels = {
@@ -77,7 +77,7 @@ const PRICING_LABELS_EN: PricingLabels = {
 
 const TH: MarketingCopy = {
   locale: "th",
-  metaTitle: `เป๋าเป๋า – ${th.TAGLINE} | แอปจดรายรับรายจ่ายใน LINE`,
+  metaTitle: "เป๋าเป๋า (PaoPao) – แอปจดรายรับรายจ่ายใน LINE ใช้ฟรี พิมพ์แล้วบันทึกทันที",
   tagline: th.TAGLINE,
   taglineAccent: "ที่เหลือเป๋าเป๋าจัดการให้",
   description: th.DESCRIPTION,
@@ -120,7 +120,7 @@ const TH: MarketingCopy = {
   faqs: th.FAQS,
   finalTitle: "เริ่มจดวันนี้ ใช้เวลาไม่ถึงนาที",
   finalBody: `ใช้ฟรี ไม่ต้องโหลดแอป และลอง Pro ได้ฟรี ${TRIAL_DAYS} วัน`,
-  nav: { pricing: "ราคา", faq: "คำถามที่พบบ่อย", privacy: "นโยบายความเป็นส่วนตัว", login: "เข้าสู่ระบบ", footerTag: "เป๋าเป๋า · ผู้ช่วยจดรายรับรายจ่ายใน LINE", switchTo: "English", main: "หลัก", footer: "ลิงก์ท้ายหน้า" },
+  nav: { pricing: "ราคา", guides: "คู่มือ", faq: "คำถามที่พบบ่อย", privacy: "นโยบายความเป็นส่วนตัว", login: "เข้าสู่ระบบ", footerTag: "เป๋าเป๋า · ผู้ช่วยจดรายรับรายจ่ายใน LINE", switchTo: "English", main: "หลัก", footer: "ลิงก์ท้ายหน้า" },
 }
 
 const EN_DESCRIPTION =
@@ -205,7 +205,7 @@ const EN: MarketingCopy = {
   ],
   finalTitle: "Start today. It takes less than a minute.",
   finalBody: `Free to use, no app to install, and Pro is free for ${TRIAL_DAYS} days.`,
-  nav: { pricing: "Pricing", faq: "FAQ", privacy: "Privacy", login: "Sign in", footerTag: "PaoPao · your money tracker in LINE", switchTo: "ภาษาไทย", main: "Main", footer: "Footer" },
+  nav: { pricing: "Pricing", guides: "Guides (Thai)", faq: "FAQ", privacy: "Privacy", login: "Sign in", footerTag: "PaoPao · your money tracker in LINE", switchTo: "ภาษาไทย", main: "Main", footer: "Footer" },
 }
 
 export const MARKETING_COPY: Record<MarketingLocale, MarketingCopy> = { th: TH, en: EN }
