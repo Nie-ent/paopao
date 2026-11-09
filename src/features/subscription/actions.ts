@@ -19,6 +19,8 @@ export async function getSubscriptionData() {
     proExpired: plan === "FREE" && !!user.proExpiresAt,
     /** Currently on the free trial (never paid) */
     onTrial: plan === "PRO" && !!user.trialStartedAt && paidCount === 0,
+    /** The shared demo account: it can look at plans, but upgrading needs the visitor's own LINE account */
+    isDemo: user.lineId === DEMO_LINE_ID,
     /** Pro, or the shared demo: AI chat is a Pro feature */
     chatAllowed: plan === "PRO" || user.lineId === DEMO_LINE_ID,
     trialEligible: user.lineId !== DEMO_LINE_ID && isTrialEligible(user, paidCount > 0),

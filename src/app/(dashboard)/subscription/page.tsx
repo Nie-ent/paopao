@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react"
 import { motion } from "framer-motion"
-import { Check, Sparkles, Zap, AlertCircle, QrCode, X, Gift } from "lucide-react"
+import { Check, Sparkles, Zap, AlertCircle, QrCode, X, Gift, LogIn } from "lucide-react"
 import { QRCodeSVG } from "qrcode.react"
 import generatePayload from "promptpay-qr"
 import { toast } from "sonner"
@@ -71,7 +71,24 @@ export default function SubscriptionPage() {
         </div>
       </div>
 
-      {data && !isPro && (
+      {/* Demo: Pro is credited to the LINE account that sends the payment slip, so a visitor must
+          sign in with their own LINE first; paying from the shared demo would only confuse */}
+      {data?.isDemo && (
+        <div className="bg-primary/5 border border-primary/20 rounded-2xl p-6 shadow-sm flex flex-col sm:flex-row gap-4 sm:items-center justify-between">
+          <div className="flex gap-4 items-start">
+            <AlertCircle className="w-6 h-6 shrink-0 text-primary" />
+            <div>
+              <h3 className="font-semibold text-lg text-foreground">{t('sub.demo_title')}</h3>
+              <p className="text-sm text-muted-foreground mt-1">{t('sub.demo_desc', { days: data.trialDays })}</p>
+            </div>
+          </div>
+          <a href="/api/auth/line" className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#06C755] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#05b34c] shrink-0">
+            <LogIn className="w-4 h-4" /> {t('sub.demo_login')}
+          </a>
+        </div>
+      )}
+
+      {data && !isPro && !data.isDemo && (
         <div className="bg-card border border-border/50 rounded-2xl p-6 shadow-sm flex flex-col sm:flex-row gap-4 sm:items-center justify-between">
           <div className="flex gap-4 items-start">
             <AlertCircle className={`w-6 h-6 shrink-0 ${data.proExpired ? "text-destructive" : "text-muted-foreground"}`} />
@@ -175,13 +192,19 @@ export default function SubscriptionPage() {
               </li>
             ))}
           </ul>
-          <Button className="w-full rounded-xl shadow-md gap-2" variant={isPro ? "outline" : "default"} onClick={() => setShowQR(true)}>
-            <QrCode className="w-4 h-4" /> {isPro ? t('sub.renew', { days: selected.days }) : t('sub.pay_promptpay')}
-          </Button>
+          {data?.isDemo ? (
+            <a href="/api/auth/line" className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-md hover:bg-primary/90">
+              <LogIn className="w-4 h-4" /> {t('sub.demo_login')}
+            </a>
+          ) : (
+            <Button className="w-full rounded-xl shadow-md gap-2" variant={isPro ? "outline" : "default"} onClick={() => setShowQR(true)}>
+              <QrCode className="w-4 h-4" /> {isPro ? t('sub.renew', { days: selected.days }) : t('sub.pay_promptpay')}
+            </Button>
+          )}
         </div>
       </div>
 
-      {showQR && (
+      {showQR && !data?.isDemo && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
