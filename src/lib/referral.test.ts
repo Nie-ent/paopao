@@ -27,3 +27,11 @@ describe("referral rules", () => {
     expect(referralRewardText(at("2026-12-09T03:00:00Z"), 3)).toMatch(/ครบ 3 ครั้ง/)
   })
 })
+
+describe("invite command", () => {
+  it("recognises the ways people ask for their invite link", async () => {
+    const { isInviteRequest } = await import("./referral")
+    for (const t of ["ชวนเพื่อน", "แนะนำเพื่อน", " invite ", "Referral", "ชวนเพื่อนรับ pro"]) expect(isInviteRequest(t), t).toBe(true)
+    for (const t of ["ชวนเพื่อนกินข้าว 120", "กาแฟ 65", "invite 50"]) expect(isInviteRequest(t), t).toBe(false)
+  })
+})

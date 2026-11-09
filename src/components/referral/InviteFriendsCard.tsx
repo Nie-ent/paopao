@@ -21,6 +21,11 @@ export function InviteFriendsCard() {
     loadCached(cacheKeys.referral, getReferralInfo).then(res => setInfo(res ?? null)).catch(() => {})
   }, [])
 
+  // Opened from the menu or LINE ("/subscription#invite"): bring the card into view once it renders
+  useEffect(() => {
+    if (info && window.location.hash === "#invite") document.getElementById("invite")?.scrollIntoView({ behavior: "smooth", block: "start" })
+  }, [info])
+
   if (!info) return null
 
   const shareText = t("invite.share_text", { trial: info.friendTrialDays, link: info.link })
@@ -35,7 +40,7 @@ export function InviteFriendsCard() {
   }
 
   return (
-    <section aria-labelledby="invite-title" className="bg-card border border-border/50 rounded-2xl p-6 shadow-sm space-y-5">
+    <section id="invite" aria-labelledby="invite-title" className="scroll-mt-20 bg-card border border-border/50 rounded-2xl p-6 shadow-sm space-y-5">
       <div className="flex gap-4 items-start">
         <div className="w-11 h-11 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
           <Gift className="w-5 h-5 text-primary" />

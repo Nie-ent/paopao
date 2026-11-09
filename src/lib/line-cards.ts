@@ -338,6 +338,25 @@ export function morningBriefCard(transactions: Parameters<typeof summarizeDay>[0
   }))
 }
 
+/** Reply to "ชวนเพื่อน": the user's invite link with a LINE share button and their progress. */
+export function inviteCard(opts: { link: string; rewarded: number; maxRewards: number; rewardDays: number; friendTrialDays: number; qualifyDays: number; qualifyWindowDays: number; progressUrl: string }): FlexMessage {
+  const { link, rewarded, maxRewards, rewardDays, friendTrialDays, qualifyDays, qualifyWindowDays, progressUrl } = opts
+  const shareText = `เราใช้เป๋าเป๋าจดรายรับรายจ่ายใน LINE แค่พิมพ์ "กาแฟ 65" ก็บันทึกให้ สมัครผ่านลิงก์นี้ได้ทดลองใช้ Pro ฟรี ${friendTrialDays} วัน 👉 ${link}`
+  const maxed = rewarded >= maxRewards
+  return flex(`ชวนเพื่อน รับ Pro ฟรี: ${link}`, bubble({
+    header: header("🎁 ชวนเพื่อน รับ Pro ฟรี", `${rewarded}/${maxRewards}`),
+    body: box("vertical", [
+      text(`เพื่อนที่สมัครผ่านลิงก์ของคุณได้ทดลอง Pro ฟรี ${friendTrialDays} วัน และเมื่อเพื่อนจดครบ ${qualifyDays} วันภายใน ${qualifyWindowDays} วัน คุณได้ Pro ฟรี ${rewardDays} วัน (สูงสุด ${maxRewards} คน)`, { wrap: true }),
+      progressBar((rewarded / maxRewards) * 100, COLORS.primary),
+      text(maxed ? "คุณรับรางวัลชวนเพื่อนครบแล้ว ขอบคุณที่บอกต่อนะครับ 🙏" : link, { size: "xs", color: COLORS.muted, wrap: true }),
+    ], { spacing: "md", paddingAll: "16px" }),
+    footer: box("vertical", [
+      ...(maxed ? [] : [uriButton("ชวนเพื่อนใน LINE", `https://line.me/R/share?text=${encodeURIComponent(shareText)}`)]),
+      uriButton("ดูความคืบหน้า", progressUrl, maxed),
+    ], { spacing: "sm" }),
+  }))
+}
+
 /** Reply to "login": opens the dashboard in LINE with one tap; on a computer, sign in with LINE on the website. */
 export function loginCard(liffUrl: string, webLoginUrl: string): FlexMessage {
   return flex("เข้าสู่แดชบอร์ดเป๋าเป๋า", bubble({
