@@ -30,7 +30,7 @@ const items = [
     icon: Target,
   },
   {
-    titleKey: "nav.bills",
+    titleKey: "nav.bills_short",
     url: "/bills",
     icon: Receipt,
   },

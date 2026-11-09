@@ -11,7 +11,9 @@ import { Select } from "@/components/ui/select"
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { useSingleFlight } from "@/hooks/use-single-flight"
 import { Card, CardContent } from "@/components/ui/card"
-import { getBills, saveBill, deleteBill, type BillInput } from "@/features/bills/actions"
+import { getBills, getFixedCosts, saveBill, deleteBill, setBillEssential, type BillInput } from "@/features/bills/actions"
+import { FixedCostSuggestions, FixedCostSummaryCard } from "@/components/bills/FixedCostSummary"
+import { monthlyAmount, type Suggestion } from "@/lib/fixed-costs"
 import { EXPENSE_CATEGORIES } from "@/lib/categories"
 import { useLanguage } from "@/contexts/LanguageContext"
 import { cacheKeys } from "@/lib/cache-keys"
@@ -20,7 +22,9 @@ import { invalidateAll, load as loadCached, peek } from "@/lib/data-cache"
 type Bill = Awaited<ReturnType<typeof getBills>>["bills"][number]
 type Frequency = BillInput["frequency"]
 
-const EMPTY = { name: "", category: "Utilities", amount: "", frequency: "MONTHLY" as Frequency, dayOfWeek: "1", dayOfMonth: "1" }
+const EMPTY = { name: "", category: "Utilities", amount: "", frequency: "MONTHLY" as Frequency, dayOfWeek: "1", dayOfMonth: "1", essential: true }
+/** Suggested payments in these categories are usually things people could cut */
+const LIKELY_OPTIONAL = ["Entertainment", "Shopping", "Personal Care", "Education"]
 
 export default function BillsPage() {
   const { t } = useLanguage()
@@ -35,12 +39,30 @@ export default function BillsPage() {
   const { run: runSave, pending: saving } = useSingleFlight()
   const { run: runDelete, pending: deleting } = useSingleFlight()
   const [billToDelete, setBillToDelete] = useState<Bill | null>(null)
+  type Fixed = Awaited<ReturnType<typeof getFixedCosts>>
+  const [fixed, setFixed] = useState<Fixed | undefined>(() => peek<Fixed>(cacheKeys.fixedCosts))
+  const [adding, setAdding] = useState<string | null>(null)
 
   const load = async (force = false) => {
-    const res = await loadCached(cacheKeys.bills, getBills, { force })
-    setBills(res.bills); setIsPro(res.isPro); setLimit(res.limit); setLoaded(true)
+    const [res, fc] = await Promise.all([loadCached(cacheKeys.bills, getBills, { force }), loadCached(cacheKeys.fixedCosts, getFixedCosts, { force })])
+    setBills(res.bills); setIsPro(res.isPro); setLimit(res.limit); setLoaded(true); setFixed(fc)
   }
   useEffect(() => { load() }, [])
+
+  const toggleEssential = async (b: Bill) => {
+    setBills(prev => prev.map(x => x.id === b.id ? { ...x, essential: !b.essential } : x))
+    const res = await setBillEssential(b.id, !b.essential)
+    if (!("success" in res)) toast.error(t('common.something_wrong'))
+    invalidateAll(); load(true)
+  }
+
+  const addSuggestion = async (s: Suggestion) => {
+    setAdding(s.name)
+    const res = await saveBill(null, { name: s.name, category: s.category, amount: s.amount, frequency: "MONTHLY", dayOfWeek: null, dayOfMonth: s.dayOfMonth, essential: !LIKELY_OPTIONAL.includes(s.category) })
+    setAdding(null)
+    if ("success" in res) { toast.success(t('fixed.suggest_added', { name: s.name })); invalidateAll(); load(true) }
+    else toast.error(t(`bills.error.${res.error}`))
+  }
 
   const weekdays = [0, 1, 2, 3, 4, 5, 6].map(d => t(`bills.weekday.${d}`))
   const schedule = (b: Bill) =>
@@ -51,7 +73,7 @@ export default function BillsPage() {
   const openNew = () => { setEditingId(null); setForm(EMPTY) }
   const openEdit = (b: Bill) => {
     setEditingId(b.id)
-    setForm({ name: b.name, category: b.category, amount: b.amount?.toString() ?? "", frequency: b.frequency, dayOfWeek: String(b.dayOfWeek ?? 1), dayOfMonth: String(b.dayOfMonth ?? 1) })
+    setForm({ name: b.name, category: b.category, amount: b.amount?.toString() ?? "", frequency: b.frequency, dayOfWeek: String(b.dayOfWeek ?? 1), dayOfMonth: String(b.dayOfMonth ?? 1), essential: b.essential })
   }
 
   const submit = (e: React.FormEvent) => {
@@ -65,6 +87,7 @@ export default function BillsPage() {
       frequency: form.frequency,
       dayOfWeek: form.frequency === "WEEKLY" ? Number(form.dayOfWeek) : null,
       dayOfMonth: form.frequency === "MONTHLY" ? Number(form.dayOfMonth) : null,
+      essential: form.essential,
     })
     if ("success" in res) { toast.success(t('bills.saved')); setForm(null); invalidateAll(); load(true) }
     else toast.error(t(`bills.error.${res.error}`))
@@ -88,14 +111,17 @@ export default function BillsPage() {
           </h1>
           <p className="text-muted-foreground mt-1">{t('bills.subtitle')}</p>
         </div>
-        {isPro && !form && (
+        {loaded && !form && (
           <Button onClick={openNew} disabled={bills.length >= limit} className="rounded-xl gap-2 shrink-0">
             <Plus className="w-4 h-4" /> {t('bills.add')}
           </Button>
         )}
       </div>
 
-      {loaded && !isPro && (
+      {fixed && <FixedCostSummaryCard summary={fixed.summary} />}
+      {fixed && <FixedCostSuggestions suggestions={fixed.suggestions} onAdd={addSuggestion} adding={adding} />}
+
+      {loaded && !isPro && bills.length > 0 && (
         <Card className="border-primary/30 bg-primary/5">
           <CardContent className="p-6 flex flex-col sm:flex-row gap-4 sm:items-center justify-between">
             <div className="flex gap-3">
@@ -146,7 +172,11 @@ export default function BillsPage() {
                     options={Array.from({ length: 31 }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }))} />
                 </div>
               )}
-              <p className="text-xs text-muted-foreground sm:col-span-2">{t('bills.form.hint')}</p>
+              <label className="flex items-center gap-2 sm:col-span-2 text-sm">
+                <input type="checkbox" className="h-4 w-4 accent-[var(--primary)]" checked={!form.essential} onChange={e => setForm({ ...form, essential: !e.target.checked })} />
+                <span>{t('fixed.form_optional')}</span>
+              </label>
+              <p className="text-xs text-muted-foreground sm:col-span-2">{t(isPro ? 'bills.form.hint' : 'fixed.form_hint_free')}</p>
               <div className="flex gap-2 sm:col-span-2 justify-end">
                 <Button type="button" variant="outline" disabled={saving} onClick={() => setForm(null)}>{t('common.cancel')}</Button>
                 <Button type="submit" loading={saving}>{t('common.save')}</Button>
@@ -172,17 +202,22 @@ export default function BillsPage() {
                 <p className="font-semibold text-foreground truncate">{b.name}</p>
                 <p className="text-sm text-muted-foreground">
                   {schedule(b)} · {t(`category.${b.category}`)}{b.amount ? ` · ฿${b.amount.toLocaleString()}` : ""}
+                  {b.amount && b.frequency !== "MONTHLY" ? ` (${t('fixed.monthly_eq', { amount: `฿${Math.round(monthlyAmount(b)).toLocaleString()}` })})` : ""}
                 </p>
               </div>
-              <div className="flex gap-1 shrink-0">
-                {isPro && <Button variant="ghost" size="icon" aria-label={t('bills.edit')} onClick={() => openEdit(b)}><Pencil className="w-4 h-4" /></Button>}
+              <div className="flex items-center gap-1 shrink-0">
+                <button type="button" onClick={() => toggleEssential(b)} title={t('fixed.toggle_hint')}
+                  className={`rounded-full px-2.5 py-1 text-xs font-medium border ${b.essential ? "border-primary/30 bg-primary/10 text-primary" : "border-amber-300 bg-amber-50 text-amber-700 dark:bg-amber-950/20"}`}>
+                  {b.essential ? t('fixed.essential') : t('fixed.optional')}
+                </button>
+                <Button variant="ghost" size="icon" aria-label={t('bills.edit')} onClick={() => openEdit(b)}><Pencil className="w-4 h-4" /></Button>
                 <Button variant="ghost" size="icon" aria-label={t('common.delete')} onClick={() => setBillToDelete(b)}><Trash2 className="w-4 h-4" /></Button>
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
-      {isPro && bills.length > 0 && <p className="text-xs text-muted-foreground text-center">{t('bills.count', { count: bills.length, limit })}</p>}
+      {bills.length > 0 && <p className="text-xs text-muted-foreground text-center">{t('bills.count', { count: bills.length, limit })}</p>}
 
       <AlertDialog open={!!billToDelete} onOpenChange={open => { if (!open && !deleting) setBillToDelete(null) }}>
         <AlertDialogContent>

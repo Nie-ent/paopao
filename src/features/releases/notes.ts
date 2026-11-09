@@ -13,6 +13,16 @@ export type ReleaseNote = {
 
 export const RELEASES: ReleaseNote[] = [
   {
+    id: "2026-11-09d",
+    title: { th: "รู้ว่าเงินรั่วตรงไหน: ค่าใช้จ่ายคงที่", en: "See where money leaks: fixed costs" },
+    items: [
+      { th: "หน้า \"ค่าใช้จ่ายคงที่\" รวมทุกอย่างที่จ่ายทุกเดือน บอกว่ากินรายรับไปกี่เปอร์เซ็นต์ และเหลือเงินใช้ได้เท่าไหร่ ใช้ได้ทุกแพ็กเกจ", en: "The new \"Fixed costs\" page adds up everything you pay each month, shows how much of your income it takes and what's left. On every plan" },
+      { th: "ติดป้ายแต่ละรายการว่า \"จำเป็น\" หรือ \"ตัดได้\" เพื่อดูว่าถ้าตัดแล้วจะเหลือเงินเพิ่มเท่าไหร่", en: "Mark each one \"essential\" or \"could cut\" to see how much cutting would free up" },
+      { th: "เป๋าเป๋าหารายการที่คุณจ่ายทุกเดือนแต่ยังไม่ได้ใส่ เช่น ค่าสมาชิกที่ลืมยกเลิก แตะเดียวก็เพิ่มได้", en: "PaoPao finds payments you make every month but haven't listed, like forgotten subscriptions, and adds them in one tap" },
+      { th: "แชท AI (Pro) และคำแนะนำบนแดชบอร์ดรู้ค่าใช้จ่ายคงที่และเงินเหลือใช้ของคุณแล้ว จึงวางแผนได้ตรงกับตัวเลขจริง", en: "The AI chat (Pro) and dashboard tips now know your fixed costs and spare cash, so their plans fit your real numbers" },
+    ],
+  },
+  {
     id: "2026-11-09c",
     title: { th: "อ่านอัปเดตย้อนหลังได้ และแชท AI สำหรับ Pro", en: "Read past updates, and AI chat for Pro" },
     items: [

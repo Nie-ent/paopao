@@ -8,6 +8,7 @@ import { DEMO_LINE_ID } from "@/lib/auth-user"
 import { bangkokDate, bangkokParts, startOfBangkokDay } from "@/lib/dates"
 import { effectivePlan, LIMITS } from "@/lib/subscription"
 import { MAX_AMOUNT } from "@/lib/money"
+import { financeContext } from "@/lib/finance-context"
 
 
 const SYSTEM_INSTRUCTION = `You are PaoPao, a friendly and expert financial assistant.
@@ -125,8 +126,10 @@ export async function sendChatMessage(sessionId: string | null, message: string,
   }))
 
   try {
+    // The user's real numbers (this month, fixed costs vs. income, goals), so advice fits them
+    const moneyContext = await financeContext(user.id, language === 'en' ? 'en' : 'th').catch(() => "")
     const { chat, response } = await startChat({
-      config: { systemInstruction: `${SYSTEM_INSTRUCTION}\nReply in ${language === 'en' ? 'English' : 'Thai'} unless the user writes in another language. Keep replies concise.`, tools, temperature: 0.7, maxOutputTokens: MAX_REPLY_TOKENS, thinkingConfig: { thinkingBudget: 0 } },
+      config: { systemInstruction: `${SYSTEM_INSTRUCTION}\n\n${moneyContext}\n\nReply in ${language === 'en' ? 'English' : 'Thai'} unless the user writes in another language. Keep replies concise.`, tools, temperature: 0.7, maxOutputTokens: MAX_REPLY_TOKENS, thinkingConfig: { thinkingBudget: 0 } },
       history: formattedHistory
     }, { message }, { models })
     historyMessages.push({ role: 'user', content: message, at: new Date().toISOString() })

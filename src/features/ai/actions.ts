@@ -5,6 +5,8 @@ import { getCurrentUser } from "@/lib/current-user"
 import { bangkokDate, bangkokParts } from "@/lib/dates"
 import { AI_MODELS, generateContent, isQuotaError, modelsForPlan } from "@/lib/ai"
 import { effectivePlan } from "@/lib/subscription"
+import { loadFixedCosts } from "@/lib/finance-context"
+import { fixedCostContext } from "@/lib/fixed-costs"
 import { unstable_cache } from "next/cache"
 import { roundMoney } from '@/lib/money'
 
@@ -74,6 +76,7 @@ export async function generateFinancialAdvice(language: string = 'en') {
   const expensesList = Object.entries(categoryTotals).map(([cat, amount]) => `- ${cat}: ฿${amount.toLocaleString()}`).join('\n')
   const transactionsList = transactions.slice(0, 5).map(t => `- ${t.date.toISOString().split('T')[0]}: [${t.type === 'INCOME' ? 'รับ' : 'จ่าย'}] ${t.category?.name || 'Other'} ฿${t.amount.toLocaleString()} (${t.note || '-'})`).join('\n')
 
+  const fixedLines = fixedCostContext((await loadFixedCosts(prismaUser.id)).summary, language === 'th' ? 'th' : 'en')
   const prompt = language === 'th' ? `
 คุณเป็นผู้เชี่ยวชาญการให้คำปรึกษาทางการเงินส่วนบุคคล หน้าที่ของคุณคือการวิเคราะห์ภาพรวมการเงินใน 30 วันที่ผ่านมาของลูกค้า
 
@@ -81,6 +84,9 @@ export async function generateFinancialAdvice(language: string = 'en') {
 - รายรับรวม: ฿${totalIncome.toLocaleString()}
 - รายจ่ายรวม: ฿${totalExpense.toLocaleString()}
 - ยอดเงินคงเหลือ: ฿${(totalIncome - totalExpense).toLocaleString()}
+
+# ค่าใช้จ่ายคงที่
+${fixedLines}
 
 # หมวดหมู่รายจ่าย
 ${expensesList}
@@ -98,6 +104,9 @@ You are an expert, friendly financial advisor. Your client needs a quick review 
 - Total Income: ฿${totalIncome.toLocaleString()}
 - Total Expense: ฿${totalExpense.toLocaleString()}
 - Net Balance: ฿${(totalIncome - totalExpense).toLocaleString()}
+
+# Fixed costs
+${fixedLines}
 
 # Expenses by Category
 ${expensesList}
@@ -161,17 +170,22 @@ export async function generateDashboardInsight(language: string = 'en', timefram
     return { advice: null, reason: 'NO_DATA' as const }
   }
 
+  const fixedLines = fixedCostContext((await loadFixedCosts(prismaUser.id)).summary, language === 'th' ? 'th' : 'en')
   const prompt = language === 'th'
     ? `คุณเป็นผู้ช่วยยามการเงินส่วนตัว ข้อมูลกระแสเงินสด ${timeText} ของผู้ใช้งาน:
 รายรับ: ฿${income}
 รายจ่าย: ฿${expense}
 คงเหลือ: ฿${income - expense}
+ค่าใช้จ่ายคงที่:
+${fixedLines}
 
 ให้คำแนะนำหรือกำลังใจสั้นๆ เป็นกันเอง เพียงแค่ 1 ประโยค (ไม่เกิน 20 คำ) โดยอิงจากสัดส่วนของรายรับและรายจ่ายนี้ ตอบเป็นภาษาไทยเท่านั้น และห้ามใช้ markdown`
     : `You are a Personal Assistant. Client's ${timeText} cash flow:
 Income: ฿${income}
 Expense: ฿${expense}
 Net: ฿${income - expense}
+Fixed costs:
+${fixedLines}
 
 Provide EXACTLY ONE short, friendly, punchy sentence (max 20 words) giving an insight or encouragement based on this ratio. Reply in English. Do not use markdown.`;
 
