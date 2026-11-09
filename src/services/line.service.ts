@@ -11,7 +11,7 @@ import { proPlanFor, verifySlipImage } from "@/lib/slip-verify";
 import { startProTrial } from "@/lib/trial";
 import { billReference, parseBillAnswer } from "@/lib/bills";
 import { siteUrl } from "@/lib/site";
-import { askAmountMessage, budgetTone, categoryLabel, categoryPickerMessage, confirmCard, duplicateCard, inviteCard, loginCard, proActivatedCard, recordedCard, summaryCard, summaryPickerCard, upsellCard } from "@/lib/line-cards";
+import { askAmountMessage, budgetTone, categoryLabel, categoryPickerMessage, confirmCard, duplicateCard, inviteCard, loginCard, welcomeCard, proActivatedCard, recordedCard, summaryCard, summaryPickerCard, upsellCard } from "@/lib/line-cards";
 import { normalizeAmountText, parseAmountOnly } from "@/lib/amount-text";
 import { categoryChoices, DRAFT_TTL_MS, editItem, parseDraftItems, parseEntryAction, typeForCategory, type DraftItem, type EntryAction } from "@/lib/pending-entry";
 import { buildSummary, isSummaryRequest, parseSummaryAnswer, summaryRange, type SummaryPeriod } from "@/lib/summary";
@@ -75,6 +75,19 @@ const imageQueue = new Map<string, BatchQueue>();
  * Handles incoming LINE Webhook events.
  */
 export async function handleLineEvent(event: any) {
+  // Someone added PaoPao as a friend (or unblocked it): explain how to use it (a free reply)
+  if (event.type === "follow" && event.source?.userId && event.replyToken) {
+    const user = await getOrCreateUser(event.source.userId);
+    const hasPaid = (await prisma.subscriptionPayment.count({ where: { userId: user.id } })) > 0;
+    const card = welcomeCard({
+      name: user.name,
+      proUntil: isProActive(user) ? user.proExpiresAt : null,
+      trialEligible: isTrialEligible(user, hasPaid),
+      trialDays: TRIAL_DAYS,
+      dashboardUrl: appUrl("/"),
+    });
+    return reply(event.replyToken, [card], card.altText);
+  }
   if (event.type === "postback" && event.source?.userId && typeof event.postback?.data === "string") {
     const period = parseSummaryAnswer(event.postback.data);
     if (period) return handleSummaryAnswer(event.source.userId, event.replyToken, period);

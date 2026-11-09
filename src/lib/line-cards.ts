@@ -266,6 +266,49 @@ export function proActivatedCard(opts: { expiresAt: Date; kind: "MONTHLY" | "YEA
   }))
 }
 
+/**
+ * Sent when someone adds PaoPao as a friend: how to use it in three steps, with a "try it" button
+ * that sends a sample entry (it only becomes a draft to confirm, nothing is saved by itself).
+ */
+export function welcomeCard(opts: { name?: string | null; proUntil: Date | null; trialEligible: boolean; trialDays: number; dashboardUrl: string }): FlexMessage {
+  const { name, proUntil, trialEligible, trialDays, dashboardUrl } = opts
+  const hello = name && name !== "LINE User" ? `สวัสดีครับคุณ${name.split(/\s+/)[0]} 👋` : "สวัสดีครับ 👋"
+  const step = (n: number, title: string, detail: string): FlexBox => box("horizontal", [
+    box("vertical", [text(String(n), { size: "sm", weight: "bold", color: "#FFFFFF", align: "center" })],
+      { width: "24px", height: "24px", cornerRadius: "12px", backgroundColor: COLORS.primary, justifyContent: "center", flex: 0 }),
+    box("vertical", [text(title, { weight: "bold", size: "sm" }), text(detail, { size: "xs", color: COLORS.muted, wrap: true })], { spacing: "xs" }),
+  ], { spacing: "md", margin: "lg" })
+  const proLine = proUntil
+    ? `⭐ คุณใช้ Pro ได้ถึง ${bkkDate(proUntil)}: ส่งรูปสลิปมาบันทึกได้เลย`
+    : trialEligible
+      ? `⭐ พิมพ์ "ทดลองใช้" เพื่อใช้ Pro ฟรี ${trialDays} วัน (ส่งรูปสลิป บิลประจำ แชทกับ AI)`
+      : "⭐ อัปเกรด Pro เพื่อส่งรูปสลิป บิลประจำ และแชทกับ AI"
+  const quick: messagingApi.QuickReply = { items: [
+    { type: "action", action: { type: "message", label: "สรุป", text: "สรุป" } },
+    { type: "action", action: { type: "message", label: "ส่งสลิป", text: "ส่งสลิป" } },
+    ...(trialEligible && !proUntil ? [{ type: "action" as const, action: { type: "message" as const, label: "ทดลองใช้ Pro", text: "ทดลองใช้" } }] : []),
+    { type: "action", action: { type: "message", label: "ชวนเพื่อน", text: "ชวนเพื่อน" } },
+  ] }
+  return flex(`${hello} เป๋าเป๋าช่วยจดรายรับรายจ่ายใน LINE: พิมพ์ "กาแฟ 65" แล้วแตะบันทึก พิมพ์ "สรุป" เพื่อดูยอด`, bubble({
+    header: box("vertical", [
+      text("🐱 ยินดีต้อนรับสู่เป๋าเป๋า", { weight: "bold", size: "lg", color: "#FFFFFF" }),
+      text(hello, { size: "sm", color: "#FFFFFF" }),
+    ], { backgroundColor: COLORS.primary, paddingAll: "18px" }),
+    body: box("vertical", [
+      text("จดรายรับรายจ่ายได้ในแชทนี้เลย แค่ 3 ขั้น", { size: "sm", wrap: true }),
+      step(1, "พิมพ์รายการกับยอดเงิน", `เช่น "กาแฟ 65" หรือ "ข้าว 50 ชาไทย 35" รายรับก็พิมพ์ได้ เช่น "เงินเดือน 25000"`),
+      step(2, "ตรวจการ์ดแล้วแตะบันทึก", "แก้ยอด เปลี่ยนหมวด หรือสลับรายรับ/รายจ่ายได้ก่อนบันทึก"),
+      step(3, "ดูภาพรวม", `พิมพ์ "สรุป" ดูยอดวันนี้ เดือนนี้ ปีนี้ หรือเปิดแดชบอร์ดดูกราฟและเป้าหมาย`),
+      { type: "separator", color: COLORS.border, margin: "lg" },
+      text(proLine, { size: "xs", color: COLORS.muted, wrap: true, margin: "lg" }),
+    ], { paddingAll: "16px" }),
+    footer: box("vertical", [
+      actionButton({ type: "message", label: "ลองบันทึก \"กาแฟ 65\"", text: "กาแฟ 65" }, true),
+      uriButton("เปิดแดชบอร์ด", dashboardUrl, false),
+    ], { spacing: "sm" }),
+  }), quick)
+}
+
 /** A Free user sent a photo: explain the plan, offer the trial and the upgrade. */
 export function upsellCard(opts: { wasOtherSlip: boolean; trialEligible: boolean; trialDays: number; monthly: { priceThb: number; days: number }; yearlyThb: number; plansUrl: string }): FlexMessage {
   const { wasOtherSlip, trialEligible, trialDays, monthly, yearlyThb, plansUrl } = opts
