@@ -10,23 +10,25 @@ import { fetchProfileDataCached } from "@/lib/clientCache"
 import { getAvailableRewards, redeemReward, getUserClaims } from "@/features/quests/actions"
 import { toast } from "sonner"
 import { useLanguage } from "@/contexts/LanguageContext"
+import { cacheKeys } from "@/lib/cache-keys"
+import { invalidateAll, load as loadCached, peek } from "@/lib/data-cache"
 import { rewardText } from "@/lib/localized"
 
 export default function RewardsPage() {
   const { t, locale, language } = useLanguage()
-  const [points, setPoints] = useState<number | null>(null)
-  const [rewards, setRewards] = useState<any[]>([])
-  const [claims, setClaims] = useState<any[]>([])
+  const [points, setPoints] = useState<number | null>(() => peek<Awaited<ReturnType<typeof fetchProfileDataCached>>>(cacheKeys.profile)?.paoPoints ?? null)
+  const [rewards, setRewards] = useState<any[]>(() => peek<Awaited<ReturnType<typeof getAvailableRewards>>>(cacheKeys.rewards) ?? [])
+  const [claims, setClaims] = useState<any[]>(() => peek<Awaited<ReturnType<typeof getUserClaims>>>(cacheKeys.claims) ?? [])
   const [loading, setLoading] = useState(false)
   const redeemLockRef = React.useRef(false)
   const [redeemingId, setRedeemingId] = React.useState<string | null>(null)
   
-  const loadData = async () => {
-    fetchProfileDataCached().then(user => {
+  const loadData = async (force = false) => {
+    fetchProfileDataCached(force).then(user => {
       if (user) setPoints(user.paoPoints || 0)
     })
-    getAvailableRewards().then(setRewards)
-    getUserClaims().then(setClaims)
+    loadCached(cacheKeys.rewards, getAvailableRewards, { force }).then(setRewards)
+    loadCached(cacheKeys.claims, getUserClaims, { force }).then(setClaims)
   }
 
   useEffect(() => { loadData() }, [])
@@ -47,8 +49,9 @@ export default function RewardsPage() {
       if (res.success) {
         toast.success(t('rewards.redeemed', { name: rewardText(item, language).name }), { description: t('rewards.redeemed_desc') })
         setPoints(prev => prev! - item.points)
+        invalidateAll()
         window.dispatchEvent(new Event('points_updated')) // Notify Header
-        loadData() // Refresh list of claims
+        loadData(true) // Refresh list of claims
       } else {
         toast.error(t(res.error || 'rewards.redeem_failed'))
       }

@@ -11,14 +11,15 @@ import { generateFinancialAdvice } from "@/features/ai/actions"
 import { useLanguage } from "@/contexts/LanguageContext"
 
 export default function AIInsightsPage() {
-  const { t, language } = useLanguage()
+  const { t, language, hydrated } = useLanguage()
   const [advice, setAdvice] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetchAdvice()
-  }, [language])
+    // Before hydration the language is always Thai; asking then would give English users Thai advice
+    if (hydrated) fetchAdvice()
+  }, [language, hydrated])
 
   const generating = useRef(false)
   const fetchAdvice = async () => {

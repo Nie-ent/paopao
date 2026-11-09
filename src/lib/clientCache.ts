@@ -1,29 +1,9 @@
 import { getProfileData } from "@/features/user/actions"
+import { cacheKeys } from "@/lib/cache-keys"
+import { clearAll, load } from "@/lib/data-cache"
 
-let profilePromise: Promise<any> | null = null;
-let profileData: any = null;
+/** The signed-in user's record, shared by the header and pages (see src/lib/data-cache.ts). */
+export const fetchProfileDataCached = (force = false) => load(cacheKeys.profile, getProfileData, { force })
 
-// Memory Cache for Client Side so we don't spam Server Action requests via useEffect
-export const fetchProfileDataCached = (force = false) => {
-   if (force || typeof window === 'undefined') {
-      profileData = null;
-      profilePromise = null;
-      if (typeof window === 'undefined') return getProfileData();
-   }
-   if (profileData) return Promise.resolve(profileData);
-   if (!profilePromise) {
-      profilePromise = getProfileData().then(d => {
-         profileData = d;
-         return d;
-      }).catch(e => {
-         profilePromise = null;
-         throw e;
-      })
-   }
-   return profilePromise;
-}
-
-export const clearProfileCache = () => {
-    profileData = null;
-    profilePromise = null;
-}
+/** Forgets all cached data, e.g. on sign out. */
+export const clearProfileCache = () => clearAll()

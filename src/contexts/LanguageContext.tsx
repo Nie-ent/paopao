@@ -14,6 +14,11 @@ type LanguageContextType = {
   tc: (categoryName: string) => string
   /** Locale for Intl / toLocaleString */
   locale: 'th-TH' | 'en-US'
+  /**
+   * False during server render and hydration, when `language` is still the server default
+   * ('th'). Effects that fetch language-specific data wait for it to avoid a wasted request.
+   */
+  hydrated: boolean
 }
 
 const translations: Record<Language, Record<string, string>> = { en, th }
@@ -29,6 +34,11 @@ function subscribe(listener: () => void) {
   return () => { listeners.delete(listener) }
 }
 
+/** The language the app will show once hydrated (saved choice, else the browser's). Client only. */
+export function readSavedLanguage(): Language {
+  return getLanguageSnapshot()
+}
+
 function getLanguageSnapshot(): Language {
   let saved: string | null = null
   try { saved = localStorage.getItem(STORAGE_KEY) } catch {}
@@ -38,9 +48,11 @@ function getLanguageSnapshot(): Language {
 }
 
 const getServerLanguage = (): Language => 'th'
+const noopSubscribe = () => () => {}
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const language = useSyncExternalStore(subscribe, getLanguageSnapshot, getServerLanguage)
+  const hydrated = useSyncExternalStore(noopSubscribe, () => true, () => false)
 
   useEffect(() => {
     document.documentElement.lang = language
@@ -62,7 +74,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const tc = useCallback((categoryName: string) => translations[language][`category.${categoryName}`] ?? categoryName, [language])
 
   return (
-    <LanguageContext.Provider value={{ language, setLanguage, t, tc, locale: language === 'th' ? 'th-TH' : 'en-US' }}>
+    <LanguageContext.Provider value={{ language, setLanguage, t, tc, locale: language === 'th' ? 'th-TH' : 'en-US', hydrated }}>
       {children}
     </LanguageContext.Provider>
   )

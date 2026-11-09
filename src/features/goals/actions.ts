@@ -17,11 +17,12 @@ export async function getGoals() {
     orderBy: { deadline: 'asc' }
   })
 
-  for (const goal of goals) {
-    if (goal.type !== "FINANCIAL") continue
+  // One query per synced goal, run together rather than one after another
+  await Promise.all(goals.map(async goal => {
+    if (goal.type !== "FINANCIAL") return
     const synced = await trackedGoalAmount(goal)
     if (synced !== null) goal.currentAmount = synced
-  }
+  }))
 
   return { data: goals }
 }

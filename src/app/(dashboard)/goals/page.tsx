@@ -21,12 +21,15 @@ import { getCategoryColors } from "@/features/settings/actions"
 import { goalSyncCategories } from "@/lib/goal-sync-options"
 import { toast } from "sonner"
 import { useLanguage } from "@/contexts/LanguageContext"
+import { cacheKeys } from "@/lib/cache-keys"
+import { invalidateAll, load as loadCached, peek } from "@/lib/data-cache"
 import { cn } from "@/lib/utils"
 
 export default function GoalsPage() {
   const { t, tc, locale } = useLanguage()
-  const [goals, setGoals] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+  // Cached goals (another visit or the app snapshot) show at once, then refresh
+  const [goals, setGoals] = useState<any[]>(() => peek<Awaited<ReturnType<typeof getGoals>>>(cacheKeys.goals)?.data ?? [])
+  const [loading, setLoading] = useState(() => !peek(cacheKeys.goals))
   const [isSubmitLoading, setIsSubmitLoading] = useState(false)
   const [isSheetOpen, setIsSheetOpen] = useState(false)
   const [goalToDelete, setGoalToDelete] = useState<string | null>(null)
@@ -36,7 +39,7 @@ export default function GoalsPage() {
   const togglingIds = useRef(new Set<string>())
   const { run: runDelete, pending: isDeleting } = useSingleFlight()
   // Built-in and the user's own categories, for "auto-sync with category"
-  const [categoryNames, setCategoryNames] = useState<string[]>([])
+  const [categoryNames, setCategoryNames] = useState<string[]>(() => Object.keys(peek<Awaited<ReturnType<typeof getCategoryColors>>>(cacheKeys.categoryColors)?.categoryColors ?? {}))
   
   const [sheetType, setSheetType] = useState<"FINANCIAL" | "TODO" | "DAILY">("FINANCIAL")
   const [formData, setFormData] = useState({
@@ -74,7 +77,7 @@ export default function GoalsPage() {
 
   useEffect(() => {
     fetchGoals()
-    getCategoryColors().then(res => setCategoryNames(Object.keys(res.categoryColors ?? {}))).catch(() => {})
+    loadCached(cacheKeys.categoryColors, getCategoryColors).then(res => setCategoryNames(Object.keys(res.categoryColors ?? {}))).catch(() => {})
   }, [])
 
   const syncCats = goalSyncCategories(categoryNames)
@@ -110,16 +113,17 @@ export default function GoalsPage() {
           }, 1000)
           
           // Auto complete in DB
-          toggleGoalCompletion(goal.id, true)
+          toggleGoalCompletion(goal.id, true).then(invalidateAll)
         }
       })
     }
   }, [goals])
 
-  const fetchGoals = async () => {
+  const fetchGoals = async (force = false) => {
     try {
-      setLoading(true)
-      const res = await getGoals()
+      // Only show the spinner when there is nothing to show yet
+      if (!peek(cacheKeys.goals)) setLoading(true)
+      const res = await loadCached(cacheKeys.goals, getGoals, { force })
       if (res?.data) {
         setGoals(res.data)
       } else {
@@ -161,7 +165,8 @@ export default function GoalsPage() {
           description: t('goals.toast.saved_desc')
         })
         setIsSheetOpen(false)
-        fetchGoals()
+        invalidateAll()
+        fetchGoals(true)
       } else {
         toast.error(t('common.error'), { description: res.error || t('common.something_wrong') })
       }
@@ -176,7 +181,8 @@ export default function GoalsPage() {
     const res = await deleteGoal(goalToDelete)
     if (res.success) {
       toast.success(t('goals.toast.deleted'), { description: t('goals.toast.deleted_desc') })
-      fetchGoals()
+      invalidateAll()
+      fetchGoals(true)
     } else {
       toast.error(t('common.error'), { description: t('goals.toast.delete_failed') })
     }
@@ -192,9 +198,10 @@ export default function GoalsPage() {
     
     try {
       const res = await toggleGoalCompletion(id, !isCompleted)
+      invalidateAll()
       if (!res.success) {
         toast.error(t('goals.toast.status_failed'))
-        fetchGoals() // revert
+        fetchGoals(true) // revert
       }
     } finally {
       togglingIds.current.delete(id)
