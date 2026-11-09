@@ -77,3 +77,24 @@ schema until the new code is live everywhere, because the old code still selects
 Once it is deployed, remove these fields from `schema.prisma` and run
 `npx prisma migrate dev --name drop_unused_columns` (generates the `DROP COLUMN`s), then deploy
 that migration the usual way.
+
+## Encrypted columns and retention
+
+Free text users write is encrypted in the app before it reaches the database (AES-256-GCM,
+`src/lib/field-crypto.ts`, applied to every query by the Prisma extension in `src/lib/db.ts`):
+`Transaction.note`, `ChatSession.title`, `ChatSession.messages` and `PendingEntry.items`.
+Amounts, categories and dates stay plain so dashboards, crons and limits work in SQL. Encrypted
+columns can't be filtered or searched in SQL.
+
+- **Key:** `DATA_ENCRYPTION_KEY` (32 bytes, base64: `openssl rand -base64 32`), set in Vercel
+  for Production and Preview. Keep a copy in a password manager: data written with it can't be
+  read without it. Without the key the app keeps working but writes plain text (it logs a warning).
+- **Turning it on in production (in order):**
+  1. Add `DATA_ENCRYPTION_KEY` in Vercel, then deploy. New writes are encrypted; old plain rows
+     are still read as they are.
+  2. Encrypt the old rows: `DATA_ENCRYPTION_KEY=… npm run db:encrypt-existing` (counts only), then
+     the same with `-- --apply`. It's safe to re-run and to run while the app is live.
+  3. After step 2, rolling back to a build older than this change shows `enc:v1:…` instead of notes.
+- **Retention** (`src/lib/retention.ts`, run by the daily digest cron): AI chats with no new
+  message for 90 days, expired LINE drafts and admin sign-in attempts older than 30 days are
+  deleted. The privacy policy (`pdpa.s4.body`) states the same periods.

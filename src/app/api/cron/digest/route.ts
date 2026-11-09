@@ -5,6 +5,7 @@ import { buildMorningBrief } from "@/lib/morning-brief";
 import { morningBriefCard } from "@/lib/line-cards";
 import { appLink } from "@/lib/site";
 import { isAuthorizedCron } from "@/lib/cron-auth";
+import { purgeExpiredData } from "@/lib/retention";
 
 // This endpoint should be triggered by Vercel Cron every morning (e.g. 08:00 AM)
 export async function GET(req: Request) {
@@ -13,6 +14,9 @@ export async function GET(req: Request) {
     if (!isAuthorizedCron(req)) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
+
+    // Daily clean-up of data past its retention period; a failure here must not stop the digest
+    const purged = await purgeExpiredData().catch(e => { console.error("Retention purge failed:", e); return null });
 
     // We calculate "Yesterday" strictly in Thailand Time (UTC+7) bounds.
     const now = new Date();
@@ -64,7 +68,7 @@ export async function GET(req: Request) {
       }
     }
 
-    return NextResponse.json({ success: true, usersMessaged: sentCount }, { status: 200 });
+    return NextResponse.json({ success: true, usersMessaged: sentCount, purged }, { status: 200 });
 
   } catch (error) {
     console.error("Cron Digest Error:", error);
