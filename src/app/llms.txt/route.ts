@@ -1,6 +1,7 @@
 import { DESCRIPTION, FAQS, FREE_FEATURES, PRO_FEATURES } from "@/features/marketing/content"
 import { PRO_PLANS, TRIAL_DAYS } from "@/lib/subscription"
 import { siteUrl } from "@/lib/site"
+import { GUIDES } from "@/features/marketing/guides"
 
 export const dynamic = "force-static"
 
@@ -24,6 +25,10 @@ ${PRO_FEATURES.map(f => `  - ${f}`).join("\n")}
 - [Home](${base}/): what PaoPao is, features, FAQ
 - [Pricing](${base}/pricing): plans, comparison table, how to pay
 - [Privacy policy (PDPA)](${base}/privacy)
+- [Guides (Thai)](${base}/guides)
+
+## Guides (Thai)
+${GUIDES.map(g => `- [${g.h1}](${base}/guides/${g.slug}): ${g.answer}`).join("\n")}
 
 ## FAQ (Thai)
 ${FAQS.map(f => `### ${f.q}\n${f.a}`).join("\n\n")}

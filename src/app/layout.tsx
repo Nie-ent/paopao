@@ -30,6 +30,11 @@ export const metadata: Metadata = {
     images: [{ url: "/marketing/og.jpg", width: 1200, height: 630, alt: "แดชบอร์ดรายรับรายจ่ายของเป๋าเป๋า" }],
   },
   twitter: { card: "summary_large_image" },
+  // Search Console / Bing Webmaster Tools ownership, when verified by meta tag
+  verification: {
+    ...(process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION ? { google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION } : {}),
+    ...(process.env.NEXT_PUBLIC_BING_SITE_VERIFICATION ? { other: { "msvalidate.01": process.env.NEXT_PUBLIC_BING_SITE_VERIFICATION } } : {}),
+  },
   // App pages are private; marketing pages opt back in to indexing
   robots: { index: false, follow: false },
 };
