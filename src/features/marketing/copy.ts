@@ -164,6 +164,7 @@ const EN: MarketingCopy = {
     { title: "Money summary in LINE", body: "Your income and spending delivered in LINE every Monday, or every morning if you prefer. No app to open.", pro: true },
     { title: "Import bank statements", body: `Upload a PDF (password-protected ones too), Excel/CSV or a screenshot. Duplicates are flagged before saving (${LIMITS.statementImportsPerMonth.PRO} a month).`, pro: true },
     { title: "Goals that fill themselves", body: "Savings or debt-payoff goals track progress from a category, e.g. a ฿7,000 debt goal fills up as you log repayments. Plus to-dos with LINE reminders." },
+    { title: "See where money leaks", body: "All your monthly fixed costs in one place: how much of your income they take, what's essential and what you could cut, and the subscriptions you forgot you still pay for." },
     { title: "AI money coach", body: `Ask how to save or pay off debt; the AI looks at your real entries and can set up goals for you (${LIMITS.chatPerMonth.PRO} messages a month).`, pro: true },
     { title: "Your data stays yours", body: "Export to Excel on any plan, ask for deletion under Thailand's PDPA, and we never sell your data." },
   ],
@@ -182,6 +183,7 @@ const EN: MarketingCopy = {
     "Dashboard, all transactions and Excel export",
     "Savings goals and to-dos with reminders",
     `AI money tips on your dashboard`,
+    `Fixed-cost summary that finds forgotten subscriptions`,
     `Try Pro free for ${TRIAL_DAYS} days`,
   ],
   proFeatures: [

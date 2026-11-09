@@ -2,7 +2,7 @@
 
 import { getCurrentUser } from "@/lib/current-user"
 import { cacheKeys, defaultTransactionQuery, type Locale } from "@/lib/cache-keys"
-import { getBills } from "@/features/bills/actions"
+import { getBills, getFixedCosts } from "@/features/bills/actions"
 import { getGoals } from "@/features/goals/actions"
 import { getCategoryColors } from "@/features/settings/actions"
 import { getSubscriptionData } from "@/features/subscription/actions"
@@ -28,6 +28,7 @@ export async function getAppSnapshot(input: { month: number; year: number; local
 
   const parts: [string, () => Promise<unknown>][] = [
     [cacheKeys.bills, getBills],
+    [cacheKeys.fixedCosts, getFixedCosts],
     [cacheKeys.goals, getGoals],
     [cacheKeys.categoryColors, getCategoryColors],
     [cacheKeys.subscription, getSubscriptionData],

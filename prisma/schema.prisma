@@ -287,6 +287,8 @@ model RecurringBill {
   /// MONTHLY: 1–31; months without that day use their last day
   dayOfMonth  Int?
   active      Boolean       @default(true)
+  /// Essential (rent, power) or could be cut (subscriptions): splits fixed costs (src/lib/fixed-costs.ts)
+  essential   Boolean       @default(true)
   /// Bangkok day (YYYY-MM-DD) the bill was last asked about, so a re-run cron doesn't ask twice
   lastAskedOn String?
 

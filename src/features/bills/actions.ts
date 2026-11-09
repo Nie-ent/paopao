@@ -5,6 +5,7 @@ import prisma from "@/lib/db"
 import { getCurrentUser } from "@/lib/current-user"
 import { isProActive, LIMITS } from "@/lib/subscription"
 import { MAX_AMOUNT } from "@/lib/money"
+import { loadFixedCosts } from "@/lib/finance-context"
 
 const billSchema = z.object({
   name: z.string().trim().min(1).max(40),
@@ -14,6 +15,7 @@ const billSchema = z.object({
   dayOfWeek: z.number().int().min(0).max(6).nullable(),
   dayOfMonth: z.number().int().min(1).max(31).nullable(),
   active: z.boolean().default(true),
+  essential: z.boolean().default(true),
 }).refine(b => b.frequency !== "WEEKLY" || b.dayOfWeek !== null, { path: ["dayOfWeek"] })
   .refine(b => b.frequency !== "MONTHLY" || b.dayOfMonth !== null, { path: ["dayOfMonth"] })
 
@@ -31,10 +33,13 @@ export async function getBills() {
   return { bills, isPro: isProActive(user), limit: LIMITS.proRecurringBills }
 }
 
+/**
+ * Saves a fixed cost / recurring bill. Every plan can list fixed costs (the summary and leak
+ * finder are free); only Pro accounts get asked about them on LINE (cron/reminders).
+ */
 export async function saveBill(id: string | null, input: BillInput) {
   const user = await getCurrentUser()
   if (!user) return { error: "Unauthorized" }
-  if (!isProActive(user)) return { error: "PRO_ONLY" }
   const parsed = billSchema.safeParse(input)
   if (!parsed.success) return { error: "INVALID" }
   const data = normalize(parsed.data)
@@ -58,4 +63,19 @@ export async function deleteBill(id: string) {
   if (!user) return { error: "Unauthorized" }
   const { count } = await prisma.recurringBill.deleteMany({ where: { id, userId: user.id } })
   return count ? { success: true } : { error: "NOT_FOUND" }
+}
+
+/** Marks a fixed cost as essential or as one that could be cut. */
+export async function setBillEssential(id: string, essential: boolean) {
+  const user = await getCurrentUser()
+  if (!user) return { error: "Unauthorized" }
+  const { count } = await prisma.recurringBill.updateMany({ where: { id, userId: user.id }, data: { essential: !!essential } })
+  return count ? { success: true } : { error: "NOT_FOUND" }
+}
+
+/** Fixed-cost summary (vs. average income) and payments that look monthly but aren't listed. */
+export async function getFixedCosts() {
+  const user = await getCurrentUser()
+  if (!user) return null
+  return loadFixedCosts(user.id)
 }
