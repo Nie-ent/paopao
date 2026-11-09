@@ -26,7 +26,7 @@ export async function getSubscriptionData() {
       chatFree: LIMITS.chatPerMonth.FREE,
       chatPro: LIMITS.chatPerMonth.PRO,
       proSlipsPerMonth: LIMITS.proSlipsPerMonth,
-      statementImportsPerDay: LIMITS.statementImportsPerDay.PRO,
+      statementImportsPerMonth: LIMITS.statementImportsPerMonth.PRO,
       proRecurringBills: LIMITS.proRecurringBills,
     },
     slipsUsedThisMonth: user.aiSlipsUsed,

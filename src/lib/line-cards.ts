@@ -250,7 +250,7 @@ export function duplicateCard(duplicates: Duplicate[]): FlexMessage {
 export function proActivatedCard(opts: { expiresAt: Date; kind: "MONTHLY" | "YEARLY" | "TRIAL"; billsUrl: string; plansUrl: string }): FlexMessage {
   const { expiresAt, kind, billsUrl, plansUrl } = opts
   const title = kind === "TRIAL" ? "เริ่มทดลองใช้ Pro แล้ว 🎉" : "ชำระเงินสำเร็จ 🎉"
-  const perks = ["ส่งรูปสลิป บันทึกให้อัตโนมัติ", "บิลประจำ เป๋าเป๋าถามให้ทาง LINE", "สรุปการเงินทุกเช้า", "นำเข้า Statement ธนาคาร"]
+  const perks = ["ส่งรูปสลิป บันทึกให้อัตโนมัติ", "บิลประจำ เป๋าเป๋าถามให้ทาง LINE", "สรุปการเงินทาง LINE", "นำเข้า Statement ธนาคาร"]
   return flex(`${title} ใช้ PaoPao Pro ได้ถึง ${bkkDate(expiresAt)}`, bubble({
     header: box("vertical", [
       text("PaoPao Pro", { weight: "bold", size: "xl", color: "#FFFFFF" }),
@@ -279,7 +279,7 @@ export function upsellCard(opts: { wasOtherSlip: boolean; trialEligible: boolean
       box("vertical", [text("กาแฟ 65", { color: "#FFFFFF", size: "sm" })], { backgroundColor: "#06C755", cornerRadius: "12px", paddingAll: "8px", paddingStart: "12px", paddingEnd: "12px", margin: "sm", width: "90px" }),
       { type: "separator", color: COLORS.border, margin: "lg" },
       text(`Pro ฿${monthly.priceThb}/${monthly.days} วัน หรือ ฿${yearlyThb}/ปี`, { weight: "bold", margin: "lg" }),
-      text("ส่งรูปสลิป · บิลประจำที่ถามให้ · สรุปทุกเช้า · นำเข้า Statement", { size: "xs", color: COLORS.muted }),
+      text("ส่งรูปสลิป · บิลประจำที่ถามให้ · สรุปการเงินทาง LINE · นำเข้า Statement", { size: "xs", color: COLORS.muted }),
       text("จ่ายผ่านพร้อมเพย์แล้วส่งสลิปในแชทนี้ ไม่ตัดเงินอัตโนมัติ", { size: "xs", color: COLORS.muted }),
     ], { spacing: "sm", paddingAll: "16px" }),
     footer: box("vertical", buttons, { spacing: "sm" }),
@@ -311,15 +311,17 @@ export function billQuestionCard(bills: AskBill[], actions: BillAction[], quickR
   }), quickReply)
 }
 
-/** Morning brief for yesterday (Pro). */
-export function morningBriefCard(transactions: Parameters<typeof summarizeDay>[0], day: Date, dashboardUrl: string): FlexMessage {
+/** LINE summary for yesterday or last week (Pro). */
+export function morningBriefCard(transactions: Parameters<typeof summarizeDay>[0], day: Date, dashboardUrl: string, period: "DAY" | "WEEK" = "DAY", end?: Date): FlexMessage {
+  const when = period === "WEEK" ? "สัปดาห์ที่แล้ว" : "เมื่อวาน"
   const { spent, income, topCategories, tip } = summarizeDay(transactions)
   const stat = (label: string, value: string, color: string): FlexBox =>
     box("vertical", [text(label, { size: "xs", color: COLORS.muted }), text(value, { size: "xl", weight: "bold", color, wrap: false })], { flex: 1 })
   const top = topCategories.slice(0, 3)
   const max = top[0]?.amount || 1
-  return flex(buildMorningBrief(transactions).replace(/\n/g, " "), bubble({
-    header: header("🌅 สรุปเมื่อวาน", bkkDate(day)),
+  const dateNote = period === "WEEK" && end ? `${bkkDate(day)} – ${bkkDate(new Date(end.getTime() - 1))}` : bkkDate(day)
+  return flex(buildMorningBrief(transactions, period).replace(/\n/g, " "), bubble({
+    header: header(period === "WEEK" ? "📅 สรุปสัปดาห์ที่แล้ว" : "🌅 สรุปเมื่อวาน", dateNote),
     body: box("vertical", [
       box("horizontal", [stat("ใช้ไป", baht(Math.round(spent)), COLORS.expense), stat("รับเข้า", baht(Math.round(income)), COLORS.income)], { spacing: "md" }),
       ...(top.length ? [
@@ -330,7 +332,7 @@ export function morningBriefCard(transactions: Parameters<typeof summarizeDay>[0
           progressBar((c.amount / max) * 100, c.color || COLORS.primary),
         ], { margin: "md" })),
       ] : []),
-      callout(spent === 0 ? (income > 0 ? "เมื่อวานไม่มีรายจ่ายเลย 💰" : "เมื่อวานไม่มียอดใช้จ่ายเลย เก่งมาก 🎉") + `\n${tip}` : `💡 ${tip}`, "info"),
+      callout(spent === 0 ? (income > 0 ? `${when}ไม่มีรายจ่ายเลย 💰` : `${when}ไม่มียอดใช้จ่ายเลย เก่งมาก 🎉`) + `\n${tip}` : `💡 ${tip}`, "info"),
     ], { paddingAll: "16px" }),
     footer: box("vertical", [uriButton("ดูแดชบอร์ด", dashboardUrl, false)], { paddingTop: "0px" }),
   }))

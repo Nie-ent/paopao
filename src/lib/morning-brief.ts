@@ -41,15 +41,16 @@ export function summarizeDay(transactions: DigestTx[]) {
   return { spent, income, topCategories, tip }
 }
 
-export function buildMorningBrief(transactions: DigestTx[]) {
+export function buildMorningBrief(transactions: DigestTx[], period: "DAY" | "WEEK" = "DAY") {
+  const when = period === "WEEK" ? "สัปดาห์ที่แล้ว" : "เมื่อวาน"
   const baht = (n: number) => `฿${Math.round(n).toLocaleString('en-US')}`
   const { spent, income, topCategories, tip } = summarizeDay(transactions)
-  const lines = ['🌅 สวัสดีตอนเช้า สรุปยอดเงินเมื่อวานมาแล้ว!']
+  const lines = [period === "WEEK" ? '📅 สรุปยอดเงินสัปดาห์ที่แล้วมาแล้ว!' : '🌅 สวัสดีตอนเช้า สรุปยอดเงินเมื่อวานมาแล้ว!']
 
   if (spent === 0) {
     lines.push(income > 0
-      ? `💰 เมื่อวานมีรายรับ ${baht(income)} และไม่มีรายจ่ายเลย เป็นวันที่เหมาะกับการเก็บเงินสุดๆ`
-      : '🎉 เมื่อวานไม่มียอดใช้จ่ายเลย เก่งมากครับ')
+      ? `💰 ${when}มีรายรับ ${baht(income)} และไม่มีรายจ่ายเลย`
+      : `🎉 ${when}ไม่มียอดใช้จ่ายเลย เก่งมากครับ`)
     lines.push(tip)
     return lines.join('\n')
   }

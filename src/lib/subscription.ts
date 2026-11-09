@@ -33,8 +33,10 @@ export const LIMITS = {
   demoChatPerDay: 30,
   /** Slip photos read by AI per month (Pro only; a fair-use cap that protects the AI budget) */
   proSlipsPerMonth: 300,
-  /** Statement imports per Bangkok day (Pro and the shared demo account only) */
-  statementImportsPerDay: { PRO: 5, DEMO: 10 },
+  /** Statement imports per Bangkok month for Pro (the AI reads the whole file, ≈ ฿1.3 each: docs/costs.md) */
+  statementImportsPerMonth: { PRO: 20 },
+  /** The shared demo account resets daily, so its statement imports are per day */
+  demoStatementImportsPerDay: 10,
   /** Payment slips a Free user can submit for verification per Bangkok day (each one costs a check) */
   slipVerificationsPerDay: 5,
   /** Recurring bills PaoPao asks about on LINE (Pro) */

@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { signOut } from "@/features/auth/actions"
 import { CategorySettingsCard } from "@/components/settings/CategorySettingsCard"
+import { BriefFrequencySetting } from "@/components/settings/BriefFrequencySetting"
 import { useLanguage } from "@/contexts/LanguageContext"
 
 /**
@@ -101,13 +102,7 @@ export default function SettingsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-medium text-foreground">{t('settings.brief_title')}</h4>
-                  <p className="text-sm text-muted-foreground">{t('settings.brief_desc')}</p>
-                </div>
-                <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/30">{t('settings.enabled')}</Badge>
-              </div>
+              <BriefFrequencySetting />
               <Separator className="bg-border/50" />
               <div className="flex items-center justify-between">
                 <div>

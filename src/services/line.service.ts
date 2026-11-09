@@ -446,7 +446,7 @@ function freePlanImageMessage(wasOtherSlip: boolean) {
   return [
     wasOtherSlip ? "สลิปนี้ไม่ใช่การชำระค่า PaoPao Pro ครับ" : null,
     `แพ็กเกจ Free บันทึกรายรับรายจ่ายด้วยการพิมพ์ เช่น "กาแฟ 65" หรือ "เงินเดือน 30000" ได้เลยครับ 📝`,
-    `ส่งรูปสลิปให้บันทึกอัตโนมัติ บิลประจำที่เป๋าเป๋าถามให้ และสรุปการเงินทุกเช้า เป็นฟีเจอร์ของ Pro (฿${MONTHLY.priceThb} / ${MONTHLY.days} วัน หรือ ฿${YEARLY.priceThb} / ปี)`,
+    `ส่งรูปสลิปให้บันทึกอัตโนมัติ บิลประจำที่เป๋าเป๋าถามให้ และสรุปการเงินทาง LINE เป็นฟีเจอร์ของ Pro (฿${MONTHLY.priceThb} / ${MONTHLY.days} วัน หรือ ฿${YEARLY.priceThb} / ปี)`,
     `ยังไม่เคยลอง? พิมพ์ "ทดลองใช้" เพื่อใช้ Pro ฟรี ${TRIAL_DAYS} วัน`,
     `อัปเกรด: โอนผ่านพร้อมเพย์ตามหน้านี้ แล้วส่งสลิปมาในแชทนี้ ${subscriptionUrl()}`,
   ].filter(Boolean).join("\n\n");
