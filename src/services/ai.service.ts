@@ -196,21 +196,44 @@ export type StatementInput =
   | { kind: "text"; text: string }
   | { kind: "file"; data: Buffer; mimeType: string }
 
-/** Extracts all transaction rows from a statement. Long text is split into chunks to stay within output limits. */
-export async function extractStatementRows(input: StatementInput, userCategories: string[] = []) {
+function statementConfig(userCategories: string[]) {
   const { SYSTEM_INSTRUCTION } = buildAIConfig(userCategories)
   const categories = Array.from(new Set([...CATEGORY_NAMES, ...userCategories]))
-  const config = {
+  return {
     systemInstruction: `${STATEMENT_INSTRUCTION}\n\n${SYSTEM_INSTRUCTION.split("IMPORTANT RULES")[0]}`,
     responseMimeType: "application/json",
     responseSchema: STATEMENT_ROW_SCHEMA(categories),
     temperature: 0,
     maxOutputTokens: 32768,
   }
+}
 
+/** Lines per chunk: small enough that each AI call finishes in well under a minute. */
+export const STATEMENT_CHUNK_LINES = 60
+
+/** Splits statement text into chunks the AI reads one at a time (each repeats the column headers). */
+export function chunkStatementText(text: string) {
+  return chunkLines(text, STATEMENT_CHUNK_LINES)
+}
+
+/** Reads the transactions in one chunk of statement text. */
+export async function extractStatementChunk(text: string, userCategories: string[] = []): Promise<RawStatementRow[]> {
+  const response = await generateContent({ contents: [`List every transaction in this part of a bank statement:\n\n${text}`] as never, config: statementConfig(userCategories) }, { timeoutMs: 40_000 })
+  if (!response.text) return []
+  try {
+    return JSON.parse(response.text) as RawStatementRow[]
+  } catch {
+    console.error("Failed to parse statement JSON chunk")
+    return []
+  }
+}
+
+/** Extracts all transaction rows from a statement in one go (images and scanned PDFs; text is chunked). */
+export async function extractStatementRows(input: StatementInput, userCategories: string[] = []) {
+  const config = statementConfig(userCategories)
   const parts: unknown[][] = input.kind === "file"
     ? [["List every transaction in this bank statement.", { inlineData: { data: input.data.toString("base64"), mimeType: input.mimeType } }]]
-    : chunkLines(input.text, 120).map(chunk => [`List every transaction in this part of a bank statement:\n\n${chunk}`])
+    : chunkLines(input.text, STATEMENT_CHUNK_LINES).map(chunk => [`List every transaction in this part of a bank statement:\n\n${chunk}`])
 
   const rows: RawStatementRow[] = []
   for (const contents of parts) {
