@@ -83,6 +83,7 @@ model User {
   subscriptionPayments SubscriptionPayment[]
   usageEvents      UsageEvent[]
   recurringBills   RecurringBill[]
+  pendingEntry     PendingEntry?
 
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @default(now()) @updatedAt
@@ -290,4 +291,20 @@ model RecurringBill {
   updatedAt   DateTime      @default(now()) @updatedAt
 
   @@index([userId])
+}
+
+/// Entries read from a LINE message, waiting for the user to tap "confirm" (one open draft per user)
+model PendingEntry {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// [{ type, amount, category, note, reference?, slipHash? }]
+  items     Json
+  /// Notices shown with the draft (duplicate slips, receiver mismatch)
+  notices   Json     @default("[]")
+  /// Index of the item whose amount the next typed number replaces, or null
+  awaitingAmount Int?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
 }

@@ -108,6 +108,7 @@ Point the LINE channel's webhook URL to `https://<your-domain>/api/line`. For lo
 | `npm run typecheck` | TypeScript check |
 | `npm run lint` | ESLint |
 | `npm run build` | Production build (runs `prisma generate`) |
+| `npm run line:rich-menu` | Publish `public/line/rich-menu.png` as the default LINE rich menu (requires `LINE_CHANNEL_ACCESS_TOKEN`) |
 
 ### Environment variables
 

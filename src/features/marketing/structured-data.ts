@@ -2,6 +2,7 @@
 import { PRO_PLANS } from "@/lib/subscription"
 import { siteUrl, SITE_NAME } from "@/lib/site"
 import { DESCRIPTION, FAQS, type Faq } from "./content"
+import { MARKETING_COPY } from "./copy"
 
 export function organizationLd() {
   return {
@@ -13,11 +14,18 @@ export function organizationLd() {
   }
 }
 
-export function websiteLd() {
-  return { "@context": "https://schema.org", "@type": "WebSite", name: SITE_NAME, url: siteUrl(), inLanguage: "th-TH" }
+export function websiteLd(locale: "th" | "en" = "th") {
+  return { "@context": "https://schema.org", "@type": "WebSite", name: SITE_NAME, url: `${siteUrl()}${locale === "en" ? "/en" : ""}`, inLanguage: locale === "en" ? "en" : "th-TH" }
 }
 
-export function softwareApplicationLd() {
+const EN_OFFERS = {
+  free: "Log income and expenses by typing in LINE, dashboard, goals and Excel export",
+  monthly: `Pro for ${PRO_PLANS.MONTHLY.days} days, paid by PromptPay, never auto-charged`,
+  yearly: `Pro for ${PRO_PLANS.YEARLY.days} days, paid by PromptPay, never auto-charged`,
+}
+
+export function softwareApplicationLd(locale: "th" | "en" = "th") {
+  const en = locale === "en"
   const offer = (name: string, price: number, description: string) => ({
     "@type": "Offer", name, price: price.toFixed(2), priceCurrency: "THB", description, url: `${siteUrl()}/pricing`,
   })
@@ -29,13 +37,13 @@ export function softwareApplicationLd() {
     applicationCategory: "FinanceApplication",
     operatingSystem: "LINE, Web",
     inLanguage: ["th", "en"],
-    description: DESCRIPTION,
-    url: siteUrl(),
+    description: en ? MARKETING_COPY.en.description : DESCRIPTION,
+    url: `${siteUrl()}${en ? "/en" : ""}`,
     image: `${siteUrl()}/marketing/og.jpg`,
     offers: [
-      offer("Free", 0, "บันทึกรายรับรายจ่ายด้วยการพิมพ์ใน LINE แดชบอร์ด เป้าหมาย และส่งออก Excel"),
-      offer("Pro รายเดือน", PRO_PLANS.MONTHLY.priceThb, `Pro ${PRO_PLANS.MONTHLY.days} วัน ชำระผ่านพร้อมเพย์ ไม่ตัดเงินอัตโนมัติ`),
-      offer("Pro รายปี", PRO_PLANS.YEARLY.priceThb, `Pro ${PRO_PLANS.YEARLY.days} วัน ชำระผ่านพร้อมเพย์ ไม่ตัดเงินอัตโนมัติ`),
+      offer("Free", 0, en ? EN_OFFERS.free : "บันทึกรายรับรายจ่ายด้วยการพิมพ์ใน LINE แดชบอร์ด เป้าหมาย และส่งออก Excel"),
+      offer(en ? "Pro monthly" : "Pro รายเดือน", PRO_PLANS.MONTHLY.priceThb, en ? EN_OFFERS.monthly : `Pro ${PRO_PLANS.MONTHLY.days} วัน ชำระผ่านพร้อมเพย์ ไม่ตัดเงินอัตโนมัติ`),
+      offer(en ? "Pro yearly" : "Pro รายปี", PRO_PLANS.YEARLY.priceThb, en ? EN_OFFERS.yearly : `Pro ${PRO_PLANS.YEARLY.days} วัน ชำระผ่านพร้อมเพย์ ไม่ตัดเงินอัตโนมัติ`),
     ],
   }
 }

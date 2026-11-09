@@ -7,6 +7,7 @@ import type { messagingApi } from "@line/bot-sdk"
 import { th } from "@/i18n/messages"
 import { buildMorningBrief, summarizeDay } from "@/lib/morning-brief"
 import { encodeSummaryAnswer, SUMMARY_PERIODS, type Summary, type SummaryPeriod } from "@/lib/summary"
+import { EDITABLE_ITEMS, encodeEntryAction, type DraftItem } from "@/lib/pending-entry"
 
 type FlexMessage = messagingApi.FlexMessage
 type FlexBox = messagingApi.FlexBox
@@ -145,6 +146,86 @@ export function recordedCard(opts: { items: RecordedItem[]; dashboardUrl: string
     body: box("vertical", rows, { spacing: "md", paddingAll: "16px" }),
     footer: box("vertical", [uriButton("ดูแดชบอร์ด", dashboardUrl, false)], { paddingTop: "0px" }),
   }))
+}
+
+// ---------- confirm before saving ----------
+
+const postback = (label: string, data: string, displayText?: string): messagingApi.PostbackAction =>
+  ({ type: "postback", label: clip(label, FLEX_LIMITS.buttonLabel), data, ...(displayText ? { displayText } : {}) })
+
+const smallButton = (action: Action): messagingApi.FlexButton =>
+  ({ type: "button", style: "link", color: COLORS.primary, height: "sm", action, flex: 1 })
+
+/**
+ * What the bot read, before anything is saved: each item with "change amount", "change category"
+ * and "income ↔ expense", then confirm or cancel. Only confirm writes to the database.
+ */
+export function confirmCard(opts: { draftId: string; items: (DraftItem & { categoryColor?: string | null })[]; notices?: string[] }): FlexMessage {
+  const { draftId, items, notices = [] } = opts
+  const editable = items.length <= EDITABLE_ITEMS
+  const shown = items.slice(0, FLEX_LIMITS.rows)
+  const rows: FlexComponent[] = []
+  shown.forEach((item, index) => {
+    if (index > 0) rows.push({ type: "separator", color: COLORS.border, margin: "md" })
+    const income = item.type === "INCOME"
+    rows.push(box("horizontal", [
+      dot(item.categoryColor || (income ? COLORS.income : COLORS.expense)),
+      box("vertical", [
+        text(categoryLabel(item.category), { weight: "bold" }),
+        text(`${income ? "รายรับ" : "รายจ่าย"}${item.note ? ` · ${item.note}` : ""}`, { size: "xs", color: COLORS.muted }),
+      ], { flex: 1 }),
+      text(`${income ? "+" : "−"}${baht(item.amount)}`, { weight: "bold", size: "md", align: "end", flex: 0, wrap: false, color: income ? COLORS.income : COLORS.expense }),
+    ], { spacing: "md", margin: index > 0 ? "md" : "none" }))
+    if (editable) {
+      rows.push(box("horizontal", [
+        smallButton(postback("แก้ยอด", encodeEntryAction({ action: "amount", draftId, index }), "แก้ยอด")),
+        smallButton(postback("เปลี่ยนหมวด", encodeEntryAction({ action: "pickCategory", draftId, index }), "เปลี่ยนหมวด")),
+        smallButton(postback(income ? "เป็นรายจ่าย" : "เป็นรายรับ", encodeEntryAction({ action: "flipType", draftId, index }))),
+      ], { spacing: "xs", margin: "xs" }))
+    }
+  })
+  if (items.length > shown.length) rows.push(text(`และอีก ${items.length - shown.length} รายการ`, { size: "xs", color: COLORS.muted, margin: "md" }))
+  if (items.length > 1) {
+    const spent = items.filter(i => i.type === "EXPENSE").reduce((s, i) => s + i.amount, 0)
+    const earned = items.filter(i => i.type === "INCOME").reduce((s, i) => s + i.amount, 0)
+    rows.push({ type: "separator", color: COLORS.border, margin: "md" })
+    if (spent) rows.push(box("horizontal", [text("รวมรายจ่าย", { color: COLORS.muted }), text(`−${baht(spent)}`, { weight: "bold", align: "end", color: COLORS.expense })], { margin: "md" }))
+    if (earned) rows.push(box("horizontal", [text("รวมรายรับ", { color: COLORS.muted }), text(`+${baht(earned)}`, { weight: "bold", align: "end", color: COLORS.income })], { margin: spent ? "sm" : "md" }))
+  }
+  for (const notice of notices) rows.push(callout(notice, "warn"))
+
+  const first = items[0]
+  const alt = items.length === 1
+    ? `ยืนยันบันทึก: ${categoryLabel(first.category)} ${first.type === "INCOME" ? "+" : "−"}${baht(first.amount)}${first.note ? ` (${first.note})` : ""}`
+    : `ยืนยันบันทึก ${items.length} รายการ`
+  return flex(alt, bubble({
+    header: header("ตรวจสอบก่อนบันทึก", items.length > 1 ? `${items.length} รายการ` : undefined),
+    body: box("vertical", rows, { spacing: "sm", paddingAll: "16px" }),
+    footer: box("vertical", [
+      actionButton(postback(items.length > 1 ? `✓ บันทึกทั้ง ${items.length} รายการ` : "✓ ยืนยันบันทึก", encodeEntryAction({ action: "save", draftId }), "ยืนยันบันทึก"), true),
+      smallButton(postback("ยกเลิก", encodeEntryAction({ action: "cancel", draftId }), "ยกเลิก")),
+    ], { spacing: "sm", paddingTop: "0px" }),
+  }))
+}
+
+/** Quick-reply buttons to pick another category for one draft item */
+export function categoryPickerMessage(draftId: string, index: number, item: DraftItem, choices: string[]): messagingApi.TextMessage {
+  return {
+    type: "text",
+    text: `เลือกหมวดใหม่ให้ "${item.note || categoryLabel(item.category)}" (ตอนนี้: ${categoryLabel(item.category)}) จากปุ่มด้านล่างครับ`,
+    quickReply: {
+      items: choices.slice(0, 13).map(category => ({
+        type: "action" as const,
+        action: postback(clip(categoryLabel(category), FLEX_LIMITS.quickReplyLabel), encodeEntryAction({ action: "setCategory", draftId, index, category }), categoryLabel(category)),
+      })),
+    },
+  }
+}
+
+/** Asks for the corrected amount; the next number the user types replaces it */
+export function askAmountMessage(item: DraftItem): messagingApi.TextMessage {
+  return { type: "text", text: `พิมพ์ยอดที่ถูกต้องของ "${item.note || categoryLabel(item.category)}" ได้เลยครับ (ตอนนี้ ${baht(item.amount)})
+เช่น 1,250 หรือ 80` }
 }
 
 function duplicateLines(duplicates: Duplicate[]) {

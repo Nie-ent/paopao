@@ -17,6 +17,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from "@/components/ui/sheet"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { getGoals, createGoal, deleteGoal, toggleGoalCompletion, updateGoal } from "@/features/goals/actions"
+import { getCategoryColors } from "@/features/settings/actions"
+import { goalSyncCategories } from "@/lib/goal-sync-options"
 import { toast } from "sonner"
 import { useLanguage } from "@/contexts/LanguageContext"
 import { cn } from "@/lib/utils"
@@ -33,6 +35,8 @@ export default function GoalsPage() {
   const submitLockRef = useRef(false)
   const togglingIds = useRef(new Set<string>())
   const { run: runDelete, pending: isDeleting } = useSingleFlight()
+  // Built-in and the user's own categories, for "auto-sync with category"
+  const [categoryNames, setCategoryNames] = useState<string[]>([])
   
   const [sheetType, setSheetType] = useState<"FINANCIAL" | "TODO" | "DAILY">("FINANCIAL")
   const [formData, setFormData] = useState({
@@ -70,7 +74,10 @@ export default function GoalsPage() {
 
   useEffect(() => {
     fetchGoals()
+    getCategoryColors().then(res => setCategoryNames(Object.keys(res.categoryColors ?? {}))).catch(() => {})
   }, [])
+
+  const syncCats = goalSyncCategories(categoryNames)
 
   useEffect(() => {
     if (goals.length > 0 && typeof window !== "undefined" && window.location.hash) {
@@ -334,12 +341,20 @@ export default function GoalsPage() {
                       options={[
                         { value: "NONE", label: t('goals.form.sync_none') },
                         { value: "DAILY_BALANCE", label: t('goals.form.sync_daily') },
-                        { value: "Investment", label: t('goals.form.sync_investment') },
-                        { value: "Saving", label: t('goals.form.sync_saving') },
+                        // Each category on its own: e.g. a 7,000 debt goal fills up from "Debt Payment" entries
+                        ...syncCats.expense.map(c => ({ value: c, label: `${t('goals.form.sync_group_expense')} · ${tc(c)}` })),
+                        ...syncCats.custom.map(c => ({ value: c, label: `${c} · ${t('transactions.form.custom_group')}` })),
+                        ...syncCats.income.map(c => ({ value: c, label: `${t('goals.form.sync_group_income')} · ${tc(c)}` })),
                         { value: "Income", label: t('goals.form.sync_income') },
                         { value: "Expense", label: t('goals.form.sync_expense') },
+                        // A goal saved with a category since renamed or removed still shows what it tracks
+                        ...(formData.trackCategory && formData.trackCategory !== "DAILY_BALANCE" && !["Income", "Expense", ...syncCats.expense, ...syncCats.income, ...syncCats.custom].includes(formData.trackCategory)
+                          ? [{ value: formData.trackCategory, label: formData.trackCategory }] : []),
                       ]}
                     />
+                    {formData.trackCategory && formData.trackCategory !== "DAILY_BALANCE" && (
+                      <p className="text-xs text-muted-foreground">{t('goals.form.sync_window')}</p>
+                    )}
                   </div>
                 )}
               </>
