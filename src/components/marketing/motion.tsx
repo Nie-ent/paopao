@@ -2,11 +2,13 @@
 
 /**
  * Motion for the marketing pages. Text is still in the server HTML (only opacity/position animate),
- * so search engines read everything; people with "reduce motion" on get no movement.
+ * so search engines read everything. With "reduce motion" on (Windows: Settings → Accessibility →
+ * Visual effects → Animation effects off, which many PCs have) MotionConfig drops movement and keeps
+ * fades: decoration stays still, but the chat demo still plays, since it shows how the product works.
  */
 import { useEffect, useState } from "react"
 import Image from "next/image"
-import { AnimatePresence, MotionConfig, motion, useReducedMotion, type Variants } from "framer-motion"
+import { AnimatePresence, MotionConfig, motion, type Variants } from "framer-motion"
 import type { ChatLine } from "@/features/marketing/copy"
 
 const EASE = [0.22, 1, 0.36, 1] as const
@@ -102,19 +104,18 @@ const bubble = {
 
 /**
  * A LINE chat that plays itself: the user types, PaoPao answers with the confirm card,
- * the save button gets tapped, then a summary. Loops; shows everything at once with reduced motion.
+ * the save button gets tapped, then a summary. Loops. With reduced motion the bubbles fade in
+ * instead of sliding (MotionConfig), so the demo still reads as a conversation.
  */
 export function HeroChat({ lines, botName, label, confirmTitle, confirmButton, savedLabel }: {
   lines: ChatLine[]; botName: string; label: string; confirmTitle: string; confirmButton: string; savedLabel: string
 }) {
-  const reduce = useReducedMotion()
   // step = how many lines are visible; odd half-steps show "typing…" before a bot line
   const [step, setStep] = useState(0)
   const [typing, setTyping] = useState(false)
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
-    if (reduce) return
     let cancelled = false
     const timers: ReturnType<typeof setTimeout>[] = []
     const at = (ms: number, fn: () => void) => timers.push(setTimeout(() => !cancelled && fn(), ms))
@@ -132,10 +133,9 @@ export function HeroChat({ lines, botName, label, confirmTitle, confirmButton, s
     // Initial state is already the first frame; start on the next tick
     at(0, play)
     return () => { cancelled = true; timers.forEach(clearTimeout) }
-  }, [lines, reduce])
-  // Reduced motion: the whole conversation, already saved
-  const shown = reduce ? lines.length : step
-  const isSaved = reduce || saved
+  }, [lines])
+  const shown = step
+  const isSaved = saved
 
   return (
     <motion.div

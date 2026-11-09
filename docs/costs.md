@@ -25,14 +25,13 @@ From real token counts (≈400–700 input, up to ≈1,200 output tokens per req
 | Read a slip photo | Flash | 0.18 |
 | Statement import | Flash | 1.26 |
 | AI chat message, Pro | Flash | 0.28 |
-| AI chat message, Free | Flash-Lite | 0.08 |
 | Dashboard insight (cached per day), Pro / Free | Flash / Lite | 0.20 / 0.06 |
 
 ## Per user per month
 
 | | Typical active user | Cap |
 |---|---|---|
-| Free | ≈ ฿3.4 (60 entries, 15 chats, 15 insights) | ≈ ฿6 (30 chats/month) |
+| Free | ≈ ฿2.2 (60 entries, 15 insights; AI chat is Pro-only) | ≈ ฿3 |
 | Pro | ≈ ฿25 (40 slips, 40 chats, 2 statements) | fair-use caps: 300 slips, 300 chats/month |
 | Pro LINE pushes | ≈ 28 (brief on days with entries + bill questions) | |
 
@@ -53,9 +52,9 @@ users active in a month.
 
 | Free → Pro conversion | Pro users | All users |
 |---|---|---|
-| 15% | ≈ 120 | ≈ 800 |
-| 10% | ≈ 138 | ≈ 1,400 |
-| 5% | ≈ 260 | ≈ 5,200 |
+| 15% | ≈ 110 | ≈ 730 |
+| 10% | ≈ 120 | ≈ 1,200 |
+| 5% | ≈ 165 | ≈ 3,300 |
 | (free users cost nothing) | ≈ 97 | |
 
 Before the changes in this PR (free chat 10/day on the main model, daily brief whenever someone
@@ -64,8 +63,8 @@ ate most of what a Pro user contributes.
 
 ## Levers
 
-- **Free users' AI** is the biggest variable: free chat and insights run on Flash-Lite, chat is
-  capped per month (`LIMITS.chatPerMonth`).
+- **Free users' AI** is the biggest variable: AI chat is a Pro feature (`LIMITS.chatPerMonth`), and
+  Free dashboard insights run on Flash-Lite.
 - **LINE pushes** decide when the ฿1,370 plan is needed: the LINE summary is weekly (Mondays) by
   default, daily or off by choice in Settings, and only sent for a period with entries. Weekly
   summaries plus bill questions keep the free 300 pushes enough for roughly 25–30 Pro users.

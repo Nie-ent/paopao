@@ -68,13 +68,14 @@ export async function sendChatMessage(sessionId: string | null, message: string,
   const user = await getProfileData()
   if (!user) return { error: "Unauthorized" }
 
-  // Free and Pro: a monthly allowance (Bangkok calendar month); the shared demo: a daily one
+  // AI chat is a Pro feature (the shared demo can try it). Pro: a monthly allowance (Bangkok
+  // calendar month); the demo: a daily one
   const isDemo = user.lineId === DEMO_LINE_ID
+  if (!isDemo && effectivePlan(user) !== "PRO") return { error: "PRO_ONLY", proOnly: true }
   const { year, month } = bangkokParts(new Date())
-  const limit = isDemo ? LIMITS.demoChatPerDay : LIMITS.chatPerMonth[effectivePlan(user)]
+  const limit = isDemo ? LIMITS.demoChatPerDay : LIMITS.chatPerMonth.PRO
   const limitPeriod = isDemo ? "day" as const : "month" as const
-  // Free chats use the cheaper model first; the demo shows the full experience
-  const models = modelsForPlan(isDemo ? "PRO" : effectivePlan(user))
+  const models = modelsForPlan("PRO")
   if (await countMessagesSince(user.id, isDemo ? startOfBangkokDay() : bangkokDate(year, month, 1)) >= limit) {
     return { error: "Chat limit reached", limitReached: true, limit, limitPeriod }
   }

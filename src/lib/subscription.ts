@@ -25,10 +25,10 @@ const DAY_MS = 24 * 60 * 60 * 1000
 
 export const LIMITS = {
   /**
-   * AI chat messages per Bangkok calendar month. Chat is the largest AI cost, so the free cap keeps
-   * a free user's AI bill small and Pro gets ten times as much (docs/costs.md).
+   * AI chat is a Pro feature (it is the largest AI cost: docs/costs.md). Messages per Bangkok
+   * calendar month.
    */
-  chatPerMonth: { FREE: 30, PRO: 300 },
+  chatPerMonth: { PRO: 300 },
   /** The shared demo account resets daily, so its chat cap is per day and account-wide */
   demoChatPerDay: 30,
   /** Slip photos read by AI per month (Pro only; a fair-use cap that protects the AI budget) */

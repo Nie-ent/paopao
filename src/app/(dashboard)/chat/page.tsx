@@ -10,6 +10,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
 import { getChatSessions, getSession, sendChatMessage } from "@/features/chat/actions"
+import { getSubscriptionData } from "@/features/subscription/actions"
+import { ProChatUpsell } from "@/components/chat/ProChatUpsell"
+import { cacheKeys } from "@/lib/cache-keys"
+import { load as loadCached, peek } from "@/lib/data-cache"
 import ReactMarkdown from "react-markdown"
 import { useLanguage } from "@/contexts/LanguageContext"
 import { LIMITS } from "@/lib/subscription"
@@ -39,6 +43,13 @@ function ChatContent() {
   const sendingRef = useRef(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const initialQuerySent = useRef(false)
+
+  // AI chat is a Pro feature (the demo can try it): Free accounts see an upgrade card instead
+  type Sub = Awaited<ReturnType<typeof getSubscriptionData>>
+  const [sub, setSub] = useState<Sub | undefined>(() => peek<Sub>(cacheKeys.subscription))
+  const loadSub = (force = false) => loadCached(cacheKeys.subscription, getSubscriptionData, { force }).then(setSub).catch(() => {})
+  useEffect(() => { loadSub() }, [])
+  const chatLocked = !!sub && !sub.chatAllowed
 
   useEffect(() => {
     loadSessions()
@@ -102,7 +113,9 @@ function ChatContent() {
     try {
       const res = await sendChatMessage(activeSessionId, msg, language)
       if (res.error) {
-        if (res.limitReached) {
+        if (res.proOnly) {
+          loadSub(true)
+        } else if (res.limitReached) {
           const monthly = res.limitPeriod === 'month'
           toast.error(t(monthly ? 'chat.limit_title_month' : 'chat.limit_title'), { description: t(monthly ? 'chat.limit_desc_month' : 'chat.limit_desc', { limit: res.limit ?? 0 }) })
           setMessages(prev => [...prev, { role: 'model', content: t(monthly ? 'chat.limit_msg_month' : 'chat.limit_msg', { limit: res.limit ?? 0, pro: PRO_CHAT_PER_MONTH }) }])
@@ -131,6 +144,10 @@ function ChatContent() {
       setIsTyping(false)
       sendingRef.current = false
     }
+  }
+
+  if (chatLocked && sub) {
+    return <ProChatUpsell trialEligible={sub.trialEligible} trialDays={sub.trialDays} chatPerMonth={sub.limits.chatPro} onUpgraded={() => loadSub(true)} />
   }
 
   return (

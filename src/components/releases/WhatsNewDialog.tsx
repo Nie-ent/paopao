@@ -26,6 +26,7 @@ export function WhatsNewDialog() {
   const dismiss = () => {
     setOpen(false)
     prime(cacheKeys.releases, [])
+    window.dispatchEvent(new Event("releases_seen"))
     markReleasesSeen().catch(() => {})
   }
 
@@ -51,6 +52,7 @@ export function WhatsNewDialog() {
             </section>
           ))}
         </div>
+        <p className="text-xs text-muted-foreground">{t("whatsnew.reread")}</p>
         <DialogFooter>
           <Button onClick={dismiss} className="w-full sm:w-auto rounded-xl">{t("whatsnew.ok")}</Button>
         </DialogFooter>

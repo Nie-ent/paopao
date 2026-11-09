@@ -36,7 +36,7 @@ export default function SubscriptionPage() {
   const expiry = data?.proExpiresAt ? formatDate(data.proExpiresAt) : ""
   const limits = data?.limits
 
-  const freeFeatures = [t('sub.free.f1'), t('sub.free.f2'), t('sub.free.f3'), t('sub.free.f4', { chat: limits?.chatFree ?? 30 })]
+  const freeFeatures = [t('sub.free.f1'), t('sub.free.f2'), t('sub.free.f3'), t('sub.free.f4')]
   const proFeatures = [
     t('sub.pro.f1', { slips: limits?.proSlipsPerMonth ?? 300 }),
     t('sub.pro.f5', { bills: limits?.proRecurringBills ?? 20 }),
