@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server'
 import { createSessionToken, verifySessionToken, SESSION_COOKIE, sessionCookieOptions } from '@/lib/session'
 import { RETURN_PATH_COOKIE, safeReturnPath } from '@/lib/return-path'
 
-const PUBLIC_PAGES = ['/welcome', '/en', '/pricing', '/privacy']
+const PUBLIC_PAGES = ['/welcome', '/en', '/pricing', '/privacy', '/r']
 
 /** LINE's in-app browser, where LIFF runs ("Line/<version>" in the user agent) */
 const isLineInAppBrowser = (request: NextRequest) => /\bLine\//i.test(request.headers.get('user-agent') ?? '')
