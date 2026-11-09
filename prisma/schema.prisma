@@ -76,6 +76,8 @@ model User {
   usageEvents      UsageEvent[]
   recurringBills   RecurringBill[]
   pendingEntry     PendingEntry?
+  /// Newest "what's new" release the user dismissed (src/features/releases/notes.ts)
+  lastSeenRelease  String?
 
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @default(now()) @updatedAt
