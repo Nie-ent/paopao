@@ -87,3 +87,36 @@ export function parseDraftItems(json: unknown): DraftItem[] {
     !!x && typeof x === "object" && (x.type === "INCOME" || x.type === "EXPENSE") &&
     isValidAmount(x.amount) && typeof x.category === "string")
 }
+
+/** A slip read this recently can take the next text without an amount as its note ("ค่าบะหมี่") */
+export const CAPTION_WINDOW_MS = 3 * 60 * 1000
+const MAX_NOTE = 120
+
+/**
+ * Text that describes something rather than records it: no digits and short. Sent right after a
+ * slip it says what the transfer was for. Expects text already passed through normalizeAmountText.
+ */
+export function isCaptionText(text: string): boolean {
+  const t = text.trim()
+  return t.length > 0 && t.length <= 60 && !/\d/.test(t)
+}
+
+/** Index of the item a caption describes: the latest slip in the draft, or -1 */
+export function captionTarget(items: DraftItem[]): number {
+  for (let i = items.length - 1; i >= 0; i--) if (items[i].slipHash || items[i].reference) return i
+  return -1
+}
+
+/**
+ * Puts the caption on the latest slip as its note, keeping what the slip said after it, and uses
+ * the caption's category when it names one of the same direction ("ค่าบะหมี่" → Food).
+ * Null when the draft has no slip.
+ */
+export function applyCaption(items: DraftItem[], caption: string, category: { type: DraftItem["type"]; category: string } | null): DraftItem[] | null {
+  const index = captionTarget(items)
+  if (index < 0) return null
+  const item = items[index]
+  const text = caption.trim()
+  const note = (item.note && !item.note.includes(text) ? `${text} · ${item.note}` : item.note?.includes(text) ? item.note : text).slice(0, MAX_NOTE)
+  return editItem(items, index, { note, ...(category && category.type === item.type ? { category: category.category } : {}) })
+}
