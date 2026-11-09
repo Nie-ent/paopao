@@ -55,21 +55,33 @@ export async function withModelFallback<T>(
   throw lastError
 }
 
-export function generateContent(params: Omit<GenerateContentParameters, "model">, { timeoutMs = DEFAULT_MODEL_TIMEOUT_MS } = {}) {
+/** The cheaper model, tried first for Free accounts' chat and insights (docs/costs.md). */
+export const AI_LITE_MODEL = (process.env.AI_LITE_MODEL || "gemini-3.5-flash-lite").trim()
+
+/**
+ * Models for a plan's chat and insights. Pro gets the main models; Free starts with the lite model,
+ * about a fifth of the price, and still falls back to the others when it is busy. Reading entries,
+ * slips and statements always uses AI_MODELS: accuracy there is about money.
+ */
+export function modelsForPlan(plan: "FREE" | "PRO") {
+  return plan === "PRO" ? AI_MODELS : [AI_LITE_MODEL, ...AI_MODELS.filter(m => m !== AI_LITE_MODEL)]
+}
+
+export function generateContent(params: Omit<GenerateContentParameters, "model">, { timeoutMs = DEFAULT_MODEL_TIMEOUT_MS, models = AI_MODELS } = {}) {
   return withModelFallback((model, { isLast }) => ai.models.generateContent({
     ...params,
     model,
     config: isLast ? params.config : { ...params.config, httpOptions: { ...params.config?.httpOptions, timeout: timeoutMs } },
-  }))
+  }), { models })
 }
 
 /** Creates a chat and sends the first message, moving to the next model if that model fails. */
-export function startChat(params: Omit<CreateChatParameters, "model">, message: SendMessageParameters) {
+export function startChat(params: Omit<CreateChatParameters, "model">, message: SendMessageParameters, { models = AI_MODELS } = {}) {
   return withModelFallback(async model => {
     const chat: Chat = ai.chats.create({ ...params, model })
     const response = await chat.sendMessage(message)
     return { chat, response }
-  })
+  }, { models })
 }
 
 export function isQuotaError(error: unknown) {

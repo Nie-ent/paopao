@@ -12,6 +12,9 @@ import { toast } from "sonner"
 import { getChatSessions, getSession, sendChatMessage } from "@/features/chat/actions"
 import ReactMarkdown from "react-markdown"
 import { useLanguage } from "@/contexts/LanguageContext"
+import { LIMITS } from "@/lib/subscription"
+
+const PRO_CHAT_PER_MONTH = LIMITS.chatPerMonth.PRO
 
 type Message = { role: 'user' | 'model', content: string, action?: any }
 type ChatSession = { id: string, title: string, updatedAt: string }
@@ -100,8 +103,9 @@ function ChatContent() {
       const res = await sendChatMessage(activeSessionId, msg, language)
       if (res.error) {
         if (res.limitReached) {
-          toast.error(t('chat.limit_title'), { description: t('chat.limit_desc', { limit: res.limit ?? 0 }) })
-          setMessages(prev => [...prev, { role: 'model', content: t('chat.limit_msg', { limit: res.limit ?? 0 }) }])
+          const monthly = res.limitPeriod === 'month'
+          toast.error(t(monthly ? 'chat.limit_title_month' : 'chat.limit_title'), { description: t(monthly ? 'chat.limit_desc_month' : 'chat.limit_desc', { limit: res.limit ?? 0 }) })
+          setMessages(prev => [...prev, { role: 'model', content: t(monthly ? 'chat.limit_msg_month' : 'chat.limit_msg', { limit: res.limit ?? 0, pro: PRO_CHAT_PER_MONTH }) }])
         } else if (res.isQuota) {
           toast.error(t('chat.error_title'), { description: t('chat.error_quota_desc') })
           setMessages(prev => [...prev, { role: 'model', content: t('chat.error_quota_msg') }])
