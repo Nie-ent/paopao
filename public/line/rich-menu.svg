@@ -18,7 +18,7 @@
     <text x="417" y="1425" font-size="65" font-weight="700">บิลประจำ</text><text x="417" y="1500" font-size="38" fill="#7A7181">รายการที่ต้องจ่าย</text>
     <g transform="translate(1250 1145)" filter="url(#shadow)"><circle r="120" fill="#FFF"/><path d="M0-88 26-20 98-17 42 29 61 100 0 58-61 100-42 29-98-17-26-20z" fill="#FFB547"/></g>
     <text x="1250" y="1425" font-size="65" font-weight="700">เป้าหมาย</text><text x="1250" y="1500" font-size="38" fill="#7A7181">วางแผนให้ถึงฝัน</text>
-    <g transform="translate(2083 1145)" filter="url(#shadow)"><circle r="120" fill="#FFF"/><path d="M-72-55h144l-14 132H-58z" fill="#FFB547"/><path d="M-84-55l35 72 49-70 49 70 35-72" fill="none" stroke="#293552" stroke-width="18" stroke-linejoin="round"/><circle cy="44" r="25" fill="#FFF"/></g>
-    <text x="2083" y="1425" font-size="65" font-weight="700">Pro / วิธีใช้</text><text x="2083" y="1500" font-size="38" fill="#7A7181">แพ็กเกจและคำแนะนำ</text>
+    <g transform="translate(2083 1145)" filter="url(#shadow)"><circle r="120" fill="#FFF"/><rect x="-80" y="-30" width="160" height="110" rx="14" fill="#FF8866"/><rect x="-92" y="-62" width="184" height="44" rx="12" fill="#FFB547"/><path d="M0-62V80" stroke="#FFF" stroke-width="20"/><path d="M0-62c-20-48-74-46-62-14 6 14 38 14 62 14zM0-62c20-48 74-46 62-14-6 14-38 14-62 14z" fill="none" stroke="#293552" stroke-width="14" stroke-linejoin="round"/></g>
+    <text x="2083" y="1425" font-size="65" font-weight="700">ชวนเพื่อน</text><text x="2083" y="1500" font-size="38" fill="#7A7181">ส่งการ์ด รับ Pro ฟรี</text>
   </g>
 </svg>

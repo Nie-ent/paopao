@@ -28,17 +28,19 @@ const richMenu = {
     { bounds: { x: 1667, y: 0, width: 833, height: 843 }, action: { type: "uri", uri: liffUrl("") } },
     { bounds: { x: 0, y: 843, width: 834, height: 843 }, action: { type: "uri", uri: liffUrl("/bills") } },
     { bounds: { x: 834, y: 843, width: 833, height: 843 }, action: { type: "uri", uri: liffUrl("/goals") } },
-    { bounds: { x: 1667, y: 843, width: 833, height: 843 }, action: { type: "uri", uri: liffUrl("/subscription") } },
+    { bounds: { x: 1667, y: 843, width: 833, height: 843 }, action: { type: "uri", uri: liffUrl("/invite") } },
   ],
 };
 
 const imagePath = resolve("public/line/rich-menu.png");
 const image = await readFile(imagePath);
 const client = new messagingApi.MessagingApiClient({ channelAccessToken: token });
+// Images go through the blob API (api-data.line.me)
+const blobClient = new messagingApi.MessagingApiBlobClient({ channelAccessToken: token });
 const { richMenuId } = await client.createRichMenu(richMenu);
 
 try {
-  await client.setRichMenuImage(richMenuId, new Blob([image], { type: "image/png" }));
+  await blobClient.setRichMenuImage(richMenuId, new Blob([image], { type: "image/png" }));
   await client.setDefaultRichMenu(richMenuId);
   console.log(`Published PaoPao rich menu: ${richMenuId}`);
 } catch (error) {
