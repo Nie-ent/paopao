@@ -2,6 +2,7 @@ import * as XLSX from "xlsx"
 import { extractText, getDocumentProxy } from "unpdf"
 import prisma from "@/lib/db"
 import { chunkStatementText, extractStatementRows, type RawStatementRow, type StatementInput } from "@/services/ai.service"
+import { statementFileKind, statementImageMime } from "@/lib/statement-file"
 import { isEncryptedPdf, markDuplicates, normalizeStatementDate, statementRowTimestamp, type StatementPreviewRow, type StatementRow } from "@/lib/statement"
 import { normalizeReference } from "@/lib/slip"
 import { isValidAmount } from "@/lib/money"
@@ -14,14 +15,12 @@ export class StatementError extends Error {
   }
 }
 
-const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]
-
 /** Turns an uploaded statement (PDF, CSV/Excel or screenshot) into what the AI should read. */
 async function toStatementInput(file: File, password: string | undefined): Promise<StatementInput> {
   const bytes = Buffer.from(await file.arrayBuffer())
-  const name = file.name.toLowerCase()
+  const kind = statementFileKind(file.name, file.type)
 
-  if (file.type === "application/pdf" || name.endsWith(".pdf")) {
+  if (kind === "pdf") {
     // Read the text layer here (decrypting protected PDFs), so long statements can be read in
     // chunks; only a scanned PDF with no text goes to the AI as a file
     const encrypted = isEncryptedPdf(bytes)
@@ -39,14 +38,15 @@ async function toStatementInput(file: File, password: string | undefined): Promi
     }
   }
 
-  if (/\.(csv|xlsx|xls)$/.test(name) || file.type.includes("spreadsheet") || file.type.includes("csv") || file.type.includes("excel")) {
+  if (kind === "sheet") {
     const workbook = XLSX.read(bytes, { type: "buffer", cellDates: true })
     // Real date cells are written as ISO dates; the default m/d/yy is ambiguous for Thai d/m statements
     const text = workbook.SheetNames.map(sheet => XLSX.utils.sheet_to_csv(workbook.Sheets[sheet], { blankrows: false, dateNF: "yyyy-mm-dd" })).join("\n")
     return { kind: "text", text }
   }
 
-  if (IMAGE_TYPES.includes(file.type)) return { kind: "file", data: bytes, mimeType: file.type }
+  const imageMime = kind === "image" ? statementImageMime(file.name, file.type) : null
+  if (imageMime) return { kind: "file", data: bytes, mimeType: imageMime }
 
   throw new StatementError("UNSUPPORTED")
 }
