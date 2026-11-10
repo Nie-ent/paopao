@@ -32,7 +32,7 @@ const richMenu = {
   ],
 };
 
-const imagePath = resolve("public/line/rich-menu.png");
+const imagePath = resolve("public/line/rich-menu.jpg");
 const image = await readFile(imagePath);
 const client = new messagingApi.MessagingApiClient({ channelAccessToken: token });
 // Images go through the blob API (api-data.line.me)
@@ -40,11 +40,18 @@ const blobClient = new messagingApi.MessagingApiBlobClient({ channelAccessToken:
 const { richMenuId } = await client.createRichMenu(richMenu);
 
 try {
-  await blobClient.setRichMenuImage(richMenuId, new Blob([image], { type: "image/png" }));
+  await blobClient.setRichMenuImage(richMenuId, new Blob([image], { type: "image/jpeg" }));
   await client.setDefaultRichMenu(richMenuId);
   console.log(`Published PaoPao rich menu: ${richMenuId}`);
 } catch (error) {
   // Avoid leaving an unusable menu behind when its image cannot be attached.
   await client.deleteRichMenu(richMenuId).catch(() => undefined);
   throw error;
+}
+
+// Older menus from this script are no longer shown; LINE allows 1,000 per channel
+const { richmenus } = await client.getRichMenuList();
+for (const old of richmenus.filter(m => m.richMenuId !== richMenuId)) {
+  await client.deleteRichMenu(old.richMenuId);
+  console.log(`Removed old rich menu: ${old.richMenuId}`);
 }
