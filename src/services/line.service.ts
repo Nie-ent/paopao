@@ -1,7 +1,7 @@
 import { lineClient, lineBlobClient } from "@/config/line";
 import { extractTransactionsFromText, extractTransactionFromImage, extractTransactionsFromImages, ExtractedTransaction } from "@/services/ai.service";
 import prisma from "@/lib/db";
-import { quickParseTransaction } from "@/services/quick-parse";
+import { classifyByKeywords, quickParseTransaction } from "@/services/quick-parse";
 import { FALLBACK_CATEGORY } from "@/lib/categories";
 import { hashImage, normalizeReference } from "@/lib/slip";
 import { Prisma } from "@prisma/client";
@@ -13,7 +13,7 @@ import { billReference, parseBillAnswer } from "@/lib/bills";
 import { siteUrl } from "@/lib/site";
 import { askAmountMessage, budgetTone, categoryLabel, categoryPickerMessage, confirmCard, duplicateCard, inviteCard, loginCard, welcomeCard, proActivatedCard, recordedCard, summaryCard, summaryPickerCard, upsellCard } from "@/lib/line-cards";
 import { normalizeAmountText, parseAmountOnly } from "@/lib/amount-text";
-import { categoryChoices, DRAFT_TTL_MS, editItem, parseDraftItems, parseEntryAction, typeForCategory, type DraftItem, type EntryAction } from "@/lib/pending-entry";
+import { applyCaption, CAPTION_WINDOW_MS, captionTarget, categoryChoices, DRAFT_TTL_MS, editItem, isCaptionText, parseDraftItems, parseEntryAction, typeForCategory, type DraftItem, type EntryAction } from "@/lib/pending-entry";
 import { buildSummary, isSummaryRequest, parseSummaryAnswer, summaryRange, type SummaryPeriod } from "@/lib/summary";
 import { isTrialEligible } from "@/lib/subscription";
 import type { messagingApi } from "@line/bot-sdk";
@@ -114,6 +114,7 @@ export async function handleLineEvent(event: any) {
     let duplicateNotice = "";
     let duplicateList: { date: Date; amount: number }[] = [];
     const slipNotices: string[] = [];
+    let captionReply: { caption: string; since: Date; wait: boolean } | null = null;
 
     if (messageEvent.message.type === "text") {
       const textMessage = messageEvent.message as any;
@@ -179,6 +180,16 @@ export async function handleLineEvent(event: any) {
 
       // "1,500", Thai digits and "1.5k" become plain numbers for the parser and the AI
       const cleanText = normalizeAmountText(textMessage.text.replace(/\n/g, ' '));
+
+      // A slip, then "ค่าบะหมี่": the text says what the slip was for, so it becomes the slip's note
+      // instead of a new entry with no amount. The slip may still be with the AI, so Pro users
+      // (the only ones whose slips are read) wait for it a little before the text is read alone.
+      if (isCaptionText(cleanText)) {
+        const since = new Date((Number(messageEvent.timestamp) || Date.now()) - CAPTION_WINDOW_MS);
+        captionReply = { caption: cleanText.trim(), since, wait: isProActive(user) };
+        const captioned = await captionSlip(user.id, actualReplyToken, captionReply.caption, since, 0);
+        if (captioned) return captioned;
+      }
       // Simple single-item messages are parsed without AI; anything else goes to the LLM
       const quick = await quickParseTransaction(cleanText.trim(), user.id);
       if (quick) {
@@ -279,6 +290,11 @@ export async function handleLineEvent(event: any) {
 
     // Filter out logically invalid transactions (like 0 THB or negative) parsed by AI
     extractedDataArray = extractedDataArray.filter(d => d && isValidAmount(d.amount));
+
+    if (extractedDataArray.length === 0 && captionReply?.wait) {
+      const captioned = await captionSlip(user.id, actualReplyToken, captionReply.caption, captionReply.since, CAPTION_WAIT_MS);
+      if (captioned) return captioned;
+    }
 
     if (extractedDataArray.length === 0) {
       return replyText(actualReplyToken, "ผมไม่สามารถอ่านจำนวนเงินที่ชัดเจนจากข้อความ/รูปภาพของคุณได้ รบกวนพิมพ์ให้ชัดเจนขึ้นหรือส่งสลิปมาอีกครั้งนะครับ! 🙏");
@@ -630,14 +646,39 @@ async function addToDraft(userId: string, entries: SlipTransaction[], notices: s
   }
 }
 
-/** The confirm card for a draft, with category colors */
-async function replyDraft(replyToken: string, userId: string, draftId: string, items: DraftItem[], notices: string[]) {
+/** How long a caption waits for the slip sent just before it to be read */
+const CAPTION_WAIT_MS = 15_000;
+const CAPTION_POLL_MS = 1_500;
+
+/**
+ * Puts `caption` on the latest slip in a draft updated since `since`, waiting up to `waitMs` for
+ * one to appear. Replies with the updated card and returns the reply, or null when there's no slip.
+ */
+async function captionSlip(userId: string, replyToken: string, caption: string, since: Date, waitMs: number) {
+  const deadline = Date.now() + waitMs;
+  for (;;) {
+    const draft = await openDraft(userId);
+    const items = draft && draft.updatedAt >= since ? parseDraftItems(draft.items) : [];
+    const updated = applyCaption(items, caption, classifyByKeywords(caption));
+    if (draft && updated) {
+      await prisma.pendingEntry.update({ where: { id: draft.id }, data: { items: updated, awaitingAmount: null } });
+      const slip = updated[captionTarget(updated)];
+      return replyDraft(replyToken, userId, draft.id, updated, noticesOf(draft.notices),
+        `📝 ใส่หมายเหตุ "${caption}" ให้สลิป ${bahtText(slip.amount)} แล้ว ตรวจแล้วกดยืนยันได้เลยครับ`);
+    }
+    if (Date.now() + CAPTION_POLL_MS > deadline) return null;
+    await new Promise(resolve => setTimeout(resolve, CAPTION_POLL_MS));
+  }
+}
+
+/** The confirm card for a draft, with category colors, after an optional line of text */
+async function replyDraft(replyToken: string, userId: string, draftId: string, items: DraftItem[], notices: string[], lead?: string) {
   const categories = await prisma.category.findMany({ where: { OR: [{ userId: null }, { userId }] }, select: { name: true, color: true } });
   const colorOf = (name: string) => categories.find(c => c.name.toLowerCase() === name.toLowerCase())?.color ?? null;
   const card = confirmCard({ draftId, items: items.map(i => ({ ...i, categoryColor: colorOf(i.category) })), notices });
   const fallback = `ตรวจสอบก่อนบันทึก:\n` + items.map((d, i) => `${i + 1}. ${d.type === "INCOME" ? "+" : "−"}${bahtText(d.amount)} ${categoryLabel(d.category)}${d.note ? ` (${d.note})` : ""}`).join("\n") +
     `\n\nแตะ "ยืนยันบันทึก" บนการ์ดเพื่อบันทึกครับ`;
-  return reply(replyToken, [card], fallback);
+  return reply(replyToken, lead ? [{ type: "text", text: lead }, card] : [card], lead ? `${lead}\n\n${fallback}` : fallback);
 }
 
 const DRAFT_GONE = "รายการนี้บันทึกหรือยกเลิกไปแล้ว หรือหมดเวลายืนยัน ส่งรายการใหม่ได้เลยครับ เช่น \"กาแฟ 65\"";

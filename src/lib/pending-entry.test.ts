@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { categoryChoices, editItem, encodeEntryAction, parseDraftItems, parseEntryAction, typeForCategory, type EntryAction } from "./pending-entry"
+import { applyCaption, captionTarget, categoryChoices, editItem, encodeEntryAction, isCaptionText, parseDraftItems, parseEntryAction, typeForCategory, type DraftItem, type EntryAction } from "./pending-entry"
 
 const id = "3bfdc40d-2881-47b7-a31e-85e9897df35a"
 
@@ -47,5 +47,34 @@ describe("draft helpers", () => {
     expect(editItem(items, 1, { amount: 80 })).toBeNull()
     expect(parseDraftItems([...items, { type: "X", amount: 1, category: "a" }, { type: "INCOME", amount: 0, category: "a" }, null])).toEqual(items)
     expect(parseDraftItems("nope")).toEqual([])
+  })
+})
+
+describe("slip captions", () => {
+  const slip: DraftItem = { type: "EXPENSE", amount: 120, category: "Transfer Out", note: "โอนเงินให้ น.ส. ก", reference: "016313224002ATF04414", slipHash: "h1" }
+  const typed: DraftItem = { type: "EXPENSE", amount: 65, category: "Food", note: "กาแฟ" }
+
+  it("treats short text without numbers as a caption", () => {
+    expect(isCaptionText("ค่าบะหมี่")).toBe(true)
+    expect(isCaptionText("ข้าว 60")).toBe(false)
+    expect(isCaptionText("  ")).toBe(false)
+    expect(isCaptionText("ก".repeat(61))).toBe(false)
+  })
+
+  it("notes the latest slip and takes the caption's category", () => {
+    const out = applyCaption([slip, typed], "ค่าบะหมี่", { type: "EXPENSE", category: "Food" })!
+    expect(out[0]).toMatchObject({ note: "ค่าบะหมี่ · โอนเงินให้ น.ส. ก", category: "Food", amount: 120 })
+    expect(out[1]).toEqual(typed)
+  })
+
+  it("keeps the category when the caption names none or the other direction", () => {
+    expect(applyCaption([slip], "ของฝาก", null)![0].category).toBe("Transfer Out")
+    expect(applyCaption([slip], "เงินเดือน", { type: "INCOME", category: "Salary" })![0].category).toBe("Transfer Out")
+    expect(applyCaption([{ ...slip, note: null }], "ค่าบะหมี่", null)![0].note).toBe("ค่าบะหมี่")
+  })
+
+  it("has nothing to caption without a slip", () => {
+    expect(captionTarget([typed])).toBe(-1)
+    expect(applyCaption([typed], "ค่าบะหมี่", null)).toBeNull()
   })
 })
