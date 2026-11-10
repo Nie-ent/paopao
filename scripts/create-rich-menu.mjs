@@ -35,10 +35,12 @@ const richMenu = {
 const imagePath = resolve("public/line/rich-menu.png");
 const image = await readFile(imagePath);
 const client = new messagingApi.MessagingApiClient({ channelAccessToken: token });
+// Images go through the blob API (api-data.line.me)
+const blobClient = new messagingApi.MessagingApiBlobClient({ channelAccessToken: token });
 const { richMenuId } = await client.createRichMenu(richMenu);
 
 try {
-  await client.setRichMenuImage(richMenuId, new Blob([image], { type: "image/png" }));
+  await blobClient.setRichMenuImage(richMenuId, new Blob([image], { type: "image/png" }));
   await client.setDefaultRichMenu(richMenuId);
   console.log(`Published PaoPao rich menu: ${richMenuId}`);
 } catch (error) {
