@@ -147,7 +147,7 @@ export async function handleLineEvent(event: any) {
         const code = await ensureReferralCode(user.id);
         const s = await referralSummary(user.id);
         const link = `${siteUrl()}/r/${code}`;
-        return reply(actualReplyToken, [inviteCard({ link, rewarded: s.rewardedCount, maxRewards: s.maxRewards, rewardDays: s.rewardDays, friendTrialDays: s.friendTrialDays, qualifyDays: s.qualifyDays, qualifyWindowDays: s.qualifyWindowDays, progressUrl: appUrl("/subscription#invite") })],
+        return reply(actualReplyToken, [inviteCard({ link, rewarded: s.rewardedCount, maxRewards: s.maxRewards, rewardDays: s.rewardDays, friendTrialDays: s.friendTrialDays, qualifyDays: s.qualifyDays, qualifyWindowDays: s.qualifyWindowDays, progressUrl: appUrl("/subscription#invite"), shareUrl: process.env.NEXT_PUBLIC_LIFF_ID ? appUrl("/invite") : undefined })],
           `ชวนเพื่อน รับ Pro ฟรี ${s.rewardDays} วันต่อเพื่อน 1 คน (สูงสุด ${s.maxRewards} คน) ส่งลิงก์นี้ให้เพื่อน: ${link}`);
       }
 

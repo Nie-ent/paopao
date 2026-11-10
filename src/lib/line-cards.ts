@@ -388,9 +388,11 @@ export function morningBriefCard(transactions: Parameters<typeof summarizeDay>[0
 }
 
 /** Reply to "ชวนเพื่อน": the user's invite link with a LINE share button and their progress. */
-export function inviteCard(opts: { link: string; rewarded: number; maxRewards: number; rewardDays: number; friendTrialDays: number; qualifyDays: number; qualifyWindowDays: number; progressUrl: string }): FlexMessage {
+export function inviteCard(opts: { link: string; rewarded: number; maxRewards: number; rewardDays: number; friendTrialDays: number; qualifyDays: number; qualifyWindowDays: number; progressUrl: string; shareUrl?: string }): FlexMessage {
   const { link, rewarded, maxRewards, rewardDays, friendTrialDays, qualifyDays, qualifyWindowDays, progressUrl } = opts
   const shareText = `เราใช้เป๋าเป๋าจดรายรับรายจ่ายใน LINE แค่พิมพ์ "กาแฟ 65" ก็บันทึกให้ สมัครผ่านลิงก์นี้ได้ทดลองใช้ Pro ฟรี ${friendTrialDays} วัน 👉 ${link}`
+  // The share page sends friends a card (LIFF share target picker); without LIFF, LINE's plain text share
+  const shareUrl = opts.shareUrl ?? `https://line.me/R/share?text=${encodeURIComponent(shareText)}`
   const maxed = rewarded >= maxRewards
   return flex(`ชวนเพื่อน รับ Pro ฟรี: ${link}`, bubble({
     header: header("🎁 ชวนเพื่อน รับ Pro ฟรี", `${rewarded}/${maxRewards}`),
@@ -400,10 +402,30 @@ export function inviteCard(opts: { link: string; rewarded: number; maxRewards: n
       text(maxed ? "คุณรับรางวัลชวนเพื่อนครบแล้ว ขอบคุณที่บอกต่อนะครับ 🙏" : link, { size: "xs", color: COLORS.muted, wrap: true }),
     ], { spacing: "md", paddingAll: "16px" }),
     footer: box("vertical", [
-      ...(maxed ? [] : [uriButton("ชวนเพื่อนใน LINE", `https://line.me/R/share?text=${encodeURIComponent(shareText)}`)]),
+      ...(maxed ? [] : [uriButton("ส่งการ์ดชวนเพื่อน", shareUrl)]),
       uriButton("ดูความคืบหน้า", progressUrl, maxed),
     ], { spacing: "sm" }),
   }))
+}
+
+/**
+ * The card a user sends friends from the share page: who invited them, what PaoPao does and the
+ * friend's trial, with one button to the invite link (which adds PaoPao and signs them up).
+ */
+export function friendInviteMessage(opts: { link: string; inviterName?: string | null; friendTrialDays: number }): FlexMessage {
+  const { link, friendTrialDays } = opts
+  const who = opts.inviterName?.trim() ? clip(opts.inviterName.trim(), 30) : "เพื่อนของคุณ"
+  return flex(`${who} ชวนคุณใช้เป๋าเป๋า รับ Pro ฟรี ${friendTrialDays} วัน`, {
+    type: "bubble",
+    size: "mega",
+    hero: { type: "image", url: `${siteUrl()}/line/invite-hero.jpg`, size: "full", aspectRatio: "20:13", aspectMode: "cover", action: { type: "uri", label: "เปิดลิงก์ชวน", uri: link } },
+    body: box("vertical", [
+      text(`${who} ชวนคุณมาใช้เป๋าเป๋า`, { weight: "bold", size: "lg" }),
+      text(`ผู้ช่วยจดรายรับรายจ่ายใน LINE แค่พิมพ์ "กาแฟ 65" ก็บันทึกและแยกหมวดให้ ดูสรุปเป็นกราฟได้ ไม่ต้องโหลดแอปเพิ่ม`, { color: COLORS.muted }),
+      callout(`🎁 สมัครผ่านลิงก์นี้ ทดลองใช้ Pro ฟรี ${friendTrialDays} วัน ส่งสลิปให้บันทึกอัตโนมัติ และสรุปการเงินทาง LINE`, "info"),
+    ], { spacing: "md", paddingAll: "16px" }),
+    footer: box("vertical", [uriButton(`รับ Pro ฟรี ${friendTrialDays} วัน`, link)], { paddingAll: "12px" }),
+  })
 }
 
 /** Reply to "login": opens the dashboard in LINE with one tap; on a computer, sign in with LINE on the website. */

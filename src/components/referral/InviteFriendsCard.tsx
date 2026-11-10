@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useSyncExternalStore } from "react"
+import Link from "next/link"
 import { Copy, Gift, Users } from "lucide-react"
 import { toast } from "sonner"
 
@@ -10,12 +11,16 @@ import { getReferralInfo } from "@/features/referral/actions"
 import { load as loadCached, peek } from "@/lib/data-cache"
 import { cacheKeys } from "@/lib/cache-keys"
 
+const noSubscribe = () => () => {}
+
 type Info = NonNullable<Awaited<ReturnType<typeof getReferralInfo>>>
 
 /** "Invite friends, get Pro free": the user's link, a LINE share button and how each friend is doing. */
 export function InviteFriendsCard() {
   const { t } = useLanguage()
   const [info, setInfo] = useState<Info | null>(() => peek<Info>(cacheKeys.referral) ?? null)
+  // Inside LINE the invite goes out as a card through LINE's friend picker (the /invite page)
+  const inLine = useSyncExternalStore(noSubscribe, () => /\bLine\//i.test(navigator.userAgent), () => false)
 
   useEffect(() => {
     loadCached(cacheKeys.referral, getReferralInfo).then(res => setInfo(res ?? null)).catch(() => {})
@@ -65,14 +70,20 @@ export function InviteFriendsCard() {
         <p className="text-sm text-primary font-medium">{t("invite.maxed")}</p>
       ) : (
         <div className="flex flex-col sm:flex-row gap-2">
-          <a
-            href={`https://line.me/R/share?text=${encodeURIComponent(shareText)}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#06C755] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#05b34c]"
-          >
-            {t("invite.share_line")}
-          </a>
+          {inLine ? (
+            <Link href="/invite" className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#06C755] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#05b34c]">
+              {t("invite.share_line")}
+            </Link>
+          ) : (
+            <a
+              href={`https://line.me/R/share?text=${encodeURIComponent(shareText)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#06C755] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#05b34c]"
+            >
+              {t("invite.share_line")}
+            </a>
+          )}
           <div className="flex flex-1 min-w-0 items-center gap-2 rounded-xl border border-border bg-muted/40 pl-3">
             <span className="truncate text-sm text-muted-foreground" data-testid="invite-link">{info.link}</span>
             <Button type="button" variant="ghost" size="sm" onClick={copy} className="ml-auto shrink-0 gap-1.5">

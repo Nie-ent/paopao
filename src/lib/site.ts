@@ -31,3 +31,9 @@ export function appLink(path: string) {
   const liff = process.env.NEXT_PUBLIC_LIFF_ID
   return liff ? `https://liff.line.me/${liff}${path === "/" ? "" : path}` : `${siteUrl()}${path}`
 }
+
+/** A page opened inside LINE (LIFF) when the LIFF app is configured, otherwise the website. */
+export function liffUrl(path: string) {
+  const id = process.env.NEXT_PUBLIC_LIFF_ID
+  return id ? `https://liff.line.me/${id}${path}` : `${siteUrl()}${path}`
+}
