@@ -13,10 +13,10 @@ import { importStatementRows } from "@/features/transactions/actions"
 import type { StatementPreviewRow } from "@/lib/statement"
 import { ImportError, runStatementImport, type ImportProgress } from "@/lib/statement-runner"
 import { StatementProgress } from "@/components/transactions/StatementProgress"
+import { STATEMENT_ACCEPT, statementAccept, statementFileKind } from "@/lib/statement-file"
 
 type Props = { open: boolean; onOpenChange: (open: boolean) => void; onImported: () => void }
 
-const ACCEPT = ".pdf,.csv,.xlsx,.xls,image/png,image/jpeg,image/webp"
 const KNOWN_ERRORS = ["TOO_LARGE", "UNSUPPORTED", "PASSWORD_REQUIRED", "WRONG_PASSWORD", "NO_ROWS", "AI_BUSY", "PRO_ONLY", "DAILY_LIMIT", "MONTHLY_LIMIT", "EXPIRED"]
 
 export function StatementImportDialog({ open, onOpenChange, onImported }: Props) {
@@ -32,6 +32,19 @@ export function StatementImportDialog({ open, onOpenChange, onImported }: Props)
   const [progress, setProgress] = useState<ImportProgress | null>(null)
   const [startedAt, setStartedAt] = useState(0)
   const abortRef = useRef<AbortController | null>(null)
+
+  // The dialog only renders in the browser, so navigator is there; Android gets no filter (statementAccept)
+  const accept = typeof navigator === "undefined" ? STATEMENT_ACCEPT : statementAccept(navigator.userAgent)
+
+  const pickFile = (picked: File | null) => {
+    setNeedsPassword(false)
+    if (picked && !statementFileKind(picked.name, picked.type)) {
+      setFile(null)
+      toast.error(t("statement.error.UNSUPPORTED"))
+      return
+    }
+    setFile(picked)
+  }
 
   const reset = () => {
     setFile(null); setPassword(""); setNeedsPassword(false); setRows(null); setSelected(new Set()); setBusy(null); setProgress(null)
@@ -113,7 +126,14 @@ export function StatementImportDialog({ open, onOpenChange, onImported }: Props)
               <FileUp className="h-8 w-8 text-primary" />
               <span className="font-medium">{file ? file.name : t("statement.choose_file")}</span>
               <span className="text-xs text-muted-foreground">{t("statement.formats")}</span>
-              <input type="file" accept={ACCEPT} className="sr-only" onChange={e => { setFile(e.target.files?.[0] ?? null); setNeedsPassword(false) }} />
+              <input
+                type="file"
+                accept={accept}
+                className="sr-only"
+                // Cleared first, so picking the same file again after an error still fires onChange
+                onClick={e => { e.currentTarget.value = "" }}
+                onChange={e => pickFile(e.target.files?.[0] ?? null)}
+              />
             </label>
             {(needsPassword || file?.name.toLowerCase().endsWith(".pdf")) && (
               <div className="space-y-1">
