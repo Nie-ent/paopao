@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { messagingApi } from "@line/bot-sdk"
-import { billQuestionCard, budgetTone, duplicateCard, loginCard, morningBriefCard, proActivatedCard, recordedCard, summaryCard, summaryPickerCard, upsellCard } from "./line-cards"
+import { billQuestionCard, budgetTone, duplicateCard, friendInviteMessage, inviteCard, loginCard, morningBriefCard, proActivatedCard, recordedCard, summaryCard, summaryPickerCard, upsellCard } from "./line-cards"
 import { buildSummary } from "./summary"
 import { buildBillQuestion } from "./bills"
 
@@ -157,5 +157,28 @@ describe("summary cards", () => {
   it("shows a negative balance in red with a minus sign", () => {
     const msg = summaryCard(buildSummary("DAY", [{ type: "EXPENSE", amount: 120, date: now, category: { name: "Food" } }], now), URL)
     expect(msg.altText).toContain("คงเหลือ −฿120")
+  })
+})
+
+describe("invite cards", () => {
+  const base = { link: "https://www.paopao-wallet.com/r/ABC123", rewarded: 1, maxRewards: 3, rewardDays: 30, friendTrialDays: 30, qualifyDays: 3, qualifyWindowDays: 14, progressUrl: "https://x/subscription#invite" }
+  const uris = (m: unknown) => JSON.stringify(m).match(/"uri":"[^"]+"/g) ?? []
+
+  it("sends the share button to the card share page when there is one", () => {
+    expect(uris(inviteCard({ ...base, shareUrl: "https://liff.line.me/123/invite" }))).toContain('"uri":"https://liff.line.me/123/invite"')
+    // Without LIFF: LINE's text share with the link
+    expect(uris(inviteCard(base)).some(u => u.startsWith('"uri":"https://line.me/R/share?text='))).toBe(true)
+  })
+
+  it("builds the card friends receive: inviter, trial, and the invite link", () => {
+    const m = friendInviteMessage({ link: base.link, inviterName: "Nie", friendTrialDays: 30 })
+    expect(m.altText).toBe("Nie ชวนคุณใช้เป๋าเป๋า รับ Pro ฟรี 30 วัน")
+    const json = JSON.stringify(m)
+    expect(json).toContain("Nie ชวนคุณมาใช้เป๋าเป๋า")
+    expect(json).toContain("/line/invite-hero.jpg")
+    expect(uris(m).every(u => u === `"uri":"${base.link}"` || u.includes("invite-hero"))).toBe(true)
+    expect(friendInviteMessage({ link: base.link, inviterName: "  ", friendTrialDays: 30 }).altText).toMatch(/^เพื่อนของคุณ ชวนคุณ/)
+    expect(lineViolations(m)).toEqual([])
+    expect(lineViolations(inviteCard({ ...base, shareUrl: "https://liff.line.me/123/invite" }))).toEqual([])
   })
 })
