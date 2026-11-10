@@ -5,14 +5,17 @@
  * finalize steps only accept work the token covers, so they can't be used for free AI calls.
  */
 import crypto from "node:crypto"
+import { sessionSecret } from "@/lib/session"
 
 const TTL_MS = 30 * 60 * 1000
 
 type Job = { u: string; h: string[]; exp: number }
 
+// The login session's key (SESSION_SECRET, or one derived from the LINE channel secret), kept apart
+// by the "statement-job:" prefix below
 const secret = () => {
-  const s = process.env.SESSION_SECRET
-  if (!s) throw new Error("SESSION_SECRET is not set")
+  const s = sessionSecret()
+  if (!s) throw new Error("No signing secret: set SESSION_SECRET or LINE_CHANNEL_SECRET")
   return s
 }
 const sha = (text: string) => crypto.createHash("sha256").update(text).digest("base64url").slice(0, 22)

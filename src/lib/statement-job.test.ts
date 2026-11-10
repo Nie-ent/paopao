@@ -30,3 +30,16 @@ describe("statement import job token", () => {
     for (const bad of [undefined, 42, "", "abc", "a.b.c"]) expect(readStatementJob(bad, "u1")).toBeNull()
   })
 })
+
+describe("statement job secret", () => {
+  // Production has no SESSION_SECRET: the token must be signed like the login session, from the LINE secret
+  it("works with only the LINE channel secret set", () => {
+    vi.stubEnv("SESSION_SECRET", "")
+    vi.stubEnv("LINE_CHANNEL_SECRET", "line-secret")
+    const token = signStatementJob("u1", ["a"])
+    expect(readStatementJob(token, "u1")).not.toBeNull()
+    vi.stubEnv("LINE_CHANNEL_SECRET", "other")
+    expect(readStatementJob(token, "u1")).toBeNull()
+    vi.stubEnv("SESSION_SECRET", "test-secret")
+  })
+})

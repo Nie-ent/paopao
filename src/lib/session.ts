@@ -14,7 +14,7 @@ function toBase64Url(bytes: ArrayBuffer) {
 }
 
 /** SESSION_SECRET if configured, otherwise a key derived from the LINE channel secret (always set in production). */
-function sessionSecret() {
+export function sessionSecret() {
   const explicit = process.env.SESSION_SECRET
   if (explicit) return explicit
   const lineSecret = process.env.LINE_CHANNEL_SECRET
