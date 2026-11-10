@@ -28,7 +28,7 @@ const richMenu = {
     { bounds: { x: 1667, y: 0, width: 833, height: 843 }, action: { type: "uri", uri: liffUrl("") } },
     { bounds: { x: 0, y: 843, width: 834, height: 843 }, action: { type: "uri", uri: liffUrl("/bills") } },
     { bounds: { x: 834, y: 843, width: 833, height: 843 }, action: { type: "uri", uri: liffUrl("/goals") } },
-    { bounds: { x: 1667, y: 843, width: 833, height: 843 }, action: { type: "uri", uri: liffUrl("/subscription") } },
+    { bounds: { x: 1667, y: 843, width: 833, height: 843 }, action: { type: "uri", uri: liffUrl("/invite") } },
   ],
 };
 
