@@ -82,7 +82,7 @@ export async function extractTransactionsFromText(text: string, userCategories: 
       temperature: 0.1,
       thinkingConfig: { thinkingBudget: 0 },
     }
-  });
+  }, { feature: "entry_text" });
 
   if (response.text) {
     try {
@@ -114,7 +114,7 @@ export async function extractTransactionFromImage(imageBuffer: Buffer, mimeType:
         responseSchema: transactionSchema,
         temperature: 0.1,
       }
-    });
+    }, { feature: "slip" });
 
   if (response.text) {
     try {
@@ -154,7 +154,7 @@ export async function extractTransactionsFromImages(images: {buffer: Buffer, mim
       },
       temperature: 0.1,
     }
-  });
+  }, { feature: "slip" });
 
   if (response.text) {
     try {
@@ -218,7 +218,7 @@ export function chunkStatementText(text: string) {
 
 /** Reads the transactions in one chunk of statement text. */
 export async function extractStatementChunk(text: string, userCategories: string[] = []): Promise<RawStatementRow[]> {
-  const response = await generateContent({ contents: [`List every transaction in this part of a bank statement:\n\n${text}`] as never, config: statementConfig(userCategories) }, { timeoutMs: 40_000 })
+  const response = await generateContent({ contents: [`List every transaction in this part of a bank statement:\n\n${text}`] as never, config: statementConfig(userCategories) }, { timeoutMs: 40_000, feature: "statement" })
   if (!response.text) return []
   try {
     return JSON.parse(response.text) as RawStatementRow[]
@@ -238,7 +238,7 @@ export async function extractStatementRows(input: StatementInput, userCategories
   const rows: RawStatementRow[] = []
   for (const contents of parts) {
     // A statement can produce a lot of output, so each model gets longer than the default
-    const response = await generateContent({ contents: contents as never, config }, { timeoutMs: 45_000 })
+    const response = await generateContent({ contents: contents as never, config }, { timeoutMs: 45_000, feature: "statement" })
     if (!response.text) continue
     try {
       rows.push(...(JSON.parse(response.text) as RawStatementRow[]))

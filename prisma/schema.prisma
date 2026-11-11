@@ -74,6 +74,7 @@ model User {
   questClaims      QuestClaim[]
   subscriptionPayments SubscriptionPayment[]
   usageEvents      UsageEvent[]
+  aiUsages         AiUsage[]
   recurringBills   RecurringBill[]
   pendingEntry     PendingEntry?
   /// LINE summary for Pro: weekly (Mondays) by default to save LINE pushes, daily or off by choice
@@ -255,6 +256,24 @@ model LoginAttempt {
 }
 
 /// One use of a metered feature (e.g. a statement import or a slip verification), for daily limits
+/// Tokens of one successful Gemini call (src/lib/ai-usage.ts); cost is priced when read
+model AiUsage {
+  id           String   @id @default(uuid())
+  /// Null when the call had no user (or the account was deleted: usage history is kept)
+  userId       String?
+  user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  /// What the call was for: entry_text, slip, statement, chat, chat_title, insight, advice
+  feature      String
+  model        String
+  inputTokens  Int
+  /// Includes thinking tokens, which Gemini bills as output
+  outputTokens Int
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+}
+
 model UsageEvent {
   id        String   @id @default(uuid())
   userId    String

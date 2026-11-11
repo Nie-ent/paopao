@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { getCurrentUser } from "@/lib/current-user"
 import { isAiBusyError } from "@/lib/ai"
+import { withAiUser } from "@/lib/ai-usage"
 import { isJobChunk, readStatementJob } from "@/lib/statement-job"
 import { extractStatementChunk } from "@/services/ai.service"
 import { userCategoryNames } from "@/services/statement.service"
@@ -17,7 +18,7 @@ export async function POST(req: Request) {
   if (!job || !isJobChunk(job, body?.index, body?.text)) return NextResponse.json({ error: "EXPIRED" }, { status: 403 })
 
   try {
-    const rows = await extractStatementChunk(body!.text as string, await userCategoryNames(user.id))
+    const rows = await withAiUser(user.id, async () => extractStatementChunk(body!.text as string, await userCategoryNames(user.id)))
     return NextResponse.json({ rows })
   } catch (error) {
     if (isAiBusyError(error)) return NextResponse.json({ error: "AI_BUSY" }, { status: 503 })

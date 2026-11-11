@@ -4,6 +4,7 @@ import prisma from "@/lib/db"
 import { getProfileData } from "@/features/user/actions"
 import { Type } from "@google/genai"
 import { generateContent, modelsForPlan, startChat, isQuotaError } from "@/lib/ai"
+import { recordAiUsage } from "@/lib/ai-usage"
 import { DEMO_LINE_ID } from "@/lib/auth-user"
 import { bangkokDate, bangkokParts, startOfBangkokDay } from "@/lib/dates"
 import { effectivePlan, LIMITS } from "@/lib/subscription"
@@ -100,7 +101,7 @@ export async function sendChatMessage(sessionId: string | null, message: string,
       const titleRes = await generateContent({
         config: { maxOutputTokens: 30, thinkingConfig: { thinkingBudget: 0 } },
         contents: `Generate a 3-word ${language === 'en' ? 'English' : 'Thai'} title with 1 emoji, reply with the title only: "${message.substring(0, 50)}"`
-      }, { models })
+      }, { models, feature: "chat_title", userId: user.id })
       if (titleRes.text) title = titleRes.text.trim()
     } catch (titleErr) {
       console.warn("Title generation failed, likely quota exceeded. Using default title.")
@@ -128,10 +129,10 @@ export async function sendChatMessage(sessionId: string | null, message: string,
   try {
     // The user's real numbers (this month, fixed costs vs. income, goals), so advice fits them
     const moneyContext = await financeContext(user.id, language === 'en' ? 'en' : 'th').catch(() => "")
-    const { chat, response } = await startChat({
+    const { chat, response, model: chatModel } = await startChat({
       config: { systemInstruction: `${SYSTEM_INSTRUCTION}\n\n${moneyContext}\n\nReply in ${language === 'en' ? 'English' : 'Thai'} unless the user writes in another language. Keep replies concise.`, tools, temperature: 0.7, maxOutputTokens: MAX_REPLY_TOKENS, thinkingConfig: { thinkingBudget: 0 } },
       history: formattedHistory
-    }, { message }, { models })
+    }, { message }, { models, feature: "chat", userId: user.id })
     historyMessages.push({ role: 'user', content: message, at: new Date().toISOString() })
 
     let botReply = response.text || ""
@@ -166,6 +167,7 @@ export async function sendChatMessage(sessionId: string | null, message: string,
             }
           }]
         })
+        await recordAiUsage(chatModel, "chat", followUp.usageMetadata, user.id)
 
         botReply = followUp.text || botReply
       }
