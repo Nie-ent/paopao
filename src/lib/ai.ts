@@ -1,4 +1,5 @@
 import { GoogleGenAI, type Chat, type CreateChatParameters, type GenerateContentParameters, type SendMessageParameters } from "@google/genai"
+import { recordAiUsage, type AiFeature } from "@/lib/ai-usage"
 
 export const ai = new GoogleGenAI({ apiKey: process.env.AI_API_KEY || "dummy_key" })
 
@@ -67,20 +68,36 @@ export function modelsForPlan(plan: "FREE" | "PRO") {
   return plan === "PRO" ? AI_MODELS : [AI_LITE_MODEL, ...AI_MODELS.filter(m => m !== AI_LITE_MODEL)]
 }
 
-export function generateContent(params: Omit<GenerateContentParameters, "model">, { timeoutMs = DEFAULT_MODEL_TIMEOUT_MS, models = AI_MODELS } = {}) {
-  return withModelFallback((model, { isLast }) => ai.models.generateContent({
-    ...params,
-    model,
-    config: isLast ? params.config : { ...params.config, httpOptions: { ...params.config?.httpOptions, timeout: timeoutMs } },
-  }), { models })
+type AiCallOptions = {
+  models?: string[]
+  /** What the call is for, so the admin page can show cost per feature (src/lib/ai-usage.ts) */
+  feature?: AiFeature
+  /** Defaults to the user set by withAiUser for this request */
+  userId?: string
 }
 
-/** Creates a chat and sends the first message, moving to the next model if that model fails. */
-export function startChat(params: Omit<CreateChatParameters, "model">, message: SendMessageParameters, { models = AI_MODELS } = {}) {
+export function generateContent(params: Omit<GenerateContentParameters, "model">, { timeoutMs = DEFAULT_MODEL_TIMEOUT_MS, models = AI_MODELS, feature, userId }: AiCallOptions & { timeoutMs?: number } = {}) {
+  return withModelFallback(async (model, { isLast }) => {
+    const response = await ai.models.generateContent({
+      ...params,
+      model,
+      config: isLast ? params.config : { ...params.config, httpOptions: { ...params.config?.httpOptions, timeout: timeoutMs } },
+    })
+    await recordAiUsage(model, feature, response.usageMetadata, userId)
+    return response
+  }, { models })
+}
+
+/**
+ * Creates a chat and sends the first message, moving to the next model if that model fails.
+ * Returns the model that answered, for recording the usage of later messages in the same chat.
+ */
+export function startChat(params: Omit<CreateChatParameters, "model">, message: SendMessageParameters, { models = AI_MODELS, feature, userId }: AiCallOptions = {}) {
   return withModelFallback(async model => {
     const chat: Chat = ai.chats.create({ ...params, model })
     const response = await chat.sendMessage(message)
-    return { chat, response }
+    await recordAiUsage(model, feature, response.usageMetadata, userId)
+    return { chat, response, model }
   }, { models })
 }
 

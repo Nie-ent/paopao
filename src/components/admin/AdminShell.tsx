@@ -4,7 +4,7 @@ import { useSingleFlight } from "@/hooks/use-single-flight"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { logoutAdmin } from "@/features/admin/actions"
-import { LogOut, Package, ListChecks, LayoutDashboard, Users, Loader2 } from "lucide-react"
+import { LogOut, Package, ListChecks, LayoutDashboard, Users, Loader2, BarChart3 } from "lucide-react"
 
 /** Navigation chrome for signed-in admins. Access is enforced by the server layout and actions. */
 export function AdminShell({ children }: { children: React.ReactNode }) {
@@ -19,6 +19,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         </div>
         <nav className="flex-1 p-4 space-y-2">
           <Link href="/admin" className={`flex items-center gap-3 p-3 rounded-lg hover:bg-slate-100 ${pathname === '/admin' ? 'bg-slate-100 font-semibold' : ''}`}><LayoutDashboard className="w-5 h-5"/> ภาพรวม</Link>
+          <Link href="/admin/analytics" className={`flex items-center gap-3 p-3 rounded-lg hover:bg-slate-100 ${pathname?.includes('/analytics') ? 'bg-slate-100 font-semibold' : ''}`}><BarChart3 className="w-5 h-5"/> สถิติการใช้งาน</Link>
           <Link href="/admin/users" className={`flex items-center gap-3 p-3 rounded-lg hover:bg-slate-100 ${pathname?.includes('/users') ? 'bg-slate-100 font-semibold' : ''}`}><Users className="w-5 h-5"/> จัดการบัญชีผู้เล่น</Link>
           <Link href="/admin/rewards" className={`flex items-center gap-3 p-3 rounded-lg hover:bg-slate-100 ${pathname?.includes('/rewards') ? 'bg-slate-100 font-semibold' : ''}`}><Package className="w-5 h-5"/> จัดการของรางวัล</Link>
           <Link href="/admin/quests" className={`flex items-center gap-3 p-3 rounded-lg hover:bg-slate-100 ${pathname?.includes('/quests') ? 'bg-slate-100 font-semibold' : ''}`}><ListChecks className="w-5 h-5"/> จัดการภารกิจ</Link>

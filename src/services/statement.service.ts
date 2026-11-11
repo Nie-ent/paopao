@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx"
 import { extractText, getDocumentProxy } from "unpdf"
 import prisma from "@/lib/db"
+import { withAiUser } from "@/lib/ai-usage"
 import { chunkStatementText, extractStatementRows, type RawStatementRow, type StatementInput } from "@/services/ai.service"
 import { statementFileKind, statementImageMime } from "@/lib/statement-file"
 import { isEncryptedPdf, markDuplicates, normalizeStatementDate, statementRowTimestamp, type StatementPreviewRow, type StatementRow } from "@/lib/statement"
@@ -68,7 +69,7 @@ export async function prepareStatement(userId: string, file: File, password?: st
     if (chunks.length === 0) throw new StatementError("NO_ROWS")
     return { chunks }
   }
-  return { rows: await finalizeStatement(userId, await extractStatementRows(input, await userCategoryNames(userId))) }
+  return { rows: await finalizeStatement(userId, await withAiUser(userId, async () => extractStatementRows(input, await userCategoryNames(userId)))) }
 }
 
 /** Reads a statement in one request and flags rows that look like transactions the user already recorded. */
@@ -77,7 +78,7 @@ export async function previewStatement(userId: string, file: File, password?: st
 
   // Read the file first so a bad file or password fails before any database or AI work
   const input = await toStatementInput(file, password)
-  const raw = await extractStatementRows(input, await userCategoryNames(userId))
+  const raw = await withAiUser(userId, async () => extractStatementRows(input, await userCategoryNames(userId)))
   return finalizeStatement(userId, raw)
 }
 

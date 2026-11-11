@@ -1,4 +1,5 @@
 import { lineClient, lineBlobClient } from "@/config/line";
+import { setAiUser, withAiUser } from "@/lib/ai-usage";
 import { extractTransactionsFromText, extractTransactionFromImage, extractTransactionsFromImages, ExtractedTransaction } from "@/services/ai.service";
 import prisma from "@/lib/db";
 import { classifyByKeywords, quickParseTransaction } from "@/services/quick-parse";
@@ -74,7 +75,12 @@ const imageQueue = new Map<string, BatchQueue>();
 /**
  * Handles incoming LINE Webhook events.
  */
-export async function handleLineEvent(event: any) {
+/** AI calls made while handling the event are attributed to its user (src/lib/ai-usage.ts). */
+export function handleLineEvent(event: any) {
+  return withAiUser(null, () => handleEvent(event));
+}
+
+async function handleEvent(event: any) {
   // Someone added PaoPao as a friend (or unblocked it): explain how to use it (a free reply)
   if (event.type === "follow" && event.source?.userId && event.replyToken) {
     const user = await getOrCreateUser(event.source.userId);
@@ -106,6 +112,7 @@ export async function handleLineEvent(event: any) {
   try {
     const baseUser = await getOrCreateUser(userId);
     const user = await checkAndResetAiQuota(baseUser);
+    setAiUser(user.id);
     
     // The user's own categories, offered to the AI alongside the built-in ones
     const userCategories = (await prisma.category.findMany({ where: { userId: user.id }, select: { name: true } })).map(c => c.name);
