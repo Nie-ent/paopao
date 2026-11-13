@@ -4,6 +4,8 @@ import prisma from "@/lib/db"
 import { cookies } from "next/headers"
 import { createHmac, timingSafeEqual } from "crypto"
 import { clientIp, ADMIN_ATTEMPT_PREFIX } from "@/lib/client-ip"
+import { isAdminAccount } from "@/lib/admin-access"
+import { isProActive } from "@/lib/subscription"
 
 const ADMIN_COOKIE = "admin_session"
 
@@ -37,7 +39,8 @@ export async function loginAdmin(password: string) {
     return { success: false, error: "ลองผิดหลายครั้งเกินไป กรุณารอ 15 นาทีแล้วลองใหม่" }
   }
 
-  const ok = typeof password === "string" && safeEqual(password, expected)
+  // Only listed LINE accounts may use the password at all (same answer either way, nothing to probe)
+  const ok = typeof password === "string" && safeEqual(password, expected) && await isAdminAccount()
   await prisma.loginAttempt.create({ data: { ip, success: ok } })
   if (!ok) return { success: false, error: "รหัสผ่านไม่ถูกต้อง" }
 
@@ -52,7 +55,9 @@ export async function logoutAdmin() {
   return { success: true }
 }
 
+/** Both factors: a listed LINE account (src/lib/admin-access.ts) and the admin password cookie. */
 export async function isAdmin() {
+  if (!await isAdminAccount()) return false
   const cookieStore = await cookies()
   const token = adminSessionToken()
   const cookie = cookieStore.get(ADMIN_COOKIE)?.value
@@ -207,13 +212,39 @@ export async function deleteQuest(id: string) {
   return { success: true }
 }
 
+/** Every account (newest first) with when they joined, their plan and how much they use PaoPao. */
 export async function getAdminUsers() {
   if (!await isAdmin()) return []
-  return prisma.user.findMany({
-    orderBy: { paoPoints: 'desc' },
-    select: { id: true, name: true, lineId: true, avatarUrl: true, paoPoints: true }
-  })
+  const [users, lastEntries, lastFeatures] = await Promise.all([
+    prisma.user.findMany({
+      where: { lineId: { notIn: ["demo", "demo_line_id", ""] } },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true, name: true, lineId: true, avatarUrl: true, paoPoints: true, createdAt: true,
+        subscriptionTier: true, proExpiresAt: true, trialStartedAt: true,
+        _count: { select: { transactions: true, subscriptionPayments: true } },
+      },
+    }),
+    prisma.transaction.groupBy({ by: ['userId'], _max: { createdAt: true } }),
+    prisma.featureEvent.groupBy({ by: ['userId'], _max: { createdAt: true }, where: { userId: { not: null } } }).catch(() => []),
+  ])
+  const last = new Map<string, Date>()
+  for (const r of [...lastEntries, ...lastFeatures]) {
+    const at = r._max.createdAt
+    if (r.userId && at && (!last.get(r.userId) || at > last.get(r.userId)!)) last.set(r.userId, at)
+  }
+  const now = new Date()
+  return users.map(u => ({
+    id: u.id, name: u.name, lineId: u.lineId, avatarUrl: u.avatarUrl, paoPoints: u.paoPoints,
+    createdAt: u.createdAt.toISOString(),
+    lastActiveAt: last.get(u.id)?.toISOString() ?? null,
+    entries: u._count.transactions,
+    plan: isProActive(u, now) ? (u._count.subscriptionPayments > 0 ? "PRO_PAID" : "PRO_FREE") : u.proExpiresAt || u.trialStartedAt ? "FREE_LAPSED" : "FREE",
+    proExpiresAt: u.proExpiresAt?.toISOString() ?? null,
+  }))
 }
+
+export type AdminUser = Awaited<ReturnType<typeof getAdminUsers>>[number]
 
 export async function adjustUserPoints(userId: string, pointsDelta: number) {
   if (!await isAdmin()) return { error: "Unauthorized" }

@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/current-user"
 import { isProActive, LIMITS } from "@/lib/subscription"
 import { MAX_AMOUNT } from "@/lib/money"
 import { loadFixedCosts } from "@/lib/finance-context"
+import { trackFeature } from "@/lib/feature-events"
 
 const billSchema = z.object({
   name: z.string().trim().min(1).max(40),
@@ -55,6 +56,7 @@ export async function saveBill(id: string | null, input: BillInput) {
     await tx.recurringBill.create({ data: { ...data, userId: user.id } })
     return true
   })
+  if (created) await trackFeature("web_recurring_bill", { source: "web", userId: user.id })
   return created ? { success: true } : { error: "LIMIT" }
 }
 

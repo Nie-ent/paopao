@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client"
 import { bangkokDayKey } from "@/lib/dates"
 import { USD_TO_THB, aiCostUsd } from "@/lib/ai-usage"
 import { AI_FEATURE_LABELS, type AiFeature } from "@/lib/ai-features"
+import { featureGroup, featureLabel } from "@/lib/feature-catalog"
 import { isAdmin } from "@/features/admin/actions"
 import {
   activeDaysHistogram, activeUserSeries, funnel, lastDays, mrr, planSegment, proGrantsByWeek, trialConversion, weeklyRetention,
@@ -29,6 +30,8 @@ export async function getAdminAnalytics(now = new Date()) {
   const days = lastDays(SERIES_DAYS, now)
   const since = new Date(now.getTime() - (SERIES_DAYS + 7) * DAY_MS)
   const last30 = new Set(lastDays(30, now))
+  // The 30 days before those, to say whether a number went up or down
+  const prev30 = new Set(lastDays(60, now).filter(d => !last30.has(d)))
 
   const [users, payments, referrals, activity, entryRows, entryTotals, usageEvents] = await Promise.all([
     prisma.user.findMany({
@@ -68,7 +71,7 @@ export async function getAdminAnalytics(now = new Date()) {
     }),
   ])
 
-  const ai = await loadAiUsage(since, now)
+  const [ai, features] = await Promise.all([loadAiUsage(since, now), loadFeatureUsage(now)])
   const allActivity = dedupeActivity([...activity, ...ai.activity])
   const userIds = new Set(users.map(u => u.id))
 
@@ -101,6 +104,8 @@ export async function getAdminAnalytics(now = new Date()) {
 
   const totals = new Map(entryTotals.map(e => [e.userId, e]))
   const entries30 = entryRows.filter(r => last30.has(r.day)).reduce((s, r) => s + r.n, 0)
+  const entriesPrev30 = entryRows.filter(r => prev30.has(r.day)).reduce((s, r) => s + r.n, 0)
+  const inWindow = (d: Date, days: Set<string>) => days.has(bangkokDayKey(d))
 
   // ── Entries by source ──
   const entriesByDay = new Map(days.map(day => [day, { day, typed: 0, slip: 0, statement: 0, bill: 0 }]))
@@ -183,9 +188,19 @@ export async function getAdminAnalytics(now = new Date()) {
       trialConversionInvite: conversionInvite,
       aiCost30dThb: ai.cost30dThb,
       aiCostPerMauThb: mau && ai.available ? ai.cost30dThb / mau : null,
+      revenue30dThb: payments.filter(p => inWindow(p.createdAt, last30)).reduce((s, p) => s + p.amount, 0),
       statementImports30d: usageEvents.find(e => e.kind === "statement_import")?._count._all ?? 0,
       slipVerifications30d: usageEvents.find(e => e.kind === "slip_verification")?._count._all ?? 0,
     },
+    /** The same numbers for the 30 days before, for ↑/↓ comparisons */
+    previous: {
+      new30d: users.filter(u => inWindow(u.createdAt, prev30)).length,
+      mau: active.at(-31)?.mau ?? null,
+      entries30d: entriesPrev30,
+      revenue30dThb: payments.filter(p => inWindow(p.createdAt, prev30)).reduce((s, p) => s + p.amount, 0),
+      aiCost30dThb: ai.available ? ai.costPrev30dThb : null,
+    },
+    features,
     growth,
     active,
     activeDays: activeDaysHistogram(allActivity, [...last30]),
@@ -220,7 +235,7 @@ export type AdminAnalytics = NonNullable<Awaited<ReturnType<typeof getAdminAnaly
  * still loads and says so.
  */
 async function loadAiUsage(since: Date, now: Date) {
-  const empty = { available: false, firstAt: null as string | null, activity: [] as ActiveDay[], byDay: [] as Record<string, number | string>[], byFeature: [] as AiFeatureRow[], byUser: [] as AiUserRow[], cost30dThb: 0 }
+  const empty = { available: false, firstAt: null as string | null, activity: [] as ActiveDay[], byDay: [] as Record<string, number | string>[], byFeature: [] as AiFeatureRow[], byUser: [] as AiUserRow[], cost30dThb: 0, costPrev30dThb: 0 }
   try {
     const [rows, first] = await Promise.all([
       prisma.$queryRaw<{ day: string; userId: string | null; feature: string; model: string; calls: number; input: number; output: number }[]>`
@@ -237,13 +252,15 @@ async function loadAiUsage(since: Date, now: Date) {
     const byDay = new Map(days.map(day => [day, Object.fromEntries([["day", day], ...features.map(f => [f, 0]), ["other", 0]]) as Record<string, number | string>]))
     const byFeature = new Map<string, AiFeatureRow>()
     const byUser = new Map<string, AiUserRow>()
-    let cost30 = 0
+    let cost30 = 0, costPrev30 = 0
+    const prev30 = new Set(lastDays(60, now).filter(d => !last30.has(d)))
 
     for (const r of rows) {
       const costThb = aiCostUsd(r.model, new Date(`${r.day}T12:00:00+07:00`), r.input, r.output) * USD_TO_THB
       const feature = r.feature in AI_FEATURE_LABELS ? r.feature : "other"
       const day = byDay.get(r.day)
       if (day) day[feature] = (day[feature] as number) + costThb
+      if (prev30.has(r.day)) costPrev30 += costThb
       if (!last30.has(r.day)) continue
       cost30 += costThb
       const f = byFeature.get(feature) ?? { feature, label: AI_FEATURE_LABELS[feature as AiFeature] ?? "อื่นๆ", calls: 0, inputTokens: 0, outputTokens: 0, costThb: 0 }
@@ -262,10 +279,57 @@ async function loadAiUsage(since: Date, now: Date) {
       byFeature: [...byFeature.values()].sort((a, b) => b.costThb - a.costThb),
       byUser: [...byUser.values()],
       cost30dThb: cost30,
+      costPrev30dThb: costPrev30,
     }
   } catch (error) {
     console.warn("[admin] AI usage unavailable (has the AiUsage migration run?)", (error as Error)?.message)
     return empty
+  }
+}
+
+/**
+ * Feature use (src/lib/feature-events.ts): per feature, uses and distinct people in the last 30
+ * days and the 30 before, plus a daily count per feature group. Empty until the table exists.
+ */
+async function loadFeatureUsage(now: Date) {
+  const since60 = new Date(now.getTime() - 60 * DAY_MS)
+  const since30 = new Date(now.getTime() - 30 * DAY_MS)
+  try {
+    const [rows, daily, first] = await Promise.all([
+      prisma.$queryRaw<{ feature: string; recent: boolean; events: number; people: number }[]>`
+        SELECT feature, "createdAt" >= ${since30} AS recent, COUNT(*)::int AS events,
+          COUNT(DISTINCT COALESCE("userId", "lineUserId"))::int AS people
+        FROM "FeatureEvent" WHERE "createdAt" >= ${since60}
+        GROUP BY 1, 2`,
+      prisma.$queryRaw<{ day: string; feature: string; n: number }[]>`
+        SELECT ${bkkDay(Prisma.sql`"createdAt"`)} AS day, feature, COUNT(*)::int AS n
+        FROM "FeatureEvent" WHERE "createdAt" >= ${since60}
+        GROUP BY 1, 2`,
+      prisma.featureEvent.findFirst({ orderBy: { createdAt: "asc" }, select: { createdAt: true } }),
+    ])
+    const byFeature = new Map<string, { feature: string; label: string; group: string; events: number; people: number; prevEvents: number; prevPeople: number }>()
+    for (const r of rows) {
+      const f = byFeature.get(r.feature) ?? { feature: r.feature, label: featureLabel(r.feature), group: featureGroup(r.feature), events: 0, people: 0, prevEvents: 0, prevPeople: 0 }
+      if (r.recent) { f.events += r.events; f.people += r.people } else { f.prevEvents += r.events; f.prevPeople += r.people }
+      byFeature.set(r.feature, f)
+    }
+    const groups = ["LINE", "เว็บ", "หน้าเว็บ", "กลุ่ม", "อื่นๆ"]
+    const days = lastDays(60, now)
+    const perDay = new Map(days.map(day => [day, Object.fromEntries([["day", day], ...groups.map(g => [g, 0])]) as Record<string, string | number>]))
+    for (const r of daily) {
+      const row = perDay.get(r.day)
+      if (row) row[featureGroup(r.feature)] = (row[featureGroup(r.feature)] as number) + r.n
+    }
+    return {
+      available: true,
+      since: first?.createdAt.toISOString() ?? null,
+      rows: [...byFeature.values()].sort((a, b) => b.people - a.people || b.events - a.events),
+      daily: [...perDay.values()],
+      groups,
+    }
+  } catch (error) {
+    console.warn("[admin] feature usage unavailable (has the FeatureEvent migration run?)", (error as Error)?.message)
+    return { available: false, since: null, rows: [], daily: [], groups: [] as string[] }
   }
 }
 

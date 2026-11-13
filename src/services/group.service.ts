@@ -23,6 +23,7 @@ import {
   armedCard, billCard, claimCard, debtsCard, groupWelcomeCard, receiptLimitMessage, remindMessage, slipPaidCard, type DebtRow,
 } from "@/lib/group-cards"
 import { readReceipt, receiptLooksOff } from "@/services/receipt.service"
+import { trackFeature } from "@/lib/feature-events"
 import { reply, replyText } from "@/services/line.service"
 
 type Source = { type: string; groupId?: string; roomId?: string; userId?: string }
@@ -100,6 +101,7 @@ export async function handleGroupEvent(event: any) {
       const summary = await lineClient.getGroupSummary(group.lineGroupId).catch(() => null)
       if (summary?.groupName) await prisma.lineGroup.update({ where: { id: group.id }, data: { name: summary.groupName } })
     }
+    await trackFeature("group_join", { source: "group", lineUserId: source.userId })
     return reply(event.replyToken, [groupWelcomeCard()], "เป๋าเป๋าช่วยแยกบิล: พิมพ์ \"แยกบิล\" แล้วส่งรูปใบเสร็จ")
   }
 
@@ -187,6 +189,7 @@ async function processReceipt(group: Group, userId: string, messageId: string, r
       items: { create: items.map((item, position) => ({ ...item, position })) },
     },
   })
+  await trackFeature("group_receipt", { source: "group", userId: user?.id, lineUserId: userId })
   const { total } = billTotals(items, { ...receipt, printedTotal: bill.printedTotal })
   const warning = receipt.items.length > items.length ? `แสดง ${items.length} รายการแรก ยอดรวมจึงไม่ครบ คนจ่ายบิลแก้ได้ในหน้าเลือกรายการ`
     : receiptLooksOff({ ...receipt, items })
@@ -200,6 +203,7 @@ async function createAmountBill(group: Group, userId: string, replyToken: string
   const bill = await prisma.groupBill.create({
     data: { groupId: group.id, createdBy: userId, paidBy: userId, title, items: { create: [{ name: title, amount, quantity: 1, position: 0 }] } },
   })
+  await trackFeature("group_amount_bill", { source: "group", lineUserId: userId })
   return reply(replyToken, [billCard({ title, total: amount, itemCount: 1, payerName: await memberName(group, userId), url: billUrl(bill.id) })],
     `แยกบิล ${title} ${baht(amount)}: ${billUrl(bill.id)}`)
 }
@@ -266,6 +270,7 @@ async function processRepaymentSlip(group: Group, userId: string, messageId: str
     data: { status: "PAID", slipRef: slip.transRef, paidAt: new Date() },
   })
   if (count === 0) return null
+  await trackFeature("group_slip_paid", { source: "group", lineUserId: userId })
   return reply(replyToken, [slipPaidCard({
     debtorName: await memberName(group, userId),
     creditorName: await memberName(group, settled[0].creditorId),
@@ -284,6 +289,7 @@ async function handleAction(group: Group, userId: string, replyToken: string, ac
     }
     const rows = await debtRows(group, debts)
     await prisma.groupDebt.updateMany({ where: { id: { in: debts.map(d => d.id) } }, data: { lastRemindedAt: new Date() } })
+    await trackFeature("group_remind", { source: "group", lineUserId: userId })
     const message = remindMessage(debts.map((d, i) => ({ debtorId: d.debtorId, creditorName: rows[i].creditorName, amount: d.amount })))
     return reply(replyToken, [message as messagingApi.Message], "ทวงยอดค้างในกลุ่ม")
   }
@@ -297,6 +303,7 @@ async function handleAction(group: Group, userId: string, replyToken: string, ac
     if (userId !== debt.debtorId) return replyText(replyToken, `ปุ่มนี้สำหรับ ${debtorName} 🙏`)
     if (debt.status !== "OPEN") return null
     await prisma.groupDebt.update({ where: { id: debt.id }, data: { status: "CLAIMED" } })
+    await trackFeature("group_paid_claim", { source: "group", lineUserId: userId })
     return reply(replyToken, [claimCard({ debtId: debt.id, debtorName, creditorName, amount: debt.amount })], `${debtorName} บอกว่าจ่ายแล้ว รอ ${creditorName} ยืนยัน`)
   }
 

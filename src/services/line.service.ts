@@ -22,6 +22,7 @@ import type { messagingApi } from "@line/bot-sdk";
 import { consumeDailyUsage } from "@/lib/usage";
 import { isValidAmount } from "@/lib/money";
 import { ensureReferralCode, isInviteRequest, referralSummary } from "@/lib/referral";
+import { trackFeature } from "@/lib/feature-events";
 
 /**
  * Prepares the user entry in the DB.
@@ -154,6 +155,7 @@ async function handleEvent(event: any) {
 
       // "Invite friends": the user's own invite link with a share button (src/lib/referral.ts)
       if (isInviteRequest(text)) {
+        await trackFeature("line_invite", { source: "line", userId: user.id });
         const code = await ensureReferralCode(user.id);
         const s = await referralSummary(user.id);
         const link = `${siteUrl()}/r/${code}`;
@@ -162,6 +164,7 @@ async function handleEvent(event: any) {
       }
 
       if (isSummaryRequest(text)) {
+        await trackFeature("line_summary", { source: "line", userId: user.id });
         return reply(actualReplyToken, [summaryPickerCard()], `ดูสรุปรายรับรายจ่าย: แตะ "สรุปวันนี้" "สรุปเดือนนี้" หรือ "สรุปปีนี้" ด้านล่างได้เลยครับ`);
       }
 
@@ -183,6 +186,7 @@ async function handleEvent(event: any) {
 
       if (text === "ทดลองใช้" || text === "ทดลองใช้ pro" || text === "trial") {
         const expiresAt = await startProTrial(user.id);
+        if (expiresAt) await trackFeature("trial_start", { source: "line", userId: user.id });
         if (!expiresAt) return replyText(actualReplyToken, "บัญชีนี้ใช้สิทธิ์ทดลองใช้ Pro ไปแล้ว หรือเป็น Pro อยู่ครับ ดูรายละเอียดแพ็กเกจ: " + subscriptionUrl());
         return reply(actualReplyToken, [proActivatedCard({ expiresAt, kind: "TRIAL", billsUrl: appUrl("/bills"), plansUrl: subscriptionUrl() })],
           `🎉 เริ่มทดลองใช้ PaoPao Pro ฟรี ${TRIAL_DAYS} วันแล้ว ใช้ได้ถึง ${bkkDate(expiresAt)}`);
@@ -205,8 +209,10 @@ async function handleEvent(event: any) {
       if (quick) {
         console.info("[line] parsed without AI:", quick.category, quick.amount);
         extractedDataArray.push(quick);
+        await trackFeature("line_entry_quick", { source: "line", userId: user.id });
       } else {
         const extracted = await extractTransactionsFromText(cleanText, userCategories);
+        if (extracted.length) await trackFeature("line_entry_ai", { source: "line", userId: user.id });
         extractedDataArray.push(...extracted);
       }
     } 
@@ -238,6 +244,7 @@ async function handleEvent(event: any) {
         return null;
       }
       userQueue.isProcessing = true;
+      await trackFeature("line_slip", { source: "line", userId: user.id });
       
       const buffersToProcess = [...userQueue.buffers];
       actualReplyToken = userQueue.replyToken; // use the latest replyToken
@@ -543,6 +550,7 @@ async function handleBillAnswer(lineId: string, replyToken: string, data: string
     throw error;
   }
   await prisma.recurringBill.update({ where: { id: bill.id }, data: { amount: answer.amount } });
+  await trackFeature("line_bill_answer", { source: "line", userId: user.id });
   const card = recordedCard({ items: [{ type: "EXPENSE", amount: answer.amount, category: category!.name, categoryColor: category!.color, note: bill.name }], dashboardUrl: appUrl("/") });
   return reply(replyToken, [card], `บันทึกแล้ว ✅ ${bill.name} ${bahtText(answer.amount)}`);
 }
@@ -605,6 +613,7 @@ async function redeemVerifiedPayment(userId: string, transRef: string, amount: n
       return proExpiresAt;
     });
     if (!expiresAt) return { kind: "reply", text: used };
+    await trackFeature("line_pro_payment", { source: "line", userId });
     return {
       kind: "reply",
       text: `✅ ชำระเงินสำเร็จ! คุณใช้งาน PaoPao PRO ได้ถึงวันที่ ${bkkDate(expiresAt)} ขอบคุณที่สนับสนุนครับ 🎉`,

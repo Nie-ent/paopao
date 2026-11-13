@@ -10,6 +10,7 @@ import { loadFixedCosts } from "@/lib/finance-context"
 import { fixedCostContext } from "@/lib/fixed-costs"
 import { unstable_cache } from "next/cache"
 import { roundMoney } from '@/lib/money'
+import { trackFeature } from "@/lib/feature-events"
 
 
 // `lite`: a Free account's insight uses the cheaper model first (docs/costs.md); it is part of the cache key
@@ -125,6 +126,7 @@ Reply entirely in English.
   try {
     const today = new Date().toISOString().split('T')[0]
     const insightText = await withAiUser(prismaUser.id, () => getCachedFinancialAdvice(prompt, today, effectivePlan(prismaUser) === "FREE"))
+    await trackFeature("web_advice", { source: "web", userId: prismaUser.id })
     return { advice: insightText, error: null }
   } catch (error) {
     console.error("AI Generation Error", error)
@@ -193,6 +195,7 @@ Provide EXACTLY ONE short, friendly, punchy sentence (max 20 words) giving an in
   try {
     const today = new Date().toISOString().split('T')[0] // "2026-04-20"
     const adviceText = await withAiUser(prismaUser.id, () => getCachedInsight(prompt, today, effectivePlan(prismaUser) === "FREE"))
+    await trackFeature("web_insight", { source: "web", userId: prismaUser.id })
     return { advice: adviceText, error: null }
   } catch (error: any) {
     console.error("AI Generation Error", error)

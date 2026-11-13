@@ -65,6 +65,17 @@ export const actionButton = (action: Action, primary = false): messagingApi.Flex
   action,
 })
 
+/** A small tappable pill as wide as its label (Flex buttons are not, and truncate Thai text) */
+export function chip(action: Action): FlexBox {
+  return box("vertical", [text((action as { label?: string }).label ?? "", { size: "xs", color: COLORS.primary, align: "center", wrap: false, weight: "bold" })], {
+    flex: 0, paddingTop: "6px", paddingBottom: "6px", paddingStart: "10px", paddingEnd: "10px",
+    cornerRadius: "14px", borderWidth: "1px", borderColor: COLORS.primary, backgroundColor: COLORS.primarySoft, action,
+  })
+}
+
+/** Takes the leftover width in a horizontal row, so the items before it keep their natural size */
+const filler = (): FlexBox => box("vertical", [], { flex: 1 })
+
 /** Soft coral header with a title and an optional right-aligned note */
 export function header(title: string, note?: string): FlexBox {
   return box("horizontal", [
@@ -178,11 +189,13 @@ export function confirmCard(opts: { draftId: string; items: (DraftItem & { categ
       text(`${income ? "+" : "−"}${baht(item.amount)}`, { weight: "bold", size: "md", align: "end", flex: 0, wrap: false, color: income ? COLORS.income : COLORS.expense }),
     ], { spacing: "md", margin: index > 0 ? "md" : "none" }))
     if (editable) {
+      // Chips sized to their words: Flex buttons share the row equally and cut Thai labels ("เปลี่ย…")
       rows.push(box("horizontal", [
-        smallButton(postback("แก้ยอด", encodeEntryAction({ action: "amount", draftId, index }), "แก้ยอด")),
-        smallButton(postback("เปลี่ยนหมวด", encodeEntryAction({ action: "pickCategory", draftId, index }), "เปลี่ยนหมวด")),
-        smallButton(postback(income ? "เป็นรายจ่าย" : "เป็นรายรับ", encodeEntryAction({ action: "flipType", draftId, index }))),
-      ], { spacing: "xs", margin: "xs" }))
+        chip(postback("แก้ยอด", encodeEntryAction({ action: "amount", draftId, index }), "แก้ยอด")),
+        chip(postback("แก้หมวด", encodeEntryAction({ action: "pickCategory", draftId, index }), "เปลี่ยนหมวด")),
+        chip(postback(income ? "เป็นรายจ่าย" : "เป็นรายรับ", encodeEntryAction({ action: "flipType", draftId, index }))),
+        filler(),
+      ], { spacing: "sm", margin: "sm" }))
     }
   })
   if (items.length > shown.length) rows.push(text(`และอีก ${items.length - shown.length} รายการ`, { size: "xs", color: COLORS.muted, margin: "md" }))
