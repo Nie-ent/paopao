@@ -33,7 +33,7 @@ export const COLORS = {
 /** LINE limits that apply to what we build */
 export const FLEX_LIMITS = { altText: 400, buttonLabel: 40, quickReplyLabel: 20, rows: 10 }
 
-export const baht = (n: number) => `฿${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`
+export const baht = (n: number) => `฿${n.toLocaleString("en-US", { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })}`
 export const clip = (s: string, max: number) => (s.length > max ? s.slice(0, max - 1) + "…" : s)
 const bkkDate = (d: Date) => d.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit", timeZone: "Asia/Bangkok" })
 export const categoryLabel = (name: string) => (th as Record<string, string>)[`category.${name}`] || name

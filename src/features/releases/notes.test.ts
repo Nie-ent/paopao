@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import pkg from "../../../package.json"
 import { RELEASES, unseenReleases, type ReleaseNote } from "./notes"
 
 const r = (id: string): ReleaseNote => ({ id, title: { th: id, en: id }, items: [{ th: "x", en: "x" }] })
@@ -10,6 +11,10 @@ describe("release notes", () => {
     expect([...ids].sort().reverse()).toEqual(ids)
     expect(new Set(ids).size).toBe(ids.length)
     for (const rel of RELEASES) for (const i of rel.items) { expect(i.th.length).toBeGreaterThan(5); expect(i.en.length).toBeGreaterThan(5) }
+  })
+
+  it("the newest versioned release matches the app version in package.json", () => {
+    expect(RELEASES.find(x => x.version)?.version).toBe(pkg.version)
   })
 
   it("shows what came after the last dismissed release, at most 3", () => {

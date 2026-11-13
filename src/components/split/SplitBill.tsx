@@ -9,7 +9,8 @@ import type { BillView } from "@/features/group/split"
 type Liff = typeof import("@line/liff").default
 type EditItem = { id?: string; name: string; amount: string; discount: string; quantity: string }
 
-const baht = (n: number) => `฿${n.toLocaleString("th-TH", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
+/** Whole baht without decimals, otherwise always two (฿2,407.50, not ฿2,407.5) */
+const baht = (n: number) => `฿${n.toLocaleString("th-TH", { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })}`
 const POLL_MS = 8000
 
 const ERRORS: Record<string, string> = {
@@ -188,7 +189,7 @@ export function SplitBill({ billId }: { billId: string }) {
 
       {open && <p className="rounded-lg bg-[#FFF1EC] px-3 py-2 text-sm text-slate-700">ติ๊กรายการที่คุณกิน รายการที่มีหลายชิ้นให้กด + เลือกจำนวนของคุณ ถ้ากินด้วยกันหลายคนจะหารให้อัตโนมัติ</p>}
 
-      <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
+      <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white">
         {bill.items.map(item => {
           const myUnits = item.claims.find(c => c.userId === me)?.units ?? 0
           const taken = item.claims.reduce((n, c) => n + c.units, 0)
@@ -263,7 +264,7 @@ export function SplitBill({ billId }: { billId: string }) {
       {people > 0 && (
         <section className="space-y-2">
           <h2 className="text-sm font-semibold text-slate-500">แต่ละคนต้องจ่าย{open && <span className="font-normal text-slate-400"> · เปลี่ยนตามที่ทุกคนเลือก</span>}</h2>
-          <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
+          <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white">
             {Object.entries(split.shares).sort(([, a], [, b]) => b - a).map(([id, amount]) => {
               const debt = view.debts.find(d => d.debtorId === id)
               return (

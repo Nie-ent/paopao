@@ -35,7 +35,7 @@ export default function UpdatesPage() {
         {RELEASES.map(r => (
           <li key={r.id} className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
             <h2 className="font-semibold text-foreground">{r.title[lang]}</h2>
-            <p className="text-xs text-muted-foreground"><time dateTime={r.id.slice(0, 10)}>{dateOf(r.id)}</time></p>
+            <p className="text-xs text-muted-foreground">{r.version && <span className="font-medium">v{r.version} · </span>}<time dateTime={r.id.slice(0, 10)}>{dateOf(r.id)}</time></p>
             <ul className="mt-3 space-y-2 text-sm text-muted-foreground list-disc pl-5">
               {r.items.map(i => <li key={i.en}>{i[lang]}</li>)}
             </ul>

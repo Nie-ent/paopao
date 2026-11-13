@@ -30,7 +30,7 @@ type Group = { id: string; lineGroupId: string; kind: string; armedBy: string | 
 
 export const isGroupSource = (source: Source | undefined) => source?.type === "group" || source?.type === "room"
 
-const baht = (n: number) => `฿${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`
+const baht = (n: number) => `฿${n.toLocaleString("en-US", { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })}`
 const DAY_MS = 24 * 60 * 60 * 1000
 /** Display names are refreshed from LINE at most this often */
 const NAME_TTL_MS = 7 * DAY_MS

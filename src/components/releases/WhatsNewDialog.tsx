@@ -44,7 +44,7 @@ export function WhatsNewDialog() {
         <div className="space-y-5">
           {releases.map(r => (
             <section key={r.id}>
-              <h3 className="font-semibold text-foreground">{r.title[lang]}</h3>
+              <h3 className="font-semibold text-foreground">{r.title[lang]}{r.version && <span className="ml-1.5 text-xs font-normal text-muted-foreground">v{r.version}</span>}</h3>
               <p className="text-xs text-muted-foreground"><time dateTime={r.id.slice(0, 10)}>{dateOf(r.id)}</time></p>
               <ul className="mt-2 space-y-2 text-sm text-muted-foreground list-disc pl-5">
                 {r.items.map(i => <li key={i.en}>{i[lang]}</li>)}
