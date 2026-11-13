@@ -3,15 +3,21 @@
  * LINE and database side is src/services/group.service.ts.
  *
  * How a bill is shared:
- * - Each item is shared equally by the people who ticked it.
- * - An item nobody ticked is shared by everyone who ticked anything (nothing is left unpaid).
- * - Service charge and VAT are added, and a discount taken off, in proportion to each person's items.
+ * - An item's own discount comes off that item only.
+ * - Each person says how many units of an item they had (7 of 19 plates); the item is split by
+ *   units. A one-unit item ticked by several people is shared equally.
+ * - Units nobody took, and items nobody ticked, are shared equally by everyone who took part.
+ * - What the items don't cover is shared in proportion to each person's items: service charge,
+ *   VAT, a whole-bill discount, and, when the receipt's grand total is known, whatever else makes
+ *   up that total (VAT charged on the service charge, rounding). So shares add up to what was
+ *   actually paid, however the shop worked out its VAT.
  * - Everything is worked out in satang, and leftover satang go to the largest remainders, so the
- *   shares always add up to the bill total exactly.
+ *   shares always add up to the total exactly.
  */
 
-export type SplitItem = { id: string; amount: number; claimants: string[] }
-export type SplitExtras = { serviceCharge: number; vat: number; discount: number }
+export type SplitClaim = { userId: string; units: number }
+export type SplitItem = { id: string; amount: number; discount?: number; quantity?: number; claims: SplitClaim[] }
+export type SplitExtras = { serviceCharge: number; vat: number; discount: number; printedTotal?: number | null }
 
 const toSatang = (baht: number) => Math.round(baht * 100)
 
@@ -32,35 +38,61 @@ function apportion(total: number, weights: [string, number][]): Map<string, numb
   return out
 }
 
-export function billTotals(items: { amount: number }[], extras: SplitExtras) {
+const itemNet = (i: { amount: number; discount?: number }) => Math.max(0, toSatang(i.amount) - toSatang(i.discount ?? 0))
+
+/**
+ * The bill's totals in baht. `total` is what is shared: the printed grand total when known,
+ * otherwise items + service + VAT − discount. `adjustment` is how far the printed total is from
+ * that sum (e.g. VAT on the service charge), shown so nobody wonders where it came from.
+ */
+export function billTotals(items: { amount: number; discount?: number }[], extras: SplitExtras) {
   const subtotal = items.reduce((s, i) => s + toSatang(i.amount), 0)
-  const total = subtotal + toSatang(extras.serviceCharge) + toSatang(extras.vat) - toSatang(extras.discount)
-  return { subtotal: subtotal / 100, total: Math.max(0, total) / 100 }
+  const itemsNet = items.reduce((s, i) => s + itemNet(i), 0)
+  const computed = Math.max(0, itemsNet + toSatang(extras.serviceCharge) + toSatang(extras.vat) - toSatang(extras.discount))
+  const printed = extras.printedTotal && extras.printedTotal > 0 ? toSatang(extras.printedTotal) : null
+  const total = printed ?? computed
+  return { subtotal: subtotal / 100, itemsNet: itemsNet / 100, computed: computed / 100, total: total / 100, adjustment: (total - computed) / 100 }
 }
 
 /**
- * Each person's share in baht. `unclaimed` lists items nobody ticked (shared by all participants);
- * with no participants at all, nobody owes anything yet.
+ * Each person's share in baht. `unclaimed` lists items nobody ticked and `leftover` the units of
+ * part-claimed items nobody took (both shared by all participants); with no participants at all,
+ * nobody owes anything yet.
  */
 export function splitBill(items: SplitItem[], extras: SplitExtras) {
-  const participants = [...new Set(items.flatMap(i => i.claimants))].sort()
-  const unclaimed = items.filter(i => i.claimants.length === 0).map(i => i.id)
+  const claimsOf = (i: SplitItem) => i.claims.filter(c => c.units > 0)
+  const participants = [...new Set(items.flatMap(i => claimsOf(i).map(c => c.userId)))].sort()
   const itemShare = new Map<string, number>(participants.map(p => [p, 0]))
+  const add = (shares: Map<string, number>) => { for (const [p, s] of shares) itemShare.set(p, itemShare.get(p)! + s) }
+  const unclaimed: string[] = []
+  const leftover: { itemId: string; units: number }[] = []
+  let pool = 0
 
   for (const item of items) {
-    const who = item.claimants.length ? [...new Set(item.claimants)].sort() : participants
-    for (const [p, s] of apportion(toSatang(item.amount), who.map(p => [p, 1]))) itemShare.set(p, itemShare.get(p)! + s)
+    const net = itemNet(item)
+    const quantity = Math.max(1, item.quantity ?? 1)
+    const claims = claimsOf(item).map(c => [c.userId, Math.min(c.units, quantity)] as [string, number]).sort(([a], [b]) => a.localeCompare(b))
+    const claimed = claims.reduce((s, [, u]) => s + u, 0)
+    if (claims.length === 0) {
+      unclaimed.push(item.id)
+      pool += net
+    } else if (quantity === 1 || claimed >= quantity) {
+      add(apportion(net, claims))
+    } else {
+      const claimedPart = Math.round((net * claimed) / quantity)
+      add(apportion(claimedPart, claims))
+      pool += net - claimedPart
+      leftover.push({ itemId: item.id, units: quantity - claimed })
+    }
   }
+  add(apportion(pool, participants.map(p => [p, 1])))
 
-  const extra = toSatang(extras.serviceCharge) + toSatang(extras.vat) - toSatang(extras.discount)
-  const weights = participants.map(p => [p, itemShare.get(p)!] as [string, number])
-  const extraShare = apportion(Math.abs(extra), weights)
+  const totals = billTotals(items, extras)
+  const extra = toSatang(totals.total) - toSatang(totals.itemsNet)
+  const extraShare = apportion(Math.abs(extra), participants.map(p => [p, itemShare.get(p)!]))
   const shares = new Map<string, number>()
-  for (const p of participants) {
-    const satang = itemShare.get(p)! + Math.sign(extra) * (extraShare.get(p) ?? 0)
-    shares.set(p, Math.max(0, satang) / 100)
-  }
-  return { shares, participants, unclaimed, ...billTotals(items, extras) }
+  for (const p of participants) shares.set(p, Math.max(0, itemShare.get(p)! + Math.sign(extra) * (extraShare.get(p) ?? 0)) / 100)
+  return { shares, participants, unclaimed, leftover, ...totals }
 }
 
 /** Who owes the payer what: everyone with a share except the payer. */

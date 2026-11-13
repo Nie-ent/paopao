@@ -17,12 +17,12 @@ import { verifySlipImage } from "@/lib/slip-verify"
 import { isProActive } from "@/lib/subscription"
 import { liffUrl } from "@/lib/site"
 import {
-  ARM_MS, GROUP_LIMITS, debtsSettledBy, isDebtsCommand, isGroupHelpCommand, parseGroupAction, parseSplitCommand, type GroupAction,
+  ARM_MS, GROUP_LIMITS, billTotals, debtsSettledBy, isDebtsCommand, isGroupHelpCommand, parseGroupAction, parseSplitCommand, type GroupAction,
 } from "@/lib/group-split"
 import {
   armedMessage, billCard, claimCard, debtsCard, groupWelcomeCard, receiptLimitMessage, remindMessage, slipPaidCard, type DebtRow,
 } from "@/lib/group-cards"
-import { readReceipt, receiptAddsUp } from "@/services/receipt.service"
+import { readReceipt, receiptLooksOff } from "@/services/receipt.service"
 import { reply, replyText } from "@/services/line.service"
 
 type Source = { type: string; groupId?: string; roomId?: string; userId?: string }
@@ -160,7 +160,7 @@ async function processReceipt(group: Group, userId: string, messageId: string, r
     include: { items: true },
   })
   if (existing) {
-    const total = existing.items.reduce((s, i) => s + i.amount, 0) + existing.serviceCharge + existing.vat - existing.discount
+    const { total } = billTotals(existing.items, existing)
     return reply(replyToken, [
       { type: "text", text: "ใบเสร็จนี้แยกบิลไปแล้ว กดที่การ์ดเพื่อเลือกรายการต่อได้เลย" },
       billCard({ title: existing.title, total, itemCount: existing.items.length, payerName: await memberName(group, existing.paidBy), url: billUrl(existing.id) }),
@@ -180,13 +180,16 @@ async function processReceipt(group: Group, userId: string, messageId: string, r
     data: {
       groupId: group.id, createdBy: userId, paidBy: userId, title, receiptHash,
       serviceCharge: receipt.serviceCharge, vat: receipt.vat, discount: receipt.discount,
+      // Only trusted when every item was kept; otherwise the dropped items' cost would be spread over the rest
+      printedTotal: receipt.items.length === items.length && receipt.printedTotal ? receipt.printedTotal : null,
       items: { create: items.map((item, position) => ({ ...item, position })) },
     },
   })
-  const total = items.reduce((s, i) => s + i.amount, 0) + receipt.serviceCharge + receipt.vat - receipt.discount
-  const warning = !receiptAddsUp({ ...receipt, items })
-    ? `ยอดที่อ่านได้ไม่ตรงกับยอดรวมในใบเสร็จ (${baht(receipt.printedTotal)}) คนจ่ายบิลแก้ได้ในหน้าเลือกรายการ`
-    : receipt.items.length > items.length ? `แสดง ${items.length} รายการแรก` : undefined
+  const { total } = billTotals(items, { ...receipt, printedTotal: bill.printedTotal })
+  const warning = receipt.items.length > items.length ? `แสดง ${items.length} รายการแรก ยอดรวมจึงไม่ครบ คนจ่ายบิลแก้ได้ในหน้าเลือกรายการ`
+    : receiptLooksOff({ ...receipt, items })
+      ? `รายการที่อ่านได้รวมกันไม่ใกล้ยอดในใบเสร็จ (${baht(receipt.printedTotal)}) อาจอ่านบางรายการผิด คนจ่ายบิลตรวจและแก้ได้ในหน้าเลือกรายการ`
+      : undefined
   return reply(replyToken, [billCard({ title, total, itemCount: items.length, payerName: await memberName(group, userId), url: billUrl(bill.id), warning })],
     `แยกบิล ${title} ${baht(total)}: ${billUrl(bill.id)}`)
 }

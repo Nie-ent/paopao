@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { QRCodeSVG } from "qrcode.react"
 import generatePayload from "promptpay-qr"
-import { Check, Loader2, Pencil, Plus, Trash2 } from "lucide-react"
+import { Check, Loader2, Minus, Pencil, Plus, Trash2 } from "lucide-react"
 import type { BillView } from "@/features/group/split"
 
 type Liff = typeof import("@line/liff").default
-type EditItem = { id?: string; name: string; amount: string; quantity: string }
+type EditItem = { id?: string; name: string; amount: string; discount: string; quantity: string }
 
 const baht = (n: number) => `฿${n.toLocaleString("th-TH", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
 const POLL_MS = 8000
@@ -32,7 +32,7 @@ export function SplitBill({ billId }: { billId: string }) {
   const [view, setView] = useState<BillView | null>(null)
   const [error, setError] = useState<string | null>(process.env.NEXT_PUBLIC_LIFF_ID ? null : "ยังไม่ได้ตั้งค่า LIFF")
   const [busy, setBusy] = useState<string | null>(null)
-  const [editing, setEditing] = useState<{ title: string; serviceCharge: string; vat: string; discount: string; items: EditItem[] } | null>(null)
+  const [editing, setEditing] = useState<{ title: string; serviceCharge: string; vat: string; discount: string; printedTotal: string; items: EditItem[] } | null>(null)
   const [confirming, setConfirming] = useState<"close" | "cancel" | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [promptPay, setPromptPay] = useState("")
@@ -117,8 +117,10 @@ export function SplitBill({ billId }: { billId: string }) {
     const save = async () => {
       const data = await act("edit", {
         action: "edit", title: editing.title,
-        serviceCharge: num(editing.serviceCharge), vat: num(editing.vat), discount: num(editing.discount),
-        items: editing.items.filter(i => i.name.trim() && num(i.amount) > 0).map(i => ({ id: i.id, name: i.name, amount: num(i.amount), quantity: Math.max(1, Math.round(num(i.quantity) || 1)) })),
+        serviceCharge: num(editing.serviceCharge), vat: num(editing.vat), discount: num(editing.discount), printedTotal: num(editing.printedTotal),
+        items: editing.items.filter(i => i.name.trim() && num(i.amount) > 0).map(i => ({
+          id: i.id, name: i.name, amount: num(i.amount), discount: Math.min(num(i.amount), num(i.discount)), quantity: Math.max(1, Math.round(num(i.quantity) || 1)),
+        })),
       })
       if (data) setEditing(null)
     }
@@ -129,22 +131,31 @@ export function SplitBill({ billId }: { billId: string }) {
         <Field label="ชื่อบิล"><input className={input} value={editing.title} onChange={e => setEditing({ ...editing, title: e.target.value })} /></Field>
         <div className="space-y-2">
           {editing.items.map((it, i) => (
-            <div key={it.id ?? `new-${i}`} className="flex items-center gap-2">
-              <input className={`${input} flex-1`} value={it.name} placeholder="รายการ" onChange={e => setItem(i, { name: e.target.value })} />
-              <input className={`${input} w-14 text-center`} inputMode="numeric" value={it.quantity} aria-label="จำนวน" onChange={e => setItem(i, { quantity: e.target.value })} />
-              <input className={`${input} w-24 text-right`} inputMode="decimal" value={it.amount} placeholder="บาท" aria-label="ราคารวม" onChange={e => setItem(i, { amount: e.target.value })} />
-              <button className="p-2 text-slate-400" aria-label="ลบรายการ" onClick={() => setEditing({ ...editing, items: editing.items.filter((_, j) => j !== i) })}><Trash2 className="h-4 w-4" /></button>
+            <div key={it.id ?? `new-${i}`} className="space-y-1 rounded-lg border border-slate-200 bg-white p-2">
+              <div className="flex items-center gap-2">
+                <input className={`${input} flex-1`} value={it.name} placeholder="รายการ" onChange={e => setItem(i, { name: e.target.value })} />
+                <button className="p-2 text-slate-400" aria-label="ลบรายการ" onClick={() => setEditing({ ...editing, items: editing.items.filter((_, j) => j !== i) })}><Trash2 className="h-4 w-4" /></button>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <Field label="จำนวน"><input className={`${input} text-center`} inputMode="numeric" value={it.quantity} onChange={e => setItem(i, { quantity: e.target.value })} /></Field>
+                <Field label="ราคารวม (บาท)"><input className={`${input} text-right`} inputMode="decimal" value={it.amount} onChange={e => setItem(i, { amount: e.target.value })} /></Field>
+                <Field label="ส่วนลดรายการนี้"><input className={`${input} text-right`} inputMode="decimal" value={it.discount} placeholder="0" onChange={e => setItem(i, { discount: e.target.value })} /></Field>
+              </div>
             </div>
           ))}
-          <button className="flex items-center gap-1 text-sm font-medium text-[#E5734F]" onClick={() => setEditing({ ...editing, items: [...editing.items, { name: "", amount: "", quantity: "1" }] })}>
+          <button className="flex items-center gap-1 text-sm font-medium text-[#E5734F]" onClick={() => setEditing({ ...editing, items: [...editing.items, { name: "", amount: "", discount: "", quantity: "1" }] })}>
             <Plus className="h-4 w-4" /> เพิ่มรายการ
           </button>
         </div>
         <div className="grid grid-cols-3 gap-2">
           <Field label="Service charge"><input className={input} inputMode="decimal" value={editing.serviceCharge} onChange={e => setEditing({ ...editing, serviceCharge: e.target.value })} /></Field>
           <Field label="VAT (บวกเพิ่ม)"><input className={input} inputMode="decimal" value={editing.vat} onChange={e => setEditing({ ...editing, vat: e.target.value })} /></Field>
-          <Field label="ส่วนลด"><input className={input} inputMode="decimal" value={editing.discount} onChange={e => setEditing({ ...editing, discount: e.target.value })} /></Field>
+          <Field label="ส่วนลดทั้งบิล"><input className={input} inputMode="decimal" value={editing.discount} onChange={e => setEditing({ ...editing, discount: e.target.value })} /></Field>
         </div>
+        <Field label="ยอดสุทธิตามใบเสร็จ (TOTAL)">
+          <input className={input} inputMode="decimal" value={editing.printedTotal} placeholder="ไม่ใส่ = คิดจากรายการ + service + VAT − ส่วนลด" onChange={e => setEditing({ ...editing, printedTotal: e.target.value })} />
+        </Field>
+        <p className="text-xs text-slate-400">ถ้าใส่ยอดสุทธิ ทุกคนจะจ่ายรวมกันเท่ายอดนี้พอดี ส่วนต่าง (เช่น VAT ของ service charge) เฉลี่ยตามสัดส่วน</p>
         {notice && <p className="text-sm text-red-600">{notice}</p>}
         <div className="flex gap-2">
           <button className={secondaryBtn} onClick={() => setEditing(null)}>ยกเลิก</button>
@@ -175,39 +186,79 @@ export function SplitBill({ billId }: { billId: string }) {
         </div>
       </header>
 
-      {open && <p className="rounded-lg bg-[#FFF1EC] px-3 py-2 text-sm text-slate-700">ติ๊กรายการที่คุณกิน รายการที่กินด้วยกันหลายคนจะหารกันให้อัตโนมัติ</p>}
+      {open && <p className="rounded-lg bg-[#FFF1EC] px-3 py-2 text-sm text-slate-700">ติ๊กรายการที่คุณกิน รายการที่มีหลายชิ้นให้กด + เลือกจำนวนของคุณ ถ้ากินด้วยกันหลายคนจะหารให้อัตโนมัติ</p>}
 
       <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
         {bill.items.map(item => {
-          const mine = item.claimants.includes(me)
-          return (
-            <li key={item.id}>
-              <button disabled={!open || !!busy} onClick={() => act(item.id, { action: "claim", itemId: item.id, on: !mine })}
-                className="flex w-full items-start gap-3 px-3 py-3 text-left disabled:cursor-default" aria-pressed={mine}>
-                <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border ${mine ? "border-[#E5734F] bg-[#E5734F] text-white" : "border-slate-300 bg-white"}`}>
-                  {busy === item.id ? <Loader2 className="h-3 w-3 animate-spin text-slate-400" /> : mine && <Check className="h-3.5 w-3.5" />}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium text-slate-900">{item.name}{item.quantity > 1 && <span className="text-slate-500"> ×{item.quantity}</span>}</span>
-                  <span className="block text-xs text-slate-500">
-                    {item.claimants.length ? item.claimants.map(name).join(", ") : "ยังไม่มีใครติ๊ก (หารทุกคน)"}
+          const myUnits = item.claims.find(c => c.userId === me)?.units ?? 0
+          const taken = item.claims.reduce((n, c) => n + c.units, 0)
+          const who = item.claims.length
+            ? item.claims.map(c => (item.quantity > 1 ? `${name(c.userId)} ${c.units}` : name(c.userId))).join(", ")
+            : "ยังไม่มีใครเลือก (หารทุกคน)"
+          const setUnits = (units: number) => act(item.id, { action: "claim", itemId: item.id, units: Math.max(0, Math.min(item.quantity, units)) })
+          const price = (
+            <span className="text-right text-sm tabular-nums text-slate-700">
+              {item.discount > 0 && <span className="block text-xs text-slate-400 line-through">{baht(item.amount)}</span>}
+              {baht(item.amount - item.discount)}
+            </span>
+          )
+          if (item.quantity === 1) {
+            return (
+              <li key={item.id}>
+                <button disabled={!open || !!busy} onClick={() => setUnits(myUnits ? 0 : 1)}
+                  className="flex w-full items-start gap-3 px-3 py-3 text-left disabled:cursor-default" aria-pressed={myUnits > 0}>
+                  <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border ${myUnits ? "border-[#E5734F] bg-[#E5734F] text-white" : "border-slate-300 bg-white"}`}>
+                    {busy === item.id ? <Loader2 className="h-3 w-3 animate-spin text-slate-400" /> : myUnits > 0 && <Check className="h-3.5 w-3.5" />}
                   </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium text-slate-900">{item.name}</span>
+                    <span className="block text-xs text-slate-500">{who}</span>
+                  </span>
+                  {price}
+                </button>
+              </li>
+            )
+          }
+          // Several units (e.g. 19 plates): each person says how many were theirs
+          return (
+            <li key={item.id} className="flex items-start gap-3 px-3 py-3">
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-medium text-slate-900">{item.name} <span className="text-slate-500">×{item.quantity}</span></span>
+                <span className="block text-xs text-slate-500">{who}</span>
+                <span className={`block text-xs ${taken === item.quantity ? "text-emerald-700" : taken > item.quantity ? "text-red-600" : "text-amber-700"}`}>
+                  เลือกแล้ว {taken}/{item.quantity}{taken > item.quantity ? " (เกินจำนวน จะคิดตามสัดส่วน)" : taken < item.quantity && taken > 0 ? " (ที่เหลือหารทุกคน)" : ""}
                 </span>
-                <span className="text-sm tabular-nums text-slate-700">{baht(item.amount)}</span>
-              </button>
+                {open && (
+                  <span className="mt-2 flex items-center gap-2">
+                    <button className={stepBtn} disabled={!!busy || myUnits === 0} aria-label="ลดจำนวนของฉัน" onClick={() => setUnits(myUnits - 1)}><Minus className="h-4 w-4" /></button>
+                    <span className="w-8 text-center text-sm font-semibold tabular-nums" aria-live="polite">{busy === item.id ? <Loader2 className="mx-auto h-4 w-4 animate-spin text-slate-400" /> : myUnits}</span>
+                    <button className={stepBtn} disabled={!!busy || myUnits >= item.quantity} aria-label="เพิ่มจำนวนของฉัน" onClick={() => setUnits(myUnits + 1)}><Plus className="h-4 w-4" /></button>
+                    {taken < item.quantity && (
+                      <button className="text-xs font-medium text-[#E5734F]" disabled={!!busy} onClick={() => setUnits(myUnits + item.quantity - taken)}>
+                        +ที่เหลือ {item.quantity - taken}
+                      </button>
+                    )}
+                  </span>
+                )}
+              </span>
+              {price}
             </li>
           )
         })}
       </ul>
 
-      {(bill.serviceCharge > 0 || bill.vat > 0 || bill.discount > 0) && (
-        <div className="space-y-1 text-sm text-slate-600">
-          {bill.serviceCharge > 0 && <Row label="Service charge" value={baht(bill.serviceCharge)} />}
-          {bill.vat > 0 && <Row label="VAT" value={baht(bill.vat)} />}
-          {bill.discount > 0 && <Row label="ส่วนลด" value={`−${baht(bill.discount)}`} />}
-          <p className="text-xs text-slate-400">เฉลี่ยตามสัดส่วนรายการของแต่ละคน</p>
-        </div>
-      )}
+      <div className="space-y-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-600">
+        <Row label="รวมรายการ" value={baht(split.subtotal)} />
+        {split.subtotal - split.itemsNet > 0 && <Row label="ส่วนลดรายการ" value={`−${baht(split.subtotal - split.itemsNet)}`} />}
+        {bill.discount > 0 && <Row label="ส่วนลดทั้งบิล" value={`−${baht(bill.discount)}`} />}
+        {bill.serviceCharge > 0 && <Row label="Service charge" value={baht(bill.serviceCharge)} />}
+        {bill.vat > 0 && <Row label="VAT" value={baht(bill.vat)} />}
+        {Math.abs(split.adjustment) >= 0.01 && (
+          <Row label={split.adjustment > 0 ? "ปรับให้ตรงยอดใบเสร็จ (เช่น VAT ของ service)" : "ปรับให้ตรงยอดใบเสร็จ"} value={`${split.adjustment > 0 ? "+" : "−"}${baht(Math.abs(split.adjustment))}`} />
+        )}
+        <div className="flex justify-between border-t border-slate-100 pt-1 font-semibold text-slate-900"><span>ยอดสุทธิ</span><span className="tabular-nums">{baht(split.total)}</span></div>
+        <p className="text-xs text-slate-400">ส่วนลดทั้งบิล service และ VAT เฉลี่ยตามสัดส่วนรายการของแต่ละคน</p>
+      </div>
 
       {bill.status === "CLOSED" && (
         <section className="space-y-2">
@@ -270,10 +321,13 @@ export function SplitBill({ billId }: { billId: string }) {
             <div className="flex gap-2">
               <button className={`${secondaryBtn} w-auto px-3`} aria-label="แก้ไขบิล" onClick={() => setEditing({
                 title: bill.title, serviceCharge: String(bill.serviceCharge || ""), vat: String(bill.vat || ""), discount: String(bill.discount || ""),
-                items: bill.items.map(i => ({ id: i.id, name: i.name, amount: String(i.amount), quantity: String(i.quantity) })),
+                printedTotal: String(bill.printedTotal || ""),
+                items: bill.items.map(i => ({ id: i.id, name: i.name, amount: String(i.amount), discount: String(i.discount || ""), quantity: String(i.quantity) })),
               })}><Pencil className="h-4 w-4" /></button>
               <button className={primaryBtn} disabled={!!busy || people === 0} onClick={() => setConfirming("close")}>
-                {split.unclaimed.length ? `ปิดบิล (${split.unclaimed.length} รายการไม่มีใครติ๊ก จะหารทุกคน)` : "ปิดบิลและสรุปยอด"}
+                {split.unclaimed.length || split.leftover.length
+                  ? `ปิดบิล (${split.unclaimed.length + split.leftover.length} รายการยังเลือกไม่ครบ จะหารทุกคน)`
+                  : "ปิดบิลและสรุปยอด"}
               </button>
             </div>
           ))}
@@ -298,6 +352,7 @@ export function SplitBill({ billId }: { billId: string }) {
 
 const input = "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#E5734F]"
 const primaryBtn = "flex w-full flex-1 items-center justify-center rounded-lg bg-[#E5734F] px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+const stepBtn = "flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 disabled:opacity-40"
 const secondaryBtn = "flex w-full flex-1 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 disabled:opacity-50"
 
 function Shell({ children }: { children: React.ReactNode }) {

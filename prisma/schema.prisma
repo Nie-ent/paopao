@@ -434,8 +434,11 @@ model GroupBill {
   /// Baht added on top of the items, shared in proportion to each person's items
   serviceCharge  Decimal         @default(0) @db.Decimal(12, 2)
   vat            Decimal         @default(0) @db.Decimal(12, 2)
-  /// Baht taken off, shared the same way
+  /// Baht taken off the whole bill, shared the same way
   discount       Decimal         @default(0) @db.Decimal(12, 2)
+  /// Grand total printed on the receipt. When set, shares always add up to it: whatever the items
+  /// don't cover (service, VAT, VAT on service, rounding) is shared in proportion (src/lib/group-split.ts)
+  printedTotal   Decimal?        @db.Decimal(12, 2)
   status         GroupBillStatus @default(OPEN)
   /// SHA-256 of the receipt image, to warn about the same receipt twice
   receiptHash    String?
@@ -454,8 +457,10 @@ model GroupBillItem {
   billId    String
   bill      GroupBill        @relation(fields: [billId], references: [id], onDelete: Cascade)
   name      String
-  /// Line total in baht (all units)
+  /// Line total in baht (all units), before this item's own discount
   amount    Decimal          @db.Decimal(12, 2)
+  /// Discount printed against this item only; only the people who had it get it
+  discount  Decimal          @default(0) @db.Decimal(12, 2)
   quantity  Int              @default(1)
   position  Int
   claims    GroupBillClaim[]
@@ -463,12 +468,14 @@ model GroupBillItem {
   @@index([billId])
 }
 
-/// A person who had (part of) an item; an item is shared equally between its claimants
+/// A person who had (part of) an item, and how many of its units
 model GroupBillClaim {
   id         String        @id @default(uuid())
   itemId     String
   item       GroupBillItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
   lineUserId String
+  /// Units of the item this person had (e.g. 7 of 19 plates); with one unit, claimants share it equally
+  units      Int           @default(1)
   createdAt  DateTime      @default(now())
 
   @@unique([itemId, lineUserId])
