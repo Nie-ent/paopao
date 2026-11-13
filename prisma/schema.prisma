@@ -419,6 +419,9 @@ model LinePayee {
   lineUserId  String   @id
   /// PromptPay phone or ID for the QR shown to people who owe them (encrypted: src/lib/field-crypto.ts)
   promptPayId String?
+  /// Text of the user's own payment QR (e.g. a bank's "My QR"), read from their photo in the browser;
+  /// used when there is no PromptPay number (encrypted). Only one of the two is set.
+  qrPayload   String?
   updatedAt   DateTime @default(now()) @updatedAt
 }
 

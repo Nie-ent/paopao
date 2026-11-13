@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { QRCodeSVG } from "qrcode.react"
-import generatePayload from "promptpay-qr"
 import { Check, Loader2, Minus, Pencil, Plus, Trash2 } from "lucide-react"
 import type { BillView } from "@/features/group/split"
+import { PayoutSettings } from "@/components/split/PayoutSettings"
 
 type Liff = typeof import("@line/liff").default
 type EditItem = { id?: string; name: string; amount: string; discount: string; quantity: string }
@@ -36,7 +36,6 @@ export function SplitBill({ billId }: { billId: string }) {
   const [editing, setEditing] = useState<{ title: string; serviceCharge: string; vat: string; discount: string; printedTotal: string; items: EditItem[] } | null>(null)
   const [confirming, setConfirming] = useState<"close" | "cancel" | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const [promptPay, setPromptPay] = useState("")
   const liffRef = useRef<Liff | null>(null)
   const tokenRef = useRef<string | null>(null)
 
@@ -288,32 +287,23 @@ export function SplitBill({ billId }: { billId: string }) {
         </section>
       )}
 
-      {bill.status === "CLOSED" && (
-        <section className="space-y-2">
-          {myDebt && (
-            <div className="rounded-xl border border-slate-200 bg-white p-4 text-center">
-              <p className="text-sm text-slate-600">โอนให้ {name(bill.paidBy)}</p>
-              <p className="text-2xl font-bold">{baht(myDebt.amount)}</p>
-              {view.payeePromptPay ? (
-                <>
-                  <div className="my-3 flex justify-center"><QRCodeSVG value={generatePayload(view.payeePromptPay, { amount: myDebt.amount })} size={200} /></div>
-                  <p className="text-xs text-slate-500">สแกนด้วยแอปธนาคาร แล้วส่งสลิปในกลุ่ม ระบบจะปิดยอดให้อัตโนมัติ</p>
-                </>
-              ) : <p className="mt-2 text-xs text-slate-500">{name(bill.paidBy)} ยังไม่ได้ใส่พร้อมเพย์ โอนตามช่องทางที่ตกลงกัน แล้วส่งสลิปในกลุ่ม</p>}
-            </div>
-          )}
+      {bill.status === "CLOSED" && myDebt && (
+        <div className="rounded-xl border border-slate-200 bg-white p-4 text-center">
+          <p className="text-sm text-slate-600">โอนให้ {name(bill.paidBy)}</p>
+          <p className="text-2xl font-bold">{baht(myDebt.amount)}</p>
+          {view.payQr ? (
+            <>
+              <div className="my-3 flex justify-center"><QRCodeSVG value={view.payQr.payload} size={200} /></div>
+              <p className="text-xs text-slate-500">
+                {view.payQr.exact ? "สแกนด้วยแอปธนาคาร ยอดจะขึ้นให้เอง" : `สแกนด้วยแอปธนาคาร แล้วพิมพ์ยอด ${baht(myDebt.amount)}`} · โอนแล้วส่งสลิปในกลุ่ม ระบบจะปิดยอดให้อัตโนมัติ
+              </p>
+            </>
+          ) : <p className="mt-2 text-xs text-slate-500">{name(bill.paidBy)} ยังไม่ได้ตั้งช่องทางรับเงิน โอนตามช่องทางที่ตกลงกัน แล้วส่งสลิปในกลุ่ม</p>}
+        </div>
+      )}
 
-          {bill.paidBy === me && !view.payeePromptPay && (
-            <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-4">
-              <p className="text-sm font-medium">ใส่พร้อมเพย์ของคุณ เพื่อให้เพื่อนสแกน QR จ่ายได้</p>
-              <div className="flex gap-2">
-                <input className={`${input} flex-1`} inputMode="numeric" placeholder="เบอร์มือถือหรือเลขบัตร" value={promptPay} onChange={e => setPromptPay(e.target.value)} />
-                <button className={`${primaryBtn} w-auto px-4`} disabled={!!busy || !promptPay} onClick={() => act("pp", { action: "setPromptPay", promptPayId: promptPay })}>บันทึก</button>
-              </div>
-              <p className="text-xs text-slate-400">เก็บแบบเข้ารหัส แสดงเป็น QR ให้เฉพาะคนที่ค้างจ่ายคุณ</p>
-            </div>
-          )}
-        </section>
+      {bill.paidBy === me && bill.status !== "CANCELLED" && (
+        <PayoutSettings payout={view.myPayout} busy={busy} save={act} startOpen={bill.status === "CLOSED"} />
       )}
 
       {notice && <p className="text-center text-sm text-slate-600">{notice}</p>}
