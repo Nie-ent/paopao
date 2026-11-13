@@ -9,6 +9,7 @@ import { verifyLiffAccessToken } from "@/lib/line-login"
 import { debtsFor, GROUP_LIMITS, splitBill } from "@/lib/group-split"
 import { isValidAmount } from "@/lib/money"
 import { fetchMemberProfile } from "@/services/group.service"
+import { isPaymentQr, maskPromptPay, payQr } from "@/lib/emv-qr"
 
 export class SplitError extends Error {
   constructor(public code: "UNAUTHORIZED" | "NOT_FOUND" | "NOT_MEMBER" | "FORBIDDEN" | "INVALID" | "CLOSED" | "HAS_PAYMENTS" | "NO_PARTICIPANTS", public status: number) {
@@ -51,9 +52,10 @@ export async function billView(billId: string, me: string) {
     claims: i.claims.map(c => ({ userId: c.lineUserId, units: c.units })),
   }))
   const split = splitBill(items, bill)
-  // Shown to people who owe the payer, so they can scan and pay
-  const iOwe = bill.debts.some(d => d.debtorId === me && d.status !== "PAID" && d.status !== "CANCELLED")
-  const payee = bill.paidBy === me || iOwe ? await prisma.linePayee.findUnique({ where: { lineUserId: bill.paidBy } }) : null
+  // The payer's payment details reach only people who owe them, as a QR for their own amount
+  const myDebt = bill.debts.find(d => d.debtorId === me && (d.status === "OPEN" || d.status === "CLAIMED"))
+  const payee = myDebt ? await prisma.linePayee.findUnique({ where: { lineUserId: bill.paidBy } }) : null
+  const mine = await prisma.linePayee.findUnique({ where: { lineUserId: me } })
 
   return {
     me,
@@ -68,7 +70,12 @@ export async function billView(billId: string, me: string) {
       subtotal: split.subtotal, itemsNet: split.itemsNet, total: split.total, adjustment: split.adjustment,
     },
     debts: bill.debts.map(d => ({ id: d.id, debtorId: d.debtorId, creditorId: d.creditorId, amount: d.amount, status: d.status })),
-    payeePromptPay: payee?.promptPayId ?? null,
+    /** What I scan to pay what I owe on this bill (null when I owe nothing or the payer set no way to pay) */
+    payQr: myDebt && payee ? payQr(payee, myDebt.amount) : null,
+    /** How I get paid, for my own settings (my own data only) */
+    myPayout: mine?.promptPayId ? { kind: "promptpay" as const, label: maskPromptPay(mine.promptPayId) }
+      : mine?.qrPayload ? { kind: "qr" as const, payload: mine.qrPayload, withAmount: isPaymentQr(mine.qrPayload) }
+        : null,
   }
 }
 
@@ -95,6 +102,9 @@ const ActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("cancel") }),
   /** Thai mobile (10 digits), national/tax ID (13) or e-wallet (15) */
   z.object({ action: z.literal("setPromptPay"), promptPayId: z.string().transform(s => s.replace(/[\s-]/g, "")).refine(s => /^(0\d{9}|\d{13}|\d{15})$/.test(s)) }),
+  /** Text of the user's own payment QR, decoded from their photo in the browser */
+  z.object({ action: z.literal("setPayQr"), payload: z.string().trim().min(8).max(512) }),
+  z.object({ action: z.literal("clearPayout") }),
 ])
 
 export async function applyAction(billId: string, me: string, body: unknown) {
@@ -180,8 +190,19 @@ export async function applyAction(billId: string, me: string, body: unknown) {
       ])
       break
     }
+    // One way to get paid at a time: setting one clears the other
     case "setPromptPay": {
-      await prisma.linePayee.upsert({ where: { lineUserId: me }, create: { lineUserId: me, promptPayId: input.promptPayId }, update: { promptPayId: input.promptPayId } })
+      const data = { promptPayId: input.promptPayId, qrPayload: null }
+      await prisma.linePayee.upsert({ where: { lineUserId: me }, create: { lineUserId: me, ...data }, update: data })
+      break
+    }
+    case "setPayQr": {
+      const data = { promptPayId: null, qrPayload: input.payload }
+      await prisma.linePayee.upsert({ where: { lineUserId: me }, create: { lineUserId: me, ...data }, update: data })
+      break
+    }
+    case "clearPayout": {
+      await prisma.linePayee.updateMany({ where: { lineUserId: me }, data: { promptPayId: null, qrPayload: null } })
       break
     }
   }

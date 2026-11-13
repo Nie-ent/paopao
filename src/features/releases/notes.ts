@@ -7,11 +7,25 @@
 export type ReleaseNote = {
   /** YYYY-MM-DD (or YYYY-MM-DDb …), unique and increasing */
   id: string
+  /** Semantic version of the app this release shipped as (package.json "version"), e.g. "1.0.0" */
+  version?: string
   title: { th: string; en: string }
   items: { th: string; en: string }[]
 }
 
 export const RELEASES: ReleaseNote[] = [
+  {
+    id: "2026-11-13",
+    version: "1.0.0",
+    title: { th: "เป๋าเป๋า 1.0: แยกบิลและทวงเงินในกลุ่ม LINE", en: "PaoPao 1.0: split bills and chase debts in LINE groups" },
+    items: [
+      { th: "เชิญเป๋าเป๋าเข้ากลุ่ม LINE แล้วพิมพ์ \"แยกบิล\" กดถ่ายรูปหรือเลือกรูปใบเสร็จได้จากการ์ดเลย เป๋าเป๋าอ่านรายการให้ ไม่มีใบเสร็จพิมพ์ \"แยกบิล 1200 ค่าห้อง\" เพื่อหารเท่ากัน", en: "Invite PaoPao to a LINE group and type \"แยกบิล\": take or pick a photo of the receipt right from the card and PaoPao reads the items. No receipt? Type \"แยกบิล 1200 rent\" to split evenly" },
+      { th: "ทุกคนติ๊กรายการของตัวเอง รายการที่มีหลายชิ้น (เช่น ซูชิ 19 จาน) เลือกจำนวนของตัวเองได้ และเห็นยอดที่แต่ละคนต้องจ่ายทันที", en: "Everyone ticks what they had, picks how many of a multi-piece item (like 19 sushi plates) were theirs, and sees what each person owes right away" },
+      { th: "ยอดรวมตรงกับใบเสร็จเสมอ ทั้ง VAT, service charge, ส่วนลดทั้งบิล และส่วนลดเฉพาะรายการ", en: "Totals always match the receipt, including VAT, service charge, whole-bill and per-item discounts" },
+      { th: "คนจ่ายบิลตั้งช่องทางรับเงินได้ ใส่เลขพร้อมเพย์หรืออัปโหลดรูป QR ของตัวเอง (เช่น My QR ของแอปธนาคาร) เพื่อนที่ค้างจะเห็น QR ที่ใส่ยอดของเขาไว้แล้ว สแกนจ่ายได้ทันที", en: "Whoever paid sets how to get paid: a PromptPay number or their own QR photo (like a bank's My QR). Friends who owe see a QR with their amount already in it" },
+      { th: "ทวงเงินในกลุ่มได้: โอนแล้วส่งสลิปในกลุ่ม ยอดตรงปิดให้อัตโนมัติ จ่ายเงินสดกด \"จ่ายแล้ว\" ให้เจ้าของเงินยืนยัน กด \"ทวงทุกคน\" เพื่อแท็กคนที่ยังไม่จ่าย และสมาชิก Pro ได้สรุปยอดค้างทุกวันจันทร์", en: "Chase debts in the group: send the transfer slip and an exact amount is settled automatically, tap \"paid\" for cash, tag everyone who still owes, and Pro members get a Monday summary" },
+    ],
+  },
   {
     id: "2026-11-09d",
     title: { th: "รู้ว่าเงินรั่วตรงไหน: ค่าใช้จ่ายคงที่", en: "See where money leaks: fixed costs" },
