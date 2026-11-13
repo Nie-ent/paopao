@@ -1,6 +1,6 @@
 import Image from "next/image"
 import Link from "next/link"
-import { ArrowRight, Sparkles, Zap } from "lucide-react"
+import { ArrowRight, Sparkles, Users, Zap } from "lucide-react"
 
 import { signInAsDemo } from "@/features/auth/actions"
 import type { MarketingCopy } from "@/features/marketing/copy"
@@ -10,6 +10,7 @@ import { JsonLd } from "@/components/marketing/JsonLd"
 import { PlainSubmitButton } from "@/components/ui/submit-button"
 import { PricingCards } from "@/components/marketing/PricingCards"
 import { FaqList } from "@/components/marketing/FaqList"
+import { GroupSplitDemo } from "@/components/marketing/GroupSplitDemo"
 import { FloatingBlobs, HeroChat, HeroIntro, HeroLine, MotionRoot, Reveal, Stagger, StaggerItem } from "@/components/marketing/motion"
 
 const sectionTitle = "text-center font-heading text-2xl font-semibold text-foreground sm:text-3xl"
@@ -93,6 +94,31 @@ export function LandingView({ copy: c }: { copy: MarketingCopy }) {
             </StaggerItem>
           ))}
         </Stagger>
+      </section>
+
+      {/* New: splitting bills in LINE groups */}
+      <section id="group" aria-labelledby="group-title" className="mx-auto max-w-6xl scroll-mt-20 px-4 py-12">
+        <div className="grid items-center gap-12 md:grid-cols-[1fr_0.9fr]">
+          <Reveal>
+            <p className="inline-flex items-center gap-2 rounded-full border border-emerald-300/60 bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-700">
+              <Users className="h-4 w-4" aria-hidden /> {c.group.badge}
+            </p>
+            <h2 id="group-title" className="mt-4 text-balance font-heading text-2xl font-semibold text-foreground sm:text-3xl">{c.group.title}</h2>
+            <p className="mt-3 text-lg leading-relaxed text-muted-foreground">{c.group.lead}</p>
+            <ol className="mt-8 space-y-5">
+              {c.group.points.map((p, i) => (
+                <li key={p.title} className="flex gap-4">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary font-heading font-bold text-primary-foreground shadow-md shadow-primary/30">{i + 1}</span>
+                  <div>
+                    <h3 className="font-heading font-semibold text-foreground">{p.title}</h3>
+                    <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{p.body}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </Reveal>
+          <GroupSplitDemo demo={c.group.demo} />
+        </div>
       </section>
 
       {/* Screens */}

@@ -5,8 +5,24 @@
 import { LIMITS, PRO_PLANS, TRIAL_DAYS } from "@/lib/subscription"
 import * as th from "./content"
 import type { Faq, Feature } from "./content"
+import { GROUP_LIMITS } from "@/lib/group-split"
+
+const GROUP_LIMITS_FREE = GROUP_LIMITS.freeReceiptsPerMonth
 
 export type MarketingLocale = "th" | "en"
+
+/** Copy for the group bill-splitting section and its illustrated LINE group chat */
+export type GroupCopy = {
+  badge: string; title: string; lead: string
+  points: { title: string; body: string }[]
+  demo: {
+    label: string; chatName: string; payer: string; typed: string
+    armedTitle: string; camera: string; album: string
+    receiptShop: string; billTitle: string; billNote: string; pick: string
+    sharesTitle: string; shares: { name: string; amount: string; note?: string }[]
+    remind: string; remindName: string
+  }
+}
 const { MONTHLY, YEARLY } = PRO_PLANS
 
 export type ChatLine = { from: "me" | "bot"; text: string } | { from: "confirm"; category: string; note: string; amount: string } | { from: "chips"; chips: string[] }
@@ -33,6 +49,7 @@ export type MarketingCopy = {
   steps: { title: string; body: string }[]
   featuresTitle: string
   features: Feature[]
+  group: GroupCopy
   screensTitle: string
   screensNote: string
   screens: { src: string; alt: string }[]
@@ -103,6 +120,18 @@ const TH: MarketingCopy = {
   steps: th.STEPS,
   featuresTitle: "ทุกอย่างที่ต้องใช้จัดการเงินส่วนตัว",
   features: th.FEATURES,
+  group: {
+    ...th.GROUP_SPOTLIGHT,
+    demo: {
+      label: "ตัวอย่างการแยกบิลในกลุ่ม LINE: พิมพ์แยกบิล ส่งรูปใบเสร็จ ทุกคนเห็นยอดของตัวเอง และเป๋าเป๋าทวงคนที่ยังไม่จ่าย",
+      chatName: "ทริปเชียงใหม่ (4)", payer: "บี", typed: "แยกบิล",
+      armedTitle: "🧾 ส่งรูปใบเสร็จ", camera: "📷 ถ่ายรูปใบเสร็จ", album: "🖼️ เลือกจากอัลบั้ม",
+      receiptShop: "ร้านซูชิ", billTitle: "ร้านซูชิ", billNote: "7 รายการ · บี เป็นคนจ่าย", pick: "เลือกรายการของฉัน",
+      sharesTitle: "แต่ละคนต้องจ่าย",
+      shares: [{ name: "ต้น", amount: "฿485.50" }, { name: "บี", amount: "฿412.50", note: "จ่ายบิลแล้ว" }, { name: "มิ้น", amount: "฿356.00" }],
+      remind: "ค้าง ฿356 ให้ บี โอนแล้วส่งสลิปในกลุ่มได้เลย", remindName: "@มิ้น",
+    },
+  },
   screensTitle: "ดูภาพรวมการเงินบนเว็บ",
   screensNote: "ภาพจากบัญชีเดโม ข้อมูลทั้งหมดเป็นข้อมูลตัวอย่าง",
   screens: [
@@ -157,6 +186,25 @@ const EN: MarketingCopy = {
     { title: "See the big picture on the web", body: "A dashboard of income and spending, monthly charts, goals and Excel export." },
   ],
   featuresTitle: "Everything you need to manage your own money",
+  group: {
+    badge: "New in 1.0",
+    title: "Split bills in LINE groups, no maths",
+    lead: "Add PaoPao to your friends' or team's LINE group and let it split the bill and chase the money for you.",
+    points: [
+      { title: "Snap the receipt, AI lists it", body: "Type \"แยกบิล\" and take the photo straight from the card. No receipt? Type the amount to split it evenly." },
+      { title: "Everyone ticks their own", body: "19 plates of sushi? Each person taps + for theirs. Totals always match the receipt, VAT, service and discounts included." },
+      { title: "Easy to pay, chased for you", body: "Friends scan a QR with their amount in it; a slip sent in the group settles it automatically. Tap remind for anyone who hasn't paid." },
+    ],
+    demo: {
+      label: "Example of splitting a bill in a LINE group: type split, send the receipt photo, everyone sees their share, and PaoPao reminds whoever hasn't paid",
+      chatName: "Chiang Mai trip (4)", payer: "Bee", typed: "แยกบิล",
+      armedTitle: "🧾 Send the receipt", camera: "📷 Take a photo", album: "🖼️ Choose from album",
+      receiptShop: "Sushi bar", billTitle: "Sushi bar", billNote: "7 items · Bee paid", pick: "Pick my items",
+      sharesTitle: "What each person pays",
+      shares: [{ name: "Ton", amount: "฿485.50" }, { name: "Bee", amount: "฿412.50", note: "paid the bill" }, { name: "Mint", amount: "฿356.00" }],
+      remind: "owes ฿356 to Bee. Send the slip here once you've paid", remindName: "@Mint",
+    },
+  },
   features: [
     { title: "Log by typing", body: "Type items and amounts in LINE, several in one message. Each is sorted into one of 24 categories, or your own, and you confirm before it's saved." },
     { title: "Send a slip, it's logged", body: `Snap or forward a transfer slip. PaoPao reads the amount, direction and reference, and never records the same slip twice (up to ${LIMITS.proSlipsPerMonth} a month).`, pro: true },
@@ -166,6 +214,8 @@ const EN: MarketingCopy = {
     { title: "Goals that fill themselves", body: "Savings or debt-payoff goals track progress from a category, e.g. a ฿7,000 debt goal fills up as you log repayments. Plus to-dos with LINE reminders." },
     { title: "See where money leaks", body: "All your monthly fixed costs in one place: how much of your income they take, what's essential and what you could cut, and the subscriptions you forgot you still pay for." },
     { title: "AI money coach", body: `Ask how to save or pay off debt; the AI looks at your real entries and can set up goals for you (${LIMITS.chatPerMonth.PRO} messages a month).`, pro: true },
+    { title: "Split bills in LINE groups", body: `Add PaoPao to a group and snap the receipt: the AI lists the items, everyone ticks theirs (or how many of a shared dish), and totals match the receipt with VAT, service and discounts (${GROUP_LIMITS_FREE} free receipts per group a month).` },
+    { title: "Chases the money for you", body: "Friends scan a PromptPay QR with their amount already in it and send the slip in the group; PaoPao checks it with the bank and closes their share. Tap remind to tag whoever hasn't paid." },
     { title: "Your data stays yours", body: "Export to Excel on any plan, ask for deletion under Thailand's PDPA, and we never sell your data." },
   ],
   screensTitle: "Your money at a glance on the web",
@@ -184,6 +234,7 @@ const EN: MarketingCopy = {
     "Savings goals and to-dos with reminders",
     `AI money tips on your dashboard`,
     `Fixed-cost summary that finds forgotten subscriptions`,
+    `Split bills and chase debts in LINE groups (${GROUP_LIMITS_FREE} free receipts per group a month)`,
     `Try Pro free for ${TRIAL_DAYS} days`,
   ],
   proFeatures: [
@@ -192,6 +243,7 @@ const EN: MarketingCopy = {
     "A weekly or daily money summary in LINE",
     `Bank statement import, ${LIMITS.statementImportsPerMonth.PRO} a month`,
     `AI chat, ${LIMITS.chatPerMonth.PRO} messages a month`,
+    "Unlimited receipt reading in groups, and a Monday summary of who still owes",
   ],
   pricingLabels: PRICING_LABELS_EN,
   faqTitle: "Frequently asked questions",
@@ -202,6 +254,7 @@ const EN: MarketingCopy = {
     { q: "Can I try Pro for free?", a: `Yes. Every account can try Pro free for ${TRIAL_DAYS} days, once. Type "trial" in the LINE chat or tap it on the plans page. No card needed, and it goes back to Free on its own.` },
     { q: "How do I pay? Will I be charged automatically?", a: "Pay with a PromptPay QR from any banking app, then send the slip in the LINE chat. The slip is checked with the bank and Pro turns on right away. Nothing is charged automatically; if you don't renew, you're back on Free." },
     { q: "Does PaoPao speak English?", a: "The web dashboard is in Thai and English (switch with the TH/EN toggle). In the LINE chat you can type in either language, e.g. \"coffee 65\" or \"กาแฟ 65\"; replies are in Thai for now." },
+    { q: "How does bill splitting in LINE groups work?", a: `Add PaoPao (@401xmdoq) to a LINE group, type "แยกบิล" and snap the receipt. PaoPao reads the items, everyone taps the card to tick theirs, the payer closes the bill and PaoPao posts who owes what. Free with ${GROUP_LIMITS_FREE} receipts per group a month, unlimited when the sender has Pro. PaoPao doesn't read other messages in the group.` },
     { q: "Is my financial data safe?", a: "Each account's data is kept separate and only its owner can see it. We never sell data. You can export everything to Excel and ask for deletion under the PDPA. See the privacy policy for details." },
     { q: "Do I need to install an app?", a: "No. It works in LINE, and you open the dashboard from a link in the chat. On a computer, click \"Sign in with LINE\" and scan the QR code with your phone. No password to set." },
   ],

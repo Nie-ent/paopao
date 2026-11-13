@@ -8,6 +8,7 @@ import { markReleasesSeen } from "@/features/releases/actions"
 import { RELEASES } from "@/features/releases/notes"
 import { cacheKeys } from "@/lib/cache-keys"
 import { prime } from "@/lib/data-cache"
+import { ReleaseMedia } from "@/components/releases/ReleaseMedia"
 
 /** Every release note, newest first: where people read again what the "what's new" dialog said. */
 export default function UpdatesPage() {
@@ -36,6 +37,7 @@ export default function UpdatesPage() {
           <li key={r.id} className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
             <h2 className="font-semibold text-foreground">{r.title[lang]}</h2>
             <p className="text-xs text-muted-foreground">{r.version && <span className="font-medium">v{r.version} · </span>}<time dateTime={r.id.slice(0, 10)}>{dateOf(r.id)}</time></p>
+            {r.media && <ReleaseMedia media={r.media} lang={lang} />}
             <ul className="mt-3 space-y-2 text-sm text-muted-foreground list-disc pl-5">
               {r.items.map(i => <li key={i.en}>{i[lang]}</li>)}
             </ul>

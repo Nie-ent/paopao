@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useLanguage } from "@/contexts/LanguageContext"
 import { getReleaseNotes, markReleasesSeen } from "@/features/releases/actions"
 import type { ReleaseNote } from "@/features/releases/notes"
+import { ReleaseMedia } from "@/components/releases/ReleaseMedia"
 import { cacheKeys } from "@/lib/cache-keys"
 import { load as loadCached, prime } from "@/lib/data-cache"
 
@@ -46,6 +47,7 @@ export function WhatsNewDialog() {
             <section key={r.id}>
               <h3 className="font-semibold text-foreground">{r.title[lang]}{r.version && <span className="ml-1.5 text-xs font-normal text-muted-foreground">v{r.version}</span>}</h3>
               <p className="text-xs text-muted-foreground"><time dateTime={r.id.slice(0, 10)}>{dateOf(r.id)}</time></p>
+              {r.media && <ReleaseMedia media={r.media} lang={lang} />}
               <ul className="mt-2 space-y-2 text-sm text-muted-foreground list-disc pl-5">
                 {r.items.map(i => <li key={i.en}>{i[lang]}</li>)}
               </ul>

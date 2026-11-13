@@ -11,12 +11,22 @@ export type ReleaseNote = {
   version?: string
   title: { th: string; en: string }
   items: { th: string; en: string }[]
+  /**
+   * A picture or short clip showing the new feature. Put the file in public/releases/ (an image,
+   * or an .mp4 screen recording, ideally under 3 MB, with a poster image) and give its real
+   * pixel size so the dialog doesn't jump while it loads.
+   */
+  media?: { kind: "image" | "video"; src: string; width: number; height: number; alt: { th: string; en: string }; poster?: string }
 }
 
 export const RELEASES: ReleaseNote[] = [
   {
     id: "2026-11-13",
     version: "1.0.0",
+    media: {
+      kind: "image", src: "/releases/1.0.0-group-split.png", width: 680, height: 1296,
+      alt: { th: "ตัวอย่างการแยกบิลในกลุ่ม LINE: ส่งรูปใบเสร็จ เป๋าเป๋าแยกรายการ บอกยอดแต่ละคน และทวงคนที่ยังไม่จ่าย", en: "Splitting a bill in a LINE group: send the receipt, PaoPao lists the items, shows each person's share and reminds whoever hasn't paid" },
+    },
     title: { th: "เป๋าเป๋า 1.0: แยกบิลและทวงเงินในกลุ่ม LINE", en: "PaoPao 1.0: split bills and chase debts in LINE groups" },
     items: [
       { th: "เชิญเป๋าเป๋าเข้ากลุ่ม LINE แล้วพิมพ์ \"แยกบิล\" กดถ่ายรูปหรือเลือกรูปใบเสร็จได้จากการ์ดเลย เป๋าเป๋าอ่านรายการให้ ไม่มีใบเสร็จพิมพ์ \"แยกบิล 1200 ค่าห้อง\" เพื่อหารเท่ากัน", en: "Invite PaoPao to a LINE group and type \"แยกบิล\": take or pick a photo of the receipt right from the card and PaoPao reads the items. No receipt? Type \"แยกบิล 1200 rent\" to split evenly" },
