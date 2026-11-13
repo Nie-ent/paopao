@@ -388,7 +388,7 @@ model LineGroup {
   /// GROUP or ROOM (decides which LINE profile API to call)
   kind        String
   name        String?
-  /// Who armed receipt reading with "แยกบิล" and until when (their next image is read as a receipt)
+  /// Who armed receipt reading with "แยกบิล" and until when (the next image anyone sends is read as a receipt)
   armedBy     String?
   armedUntil  DateTime?
   leftAt      DateTime?
