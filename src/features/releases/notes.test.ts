@@ -29,3 +29,15 @@ describe("release notes", () => {
     expect(unseenReleases(null, new Date("2026-11-09T02:00:00Z"), [r("2026-11-09")])).toEqual([])
   })
 })
+
+describe("release media", () => {
+  it("points at files that exist in public/ with a size", async () => {
+    const { existsSync } = await import("node:fs")
+    for (const rel of RELEASES) {
+      if (!rel.media) continue
+      expect(existsSync(`public${rel.media.src}`)).toBe(true)
+      expect(rel.media.width).toBeGreaterThan(0)
+      expect(rel.media.alt.th.length).toBeGreaterThan(5)
+    }
+  })
+})
