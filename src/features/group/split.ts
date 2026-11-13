@@ -46,7 +46,10 @@ export async function billView(billId: string, me: string) {
     include: { items: { orderBy: { position: "asc" }, include: { claims: true } }, debts: { orderBy: { createdAt: "asc" } } },
   })
   const members = await prisma.groupMember.findMany({ where: { groupId: bill.groupId }, orderBy: { displayName: "asc" } })
-  const items = bill.items.map(i => ({ id: i.id, name: i.name, amount: i.amount, quantity: i.quantity, claimants: i.claims.map(c => c.lineUserId) }))
+  const items = bill.items.map(i => ({
+    id: i.id, name: i.name, amount: i.amount, discount: i.discount, quantity: i.quantity,
+    claims: i.claims.map(c => ({ userId: c.lineUserId, units: c.units })),
+  }))
   const split = splitBill(items, bill)
   // Shown to people who owe the payer, so they can scan and pay
   const iOwe = bill.debts.some(d => d.debtorId === me && d.status !== "PAID" && d.status !== "CANCELLED")
@@ -57,10 +60,13 @@ export async function billView(billId: string, me: string) {
     canEdit: me === bill.createdBy || me === bill.paidBy,
     bill: {
       id: bill.id, title: bill.title, status: bill.status, paidBy: bill.paidBy, createdBy: bill.createdBy,
-      serviceCharge: bill.serviceCharge, vat: bill.vat, discount: bill.discount, items,
+      serviceCharge: bill.serviceCharge, vat: bill.vat, discount: bill.discount, printedTotal: bill.printedTotal, items,
     },
     members: members.map(m => ({ lineUserId: m.lineUserId, displayName: m.displayName, pictureUrl: m.pictureUrl })),
-    split: { shares: Object.fromEntries(split.shares), unclaimed: split.unclaimed, subtotal: split.subtotal, total: split.total },
+    split: {
+      shares: Object.fromEntries(split.shares), unclaimed: split.unclaimed, leftover: split.leftover,
+      subtotal: split.subtotal, itemsNet: split.itemsNet, total: split.total, adjustment: split.adjustment,
+    },
     debts: bill.debts.map(d => ({ id: d.id, debtorId: d.debtorId, creditorId: d.creditorId, amount: d.amount, status: d.status })),
     payeePromptPay: payee?.promptPayId ?? null,
   }
@@ -70,14 +76,18 @@ export type BillView = Awaited<ReturnType<typeof billView>>
 
 const amount = z.number().refine(n => n === 0 || isValidAmount(n))
 const ActionSchema = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("claim"), itemId: z.string().uuid(), on: z.boolean() }),
+  /** How many units of the item the viewer had; 0 removes their claim */
+  z.object({ action: z.literal("claim"), itemId: z.string().uuid(), units: z.number().int().min(0).max(999) }),
   z.object({ action: z.literal("setPaidBy"), lineUserId: z.string().min(1).max(64) }),
   z.object({
     action: z.literal("edit"),
     title: z.string().trim().min(1).max(60),
     serviceCharge: amount, vat: amount, discount: amount,
+    /** Grand total on the receipt; 0 = not known (shares then add up to items + extras) */
+    printedTotal: amount,
     items: z.array(z.object({
-      id: z.string().uuid().optional(), name: z.string().trim().min(1).max(80), amount: z.number().refine(isValidAmount), quantity: z.number().int().min(1).max(999),
+      id: z.string().uuid().optional(), name: z.string().trim().min(1).max(80), amount: z.number().refine(isValidAmount),
+      discount: amount, quantity: z.number().int().min(1).max(999),
     })).min(1).max(GROUP_LIMITS.maxItems),
   }),
   z.object({ action: z.literal("close") }),
@@ -101,8 +111,9 @@ export async function applyAction(billId: string, me: string, body: unknown) {
       requireOpen()
       const item = await prisma.groupBillItem.findFirst({ where: { id: input.itemId, billId } })
       if (!item) throw new SplitError("NOT_FOUND", 404)
-      if (input.on) {
-        await prisma.groupBillClaim.upsert({ where: { itemId_lineUserId: { itemId: item.id, lineUserId: me } }, create: { itemId: item.id, lineUserId: me }, update: {} })
+      const units = Math.min(input.units, item.quantity)
+      if (units > 0) {
+        await prisma.groupBillClaim.upsert({ where: { itemId_lineUserId: { itemId: item.id, lineUserId: me } }, create: { itemId: item.id, lineUserId: me, units }, update: { units } })
       } else {
         await prisma.groupBillClaim.deleteMany({ where: { itemId: item.id, lineUserId: me } })
       }
@@ -123,16 +134,23 @@ export async function applyAction(billId: string, me: string, body: unknown) {
       await prisma.$transaction([
         prisma.groupBillItem.deleteMany({ where: { billId, id: { notIn: [...keep] } } }),
         ...input.items.map((i, position) => i.id
-          ? prisma.groupBillItem.update({ where: { id: i.id }, data: { name: i.name, amount: i.amount, quantity: i.quantity, position } })
-          : prisma.groupBillItem.create({ data: { billId, name: i.name, amount: i.amount, quantity: i.quantity, position } })),
-        prisma.groupBill.update({ where: { id: billId }, data: { title: input.title, serviceCharge: input.serviceCharge, vat: input.vat, discount: input.discount } }),
+          ? prisma.groupBillItem.update({ where: { id: i.id }, data: { name: i.name, amount: i.amount, discount: i.discount, quantity: i.quantity, position } })
+          : prisma.groupBillItem.create({ data: { billId, name: i.name, amount: i.amount, discount: i.discount, quantity: i.quantity, position } })),
+        // A smaller quantity caps what people already claimed
+        ...input.items.flatMap(i => (i.id ? [prisma.groupBillClaim.updateMany({ where: { itemId: i.id, units: { gt: i.quantity } }, data: { units: i.quantity } })] : [])),
+        prisma.groupBill.update({
+          where: { id: billId },
+          data: { title: input.title, serviceCharge: input.serviceCharge, vat: input.vat, discount: input.discount, printedTotal: input.printedTotal || null },
+        }),
       ])
       break
     }
     case "close": {
       requireEdit(); requireOpen()
       const items = await prisma.groupBillItem.findMany({ where: { billId }, include: { claims: true } })
-      const { shares } = splitBill(items.map(i => ({ id: i.id, amount: i.amount, claimants: i.claims.map(c => c.lineUserId) })), bill)
+      const { shares } = splitBill(items.map(i => ({
+        id: i.id, amount: i.amount, discount: i.discount, quantity: i.quantity, claims: i.claims.map(c => ({ userId: c.lineUserId, units: c.units })),
+      })), bill)
       if (shares.size === 0) throw new SplitError("NO_PARTICIPANTS", 409)
       const debts = debtsFor(shares, bill.paidBy)
       await prisma.$transaction(async tx => {
