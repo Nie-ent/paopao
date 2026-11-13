@@ -33,23 +33,23 @@ export const COLORS = {
 /** LINE limits that apply to what we build */
 export const FLEX_LIMITS = { altText: 400, buttonLabel: 40, quickReplyLabel: 20, rows: 10 }
 
-const baht = (n: number) => `฿${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`
-const clip = (s: string, max: number) => (s.length > max ? s.slice(0, max - 1) + "…" : s)
+export const baht = (n: number) => `฿${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`
+export const clip = (s: string, max: number) => (s.length > max ? s.slice(0, max - 1) + "…" : s)
 const bkkDate = (d: Date) => d.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit", timeZone: "Asia/Bangkok" })
 export const categoryLabel = (name: string) => (th as Record<string, string>)[`category.${name}`] || name
 
-// ---------- building blocks ----------
+// ---------- building blocks (shared with src/lib/group-cards.ts) ----------
 
-const text = (t: string, extra: Partial<messagingApi.FlexText> = {}): messagingApi.FlexText =>
+export const text = (t: string, extra: Partial<messagingApi.FlexText> = {}): messagingApi.FlexText =>
   ({ type: "text", text: t || " ", color: COLORS.text, size: "sm", wrap: true, ...extra })
 
-const box = (layout: FlexBox["layout"], contents: FlexComponent[], extra: Partial<FlexBox> = {}): FlexBox =>
+export const box = (layout: FlexBox["layout"], contents: FlexComponent[], extra: Partial<FlexBox> = {}): FlexBox =>
   ({ type: "box", layout, contents, ...extra })
 
 const dot = (color: string): FlexBox =>
   box("vertical", [], { width: "10px", height: "10px", cornerRadius: "5px", backgroundColor: color, offsetTop: "5px", flex: 0 })
 
-const uriButton = (label: string, uri: string, primary = true): messagingApi.FlexButton => ({
+export const uriButton = (label: string, uri: string, primary = true): messagingApi.FlexButton => ({
   type: "button",
   style: primary ? "primary" : "link",
   color: primary ? COLORS.primary : COLORS.primary,
@@ -57,7 +57,7 @@ const uriButton = (label: string, uri: string, primary = true): messagingApi.Fle
   action: { type: "uri", label: clip(label, FLEX_LIMITS.buttonLabel), uri },
 })
 
-const actionButton = (action: Action, primary = false): messagingApi.FlexButton => ({
+export const actionButton = (action: Action, primary = false): messagingApi.FlexButton => ({
   type: "button",
   style: primary ? "primary" : "secondary",
   color: primary ? COLORS.primary : undefined,
@@ -66,7 +66,7 @@ const actionButton = (action: Action, primary = false): messagingApi.FlexButton 
 })
 
 /** Soft coral header with a title and an optional right-aligned note */
-function header(title: string, note?: string): FlexBox {
+export function header(title: string, note?: string): FlexBox {
   return box("horizontal", [
     text(title, { weight: "bold", size: "md", color: COLORS.primary, flex: 1 }),
     ...(note ? [text(note, { size: "xs", color: COLORS.muted, align: "end", gravity: "center", flex: 0, wrap: false })] : []),
@@ -74,7 +74,7 @@ function header(title: string, note?: string): FlexBox {
 }
 
 /** A tinted callout (warning, danger or info) */
-function callout(message: string, tone: "warn" | "danger" | "info", extra: FlexComponent[] = []): FlexBox {
+export function callout(message: string, tone: "warn" | "danger" | "info", extra: FlexComponent[] = []): FlexBox {
   const bg = tone === "danger" ? COLORS.dangerBg : tone === "warn" ? COLORS.warnBg : COLORS.primarySoft
   const fg = tone === "danger" ? COLORS.dangerText : tone === "warn" ? COLORS.warnText : COLORS.text
   return box("vertical", [text(message, { size: "xs", color: fg }), ...extra], { backgroundColor: bg, cornerRadius: "8px", paddingAll: "10px", spacing: "sm", margin: "md" })
@@ -87,11 +87,11 @@ function progressBar(percent: number, color: string): FlexBox {
     { height: "6px", backgroundColor: COLORS.track, cornerRadius: "3px", margin: "sm" })
 }
 
-function bubble(parts: { header?: FlexBox; body: FlexBox; footer?: FlexBox }): messagingApi.FlexBubble {
+export function bubble(parts: { header?: FlexBox; body: FlexBox; footer?: FlexBox }): messagingApi.FlexBubble {
   return { type: "bubble", size: "mega", ...parts }
 }
 
-function flex(altText: string, contents: messagingApi.FlexContainer, quickReply?: messagingApi.QuickReply): FlexMessage {
+export function flex(altText: string, contents: messagingApi.FlexContainer, quickReply?: messagingApi.QuickReply): FlexMessage {
   return { type: "flex", altText: clip(altText, FLEX_LIMITS.altText), contents, ...(quickReply ? { quickReply } : {}) }
 }
 

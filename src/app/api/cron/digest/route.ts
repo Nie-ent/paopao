@@ -8,6 +8,7 @@ import { isAuthorizedCron } from "@/lib/cron-auth";
 import { purgeExpiredData } from "@/lib/retention";
 import { lastWeekRange, TRIAL_REMINDER_DAYS, trialReminderText, yesterdayRange, type BriefRange } from "@/lib/brief";
 import { processReferrals, referralRewardText } from "@/lib/referral";
+import { sendWeeklyGroupReminders } from "@/services/group.service";
 
 // This endpoint should be triggered by Vercel Cron every morning (e.g. 08:00 AM)
 export async function GET(req: Request) {
@@ -35,6 +36,9 @@ export async function GET(req: Request) {
     const ranges: (BriefRange & { frequency: "DAILY" | "WEEKLY" })[] = [{ ...yesterdayRange(now), frequency: "DAILY" }];
     const week = lastWeekRange(now);
     if (week) ranges.push({ ...week, frequency: "WEEKLY" });
+
+    // Mondays: who still owes money in LINE groups (only groups with a Pro creditor)
+    const groupReminders = week ? await sendWeeklyGroupReminders(now).catch(e => { console.error("Group reminders failed:", e); return null }) : null;
 
     let sentCount = 0;
     for (const range of ranges) {
@@ -89,7 +93,7 @@ export async function GET(req: Request) {
         .catch(e => console.error(`Failed to send trial reminder to user ${u.id}:`, e?.status ?? e));
     }
 
-    return NextResponse.json({ success: true, usersMessaged: sentCount, trialReminders, purged, referrals: referrals && { checked: referrals.checked, qualified: referrals.qualified, expired: referrals.expired, rewarded: referrals.rewarded.length } }, { status: 200 });
+    return NextResponse.json({ success: true, usersMessaged: sentCount, trialReminders, groupReminders, purged, referrals: referrals && { checked: referrals.checked, qualified: referrals.qualified, expired: referrals.expired, rewarded: referrals.rewarded.length } }, { status: 200 });
 
   } catch (error) {
     console.error("Cron Digest Error:", error);

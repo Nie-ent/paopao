@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 export default function PrivacyPage() {
   const sections = [
     { title: th["pdpa.s1.title"], body: th["pdpa.s1.body"] },
-    { title: th["pdpa.s2.title"], list: [[th["pdpa.s2.identity_label"], th["pdpa.s2.identity"]], [th["pdpa.s2.financial_label"], th["pdpa.s2.financial"]], [th["pdpa.s2.usage_label"], th["pdpa.s2.usage"]]] },
+    { title: th["pdpa.s2.title"], list: [[th["pdpa.s2.identity_label"], th["pdpa.s2.identity"]], [th["pdpa.s2.financial_label"], th["pdpa.s2.financial"]], [th["pdpa.s2.usage_label"], th["pdpa.s2.usage"]], [th["pdpa.s2.group_label"], th["pdpa.s2.group"]]] },
     { title: th["pdpa.s3.title"], body: th["pdpa.s3.body"] },
     { title: th["pdpa.s4.title"], body: th["pdpa.s4.body"] },
     { title: th["pdpa.s5.title"], body: th["pdpa.s5.body"] },

@@ -34,6 +34,9 @@ const prismaClientSingleton = () => {
         subscriptionPayment: { amount: asNumber('amount') },
         goal: { targetAmount: asNumber('targetAmount'), currentAmount: asNumber('currentAmount') },
         recurringBill: { amount: asNumberOrNull('amount') },
+        groupBill: { serviceCharge: asNumber('serviceCharge'), vat: asNumber('vat'), discount: asNumber('discount') },
+        groupBillItem: { amount: asNumber('amount') },
+        groupDebt: { amount: asNumber('amount') },
       },
     })
 }

@@ -20,6 +20,7 @@ export const ENCRYPTED_FIELDS: Record<string, { strings?: string[]; json?: strin
   Transaction: { strings: ["note"] },
   ChatSession: { strings: ["title"], json: ["messages"] },
   PendingEntry: { json: ["items"] },
+  LinePayee: { strings: ["promptPayId"] },
 }
 
 export const PREFIX = "enc:v1:"

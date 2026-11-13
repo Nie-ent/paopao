@@ -82,6 +82,7 @@ export default function PDPAPage() {
               <li><strong>{t('pdpa.s2.identity_label')}</strong> {t('pdpa.s2.identity')}</li>
               <li><strong>{t('pdpa.s2.financial_label')}</strong> {t('pdpa.s2.financial')}</li>
               <li><strong>{t('pdpa.s2.usage_label')}</strong> {t('pdpa.s2.usage')}</li>
+              <li><strong>{t('pdpa.s2.group_label')}</strong> {t('pdpa.s2.group')}</li>
             </ul>
 
             <h3 className="text-foreground font-semibold mt-6">{t('pdpa.s3.title')}</h3>
