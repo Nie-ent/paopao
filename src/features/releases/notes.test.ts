@@ -36,6 +36,7 @@ describe("release media", () => {
     for (const rel of RELEASES) {
       if (!rel.media) continue
       expect(existsSync(`public${rel.media.src}`)).toBe(true)
+      if (rel.media.poster) expect(existsSync(`public${rel.media.poster}`)).toBe(true)
       expect(rel.media.width).toBeGreaterThan(0)
       expect(rel.media.alt.th.length).toBeGreaterThan(5)
     }

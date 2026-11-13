@@ -112,7 +112,7 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Static files, robots.txt, sitemap.xml, llms.txt and Vercel's analytics scripts skip the proxy
-    '/((?!_next/static|_next/image|_vercel/|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|txt|xml)$).*)',
+    // Static files (images, release videos), robots.txt, sitemap.xml, llms.txt and Vercel's analytics scripts skip the proxy
+    '/((?!_next/static|_next/image|_vercel/|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|avif|mp4|webm|txt|xml)$).*)',
   ],
 }
