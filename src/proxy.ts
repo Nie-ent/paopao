@@ -6,6 +6,9 @@ import { canonicalRedirect } from '@/lib/site'
 
 const PUBLIC_PAGES = ['/welcome', '/en', '/pricing', '/privacy', '/guides', '/r']
 
+/** Pages for LINE group members, who need no PaoPao account (src/app/split) */
+const isGroupPage = (path: string) => path.split(/[?#]/)[0].startsWith('/split/')
+
 /** LINE's in-app browser, where LIFF runs ("Line/<version>" in the user agent) */
 const isLineInAppBrowser = (request: NextRequest) => /\bLine\//i.test(request.headers.get('user-agent') ?? '')
 
@@ -62,12 +65,15 @@ export async function proxy(request: NextRequest) {
   const liffTarget = safeReturnPath(request.nextUrl.searchParams.get('liff.state'))
   const savedTarget = safeReturnPath(request.cookies.get(RETURN_PATH_COOKIE)?.value)
   if (liffTarget) {
+    // The bill-splitting page is for everyone in a LINE group, PaoPao users or not: it signs in with LIFF itself
+    if (isGroupPage(liffTarget)) return NextResponse.redirect(new URL(liffTarget, request.url))
     if (isSignedIn && hasAcceptedPDPA) return redirectToReturnPath(liffTarget)
     return redirectTo(isSignedIn ? '/pdpa' : '/login', { remember: liffTarget })
   }
 
   // Public marketing pages: anyone can read them, signed in or not, PDPA accepted or not
   if (PUBLIC_PAGES.some(p => pathname === p || pathname.startsWith(p + '/'))) return response
+  if (isGroupPage(pathname)) return response
 
   // "/" is the landing page for visitors and the dashboard once signed in. The URL stays "/" so
   // the home page is what search engines index. LINE's in-app browser (LIFF) still goes to /login,

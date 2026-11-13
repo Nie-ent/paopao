@@ -1,5 +1,6 @@
 import { lineClient, lineBlobClient } from "@/config/line";
 import { setAiUser, withAiUser } from "@/lib/ai-usage";
+import { handleGroupEvent, isGroupSource } from "@/services/group.service";
 import { extractTransactionsFromText, extractTransactionFromImage, extractTransactionsFromImages, ExtractedTransaction } from "@/services/ai.service";
 import prisma from "@/lib/db";
 import { classifyByKeywords, quickParseTransaction } from "@/services/quick-parse";
@@ -81,6 +82,8 @@ export function handleLineEvent(event: any) {
 }
 
 async function handleEvent(event: any) {
+  // Groups and multi-person chats have their own features (bill splitting); never treat their chat as personal entries
+  if (isGroupSource(event.source)) return handleGroupEvent(event);
   // Someone added PaoPao as a friend (or unblocked it): explain how to use it (a free reply)
   if (event.type === "follow" && event.source?.userId && event.replyToken) {
     const user = await getOrCreateUser(event.source.userId);

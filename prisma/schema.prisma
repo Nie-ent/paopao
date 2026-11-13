@@ -363,3 +363,147 @@ model Referral {
   @@index([referrerId])
   @@index([status, createdAt])
 }
+
+// ── LINE groups: split bills and track who owes whom (src/services/group.service.ts) ──
+
+enum GroupBillStatus {
+  OPEN
+  CLOSED
+  CANCELLED
+}
+
+enum GroupDebtStatus {
+  OPEN
+  /// The debtor said they paid (cash or no slip); waiting for the creditor to confirm
+  CLAIMED
+  PAID
+  CANCELLED
+}
+
+/// A LINE group or multi-person chat PaoPao was invited to
+model LineGroup {
+  id          String    @id @default(uuid())
+  /// LINE groupId or roomId
+  lineGroupId String    @unique
+  /// GROUP or ROOM (decides which LINE profile API to call)
+  kind        String
+  name        String?
+  /// Who armed receipt reading with "แยกบิล" and until when (their next image is read as a receipt)
+  armedBy     String?
+  armedUntil  DateTime?
+  leftAt      DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now()) @updatedAt
+
+  members     GroupMember[]
+  bills       GroupBill[]
+  debts       GroupDebt[]
+  usage       GroupUsageEvent[]
+}
+
+/// A LINE user's name as shown in a group, cached from the LINE API
+model GroupMember {
+  id          String    @id @default(uuid())
+  groupId     String
+  group       LineGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  lineUserId  String
+  displayName String
+  pictureUrl  String?
+  updatedAt   DateTime  @default(now()) @updatedAt
+
+  @@unique([groupId, lineUserId])
+}
+
+/// Settings a LINE user keeps across groups (they need not be a PaoPao user)
+model LinePayee {
+  lineUserId  String   @id
+  /// PromptPay phone or ID for the QR shown to people who owe them (encrypted: src/lib/field-crypto.ts)
+  promptPayId String?
+  updatedAt   DateTime @default(now()) @updatedAt
+}
+
+model GroupBill {
+  id             String          @id @default(uuid())
+  groupId        String
+  group          LineGroup       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  /// LINE user who sent the receipt; they can edit the bill
+  createdBy      String
+  /// LINE user who paid the shop, and is owed by everyone else
+  paidBy         String
+  title          String
+  /// Baht added on top of the items, shared in proportion to each person's items
+  serviceCharge  Decimal         @default(0) @db.Decimal(12, 2)
+  vat            Decimal         @default(0) @db.Decimal(12, 2)
+  /// Baht taken off, shared the same way
+  discount       Decimal         @default(0) @db.Decimal(12, 2)
+  status         GroupBillStatus @default(OPEN)
+  /// SHA-256 of the receipt image, to warn about the same receipt twice
+  receiptHash    String?
+  closedAt       DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @default(now()) @updatedAt
+
+  items          GroupBillItem[]
+  debts          GroupDebt[]
+
+  @@index([groupId, createdAt])
+}
+
+model GroupBillItem {
+  id        String           @id @default(uuid())
+  billId    String
+  bill      GroupBill        @relation(fields: [billId], references: [id], onDelete: Cascade)
+  name      String
+  /// Line total in baht (all units)
+  amount    Decimal          @db.Decimal(12, 2)
+  quantity  Int              @default(1)
+  position  Int
+  claims    GroupBillClaim[]
+
+  @@index([billId])
+}
+
+/// A person who had (part of) an item; an item is shared equally between its claimants
+model GroupBillClaim {
+  id         String        @id @default(uuid())
+  itemId     String
+  item       GroupBillItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  lineUserId String
+  createdAt  DateTime      @default(now())
+
+  @@unique([itemId, lineUserId])
+}
+
+model GroupDebt {
+  id           String          @id @default(uuid())
+  groupId      String
+  group        LineGroup       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  billId       String
+  bill         GroupBill       @relation(fields: [billId], references: [id], onDelete: Cascade)
+  debtorId     String
+  creditorId   String
+  amount       Decimal         @db.Decimal(12, 2)
+  status       GroupDebtStatus @default(OPEN)
+  /// Bank reference of the slip that paid it; one slip may settle several debts at once, but is never reused
+  slipRef      String?
+  paidAt       DateTime?
+  lastRemindedAt DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @default(now()) @updatedAt
+
+  @@index([groupId, status])
+  @@index([debtorId, status])
+  @@index([slipRef])
+}
+
+/// Metered group actions: receipt reads (monthly cap) and repayment slip checks (daily cap)
+model GroupUsageEvent {
+  id         String    @id @default(uuid())
+  groupId    String
+  group      LineGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  kind       String
+  lineUserId String
+  createdAt  DateTime  @default(now())
+
+  @@index([groupId, kind, createdAt])
+}

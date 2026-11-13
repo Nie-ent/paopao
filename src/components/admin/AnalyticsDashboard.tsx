@@ -222,7 +222,7 @@ export function AnalyticsDashboard({ data }: { data: AdminAnalytics }) {
               <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "#f1f5f9" }} labelFormatter={l => shortDay(String(l))} formatter={v => baht(Number(v), 2)} />
               <Legend {...legendProps} />
               {aiFeatures.map((f, i) => (
-                <Bar key={f} name={AI_FEATURE_LABELS[f as keyof typeof AI_FEATURE_LABELS] ?? "อื่นๆ"} dataKey={f} stackId="ai" fill={SERIES[i % SERIES.length]} stroke="#fff" strokeWidth={1} />
+                <Bar key={f} name={AI_FEATURE_LABELS[f as keyof typeof AI_FEATURE_LABELS] ?? "อื่นๆ"} dataKey={f} stackId="ai" fill={f === "other" ? FREE_GRAY : SERIES[i % SERIES.length]} stroke="#fff" strokeWidth={1} />
               ))}
             </BarChart>
           </ChartCard>

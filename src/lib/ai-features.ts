@@ -9,6 +9,7 @@ export type AiFeature =
   | "chat_title"
   | "insight"
   | "advice"
+  | "group_receipt"
 
 export const AI_FEATURE_LABELS: Record<AiFeature, string> = {
   entry_text: "อ่านข้อความรายการ",
@@ -18,4 +19,5 @@ export const AI_FEATURE_LABELS: Record<AiFeature, string> = {
   chat_title: "ตั้งชื่อแชท",
   insight: "Insight หน้าแรก",
   advice: "คำแนะนำการเงิน",
+  group_receipt: "อ่านใบเสร็จในกลุ่ม",
 }
