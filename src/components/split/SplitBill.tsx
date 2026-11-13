@@ -260,24 +260,35 @@ export function SplitBill({ billId }: { billId: string }) {
         <p className="text-xs text-slate-400">ส่วนลดทั้งบิล service และ VAT เฉลี่ยตามสัดส่วนรายการของแต่ละคน</p>
       </div>
 
+      {people > 0 && (
+        <section className="space-y-2">
+          <h2 className="text-sm font-semibold text-slate-500">แต่ละคนต้องจ่าย{open && <span className="font-normal text-slate-400"> · เปลี่ยนตามที่ทุกคนเลือก</span>}</h2>
+          <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
+            {Object.entries(split.shares).sort(([, a], [, b]) => b - a).map(([id, amount]) => {
+              const debt = view.debts.find(d => d.debtorId === id)
+              return (
+                <li key={id} className={`flex items-center justify-between gap-3 px-3 py-2.5 text-sm ${id === me ? "bg-[#FFF1EC]/60" : ""}`}>
+                  <span className="min-w-0 truncate">
+                    <span className="font-medium text-slate-900">{name(id)}</span>
+                    {id === bill.paidBy && <span className="text-xs text-slate-500"> · จ่ายบิลไปแล้ว</span>}
+                  </span>
+                  <span className="flex shrink-0 items-center gap-2">
+                    <span className="font-semibold tabular-nums">{baht(amount)}</span>
+                    {debt && (
+                      <span className={`rounded-full px-2 py-0.5 text-xs ${debt.status === "PAID" ? "bg-emerald-100 text-emerald-800" : debt.status === "CLAIMED" ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}`}>
+                        {debt.status === "PAID" ? "จ่ายแล้ว" : debt.status === "CLAIMED" ? "รอยืนยัน" : "ค้าง"}
+                      </span>
+                    )}
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      )}
+
       {bill.status === "CLOSED" && (
         <section className="space-y-2">
-          <h2 className="text-sm font-semibold text-slate-500">ยอดที่ต้องจ่ายให้ {name(bill.paidBy)}</h2>
-          <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
-            {view.debts.map(d => (
-              <li key={d.id} className="flex items-center justify-between px-3 py-2.5 text-sm">
-                <span className="font-medium">{name(d.debtorId)}</span>
-                <span className="flex items-center gap-2">
-                  <span className="tabular-nums">{baht(d.amount)}</span>
-                  <span className={`rounded-full px-2 py-0.5 text-xs ${d.status === "PAID" ? "bg-emerald-100 text-emerald-800" : d.status === "CLAIMED" ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}`}>
-                    {d.status === "PAID" ? "จ่ายแล้ว" : d.status === "CLAIMED" ? "รอยืนยัน" : "ค้าง"}
-                  </span>
-                </span>
-              </li>
-            ))}
-            {view.debts.length === 0 && <li className="px-3 py-3 text-sm text-slate-500">ไม่มีใครค้างจ่าย</li>}
-          </ul>
-
           {myDebt && (
             <div className="rounded-xl border border-slate-200 bg-white p-4 text-center">
               <p className="text-sm text-slate-600">โอนให้ {name(bill.paidBy)}</p>

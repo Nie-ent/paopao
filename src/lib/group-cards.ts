@@ -25,8 +25,32 @@ export function groupWelcomeCard(): FlexMessage {
   }))
 }
 
-export function armedMessage(): messagingApi.TextMessage {
-  return { type: "text", text: "ส่งรูปใบเสร็จมาได้เลย 📸 (ภายใน 3 นาที)" }
+/** LINE URL schemes that open the camera / photo picker and send the photo to the current chat */
+export const CAMERA_URL = "https://line.me/R/nv/camera/"
+export const CAMERA_ROLL_URL = "https://line.me/R/nv/cameraRoll/single"
+
+/**
+ * Reply to "แยกบิล": buttons that open the camera or the photo album. Flex buttons can't use LINE's
+ * camera actions, so they open LINE's own camera links; the quick-reply chips use the camera
+ * actions themselves, as a second way in.
+ */
+export function armedCard(): FlexMessage {
+  return flex("ส่งรูปใบเสร็จมาได้เลย (ภายใน 3 นาที)", bubble({
+    header: header("🧾 ส่งรูปใบเสร็จ", "ภายใน 3 นาที"),
+    body: box("vertical", [
+      text("ถ่ายรูปใบเสร็จให้เห็นรายการและยอดรวม หรือเลือกรูปจากอัลบั้ม ใครในกลุ่มส่งก็ได้"),
+      text("ไม่มีใบเสร็จ? พิมพ์ \"แยกบิล 1200 ค่าอาหาร\" เพื่อหารเท่ากัน", { size: "xs", color: COLORS.muted }),
+    ], { spacing: "sm", paddingAll: "16px" }),
+    footer: box("vertical", [
+      uriButton("📷 ถ่ายรูปใบเสร็จ", CAMERA_URL),
+      uriButton("🖼️ เลือกจากอัลบั้ม", CAMERA_ROLL_URL, false),
+    ], { spacing: "sm" }),
+  }), {
+    items: [
+      { type: "action", action: { type: "camera", label: "ถ่ายรูป" } },
+      { type: "action", action: { type: "cameraRoll", label: "เลือกจากอัลบั้ม" } },
+    ],
+  })
 }
 
 export function billCard(opts: { title: string; total: number; itemCount: number; payerName: string; url: string; warning?: string }): FlexMessage {

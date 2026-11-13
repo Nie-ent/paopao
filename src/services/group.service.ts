@@ -20,7 +20,7 @@ import {
   ARM_MS, GROUP_LIMITS, billTotals, debtsSettledBy, isDebtsCommand, isGroupHelpCommand, parseGroupAction, parseSplitCommand, type GroupAction,
 } from "@/lib/group-split"
 import {
-  armedMessage, billCard, claimCard, debtsCard, groupWelcomeCard, receiptLimitMessage, remindMessage, slipPaidCard, type DebtRow,
+  armedCard, billCard, claimCard, debtsCard, groupWelcomeCard, receiptLimitMessage, remindMessage, slipPaidCard, type DebtRow,
 } from "@/lib/group-cards"
 import { readReceipt, receiptLooksOff } from "@/services/receipt.service"
 import { reply, replyText } from "@/services/line.service"
@@ -120,7 +120,7 @@ export async function handleGroupEvent(event: any) {
       // "แยกบิล" sent as a reply to a photo reads that photo
       if (event.message.quotedMessageId) return processReceipt(group, userId, event.message.quotedMessageId, event.replyToken)
       await prisma.lineGroup.update({ where: { id: group.id }, data: { armedBy: userId, armedUntil: new Date(Date.now() + ARM_MS) } })
-      return reply(event.replyToken, [armedMessage()], armedMessage().text)
+      return reply(event.replyToken, [armedCard()], "ส่งรูปใบเสร็จมาได้เลย 📸 (ภายใน 3 นาที)")
     }
     if (isDebtsCommand(text)) return replyDebts(group, event.replyToken)
     if (isGroupHelpCommand(text)) return reply(event.replyToken, [groupWelcomeCard()], "พิมพ์ \"แยกบิล\" แล้วส่งรูปใบเสร็จ")
@@ -128,9 +128,11 @@ export async function handleGroupEvent(event: any) {
   }
 
   if (event.message.type === "image") {
-    if (group.armedBy === userId && group.armedUntil && group.armedUntil > new Date()) {
-      await prisma.lineGroup.update({ where: { id: group.id }, data: { armedBy: null, armedUntil: null } })
-      return processReceipt(group, userId, event.message.id, event.replyToken)
+    // Anyone may send the receipt after "แยกบิล" (whoever holds it); the first photo in the window is read
+    if (group.armedUntil && group.armedUntil > new Date()) {
+      // Claimed atomically: when several photos arrive at once, only the first is read
+      const { count } = await prisma.lineGroup.updateMany({ where: { id: group.id, armedUntil: { gt: new Date() } }, data: { armedBy: null, armedUntil: null } })
+      if (count === 1) return processReceipt(group, userId, event.message.id, event.replyToken)
     }
     const owes = await prisma.groupDebt.count({ where: { groupId: group.id, debtorId: userId, status: { in: ["OPEN", "CLAIMED"] } } })
     if (owes > 0) return processRepaymentSlip(group, userId, event.message.id, event.replyToken)
