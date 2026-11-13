@@ -8,6 +8,7 @@ import { FALLBACK_CATEGORY } from "@/lib/categories"
 import { statementRowTimestamp } from "@/lib/statement"
 import { normalizeReference } from "@/lib/slip"
 import { MAX_AMOUNT } from "@/lib/money"
+import { trackFeature } from "@/lib/feature-events"
 
 
 export async function getTransactions(options: { 
@@ -142,6 +143,7 @@ export async function createTransactionServer(formData: FormData) {
         note: notes
       }
     })
+    await trackFeature("web_entry", { source: "web", userId: prismaUser.id })
     return { success: true }
   } catch (error) {
     console.error(error)
@@ -230,5 +232,6 @@ export async function importStatementRows(input: unknown) {
     })),
     skipDuplicates: true, // unique (userId, reference)
   })
+  await trackFeature("web_statement", { source: "web", userId: user.id })
   return { success: true as const, imported: count, skipped: parsed.data.length - count }
 }

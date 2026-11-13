@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/current-user"
 import { effectivePlan, isTrialEligible, LIMITS, PRO_PLANS, TRIAL_DAYS } from "@/lib/subscription"
 import { startProTrial } from "@/lib/trial"
 import { DEMO_LINE_ID } from "@/lib/auth-user"
+import { trackFeature } from "@/lib/feature-events"
 
 export async function getSubscriptionData() {
   const user = await getCurrentUser()
@@ -41,5 +42,6 @@ export async function startTrial() {
   const user = await getCurrentUser()
   if (!user) return { error: "Unauthorized" }
   const expiresAt = await startProTrial(user.id)
+  if (expiresAt) await trackFeature("trial_start", { source: "web", userId: user.id })
   return expiresAt ? { success: true, expiresAt: expiresAt.toISOString() } : { error: "NOT_ELIGIBLE" }
 }

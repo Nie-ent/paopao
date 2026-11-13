@@ -3,6 +3,7 @@
 import prisma from "@/lib/db"
 import { getProfileData } from "@/features/user/actions"
 import { bangkokDayKey, startOfBangkokDay } from "@/lib/dates"
+import { trackFeature } from "@/lib/feature-events"
 
 /** Thrown inside a transaction to roll it back and return a user-facing error key. */
 class ClaimError extends Error {}
@@ -54,6 +55,7 @@ export async function claimDynamicQuest(questId: string) {
         data: { userId: user.id, questId: quest.id }
       })
     })
+    await trackFeature("web_quest", { source: "web", userId: user.id })
     return { success: true }
   } catch (error) {
     if (error instanceof ClaimError) return { success: false, error: error.message }
@@ -99,6 +101,7 @@ export async function redeemReward(rewardId: string) {
         data: { userId: user.id, rewardId: reward.id, status: 'PENDING' }
       })
     })
+    await trackFeature("web_reward", { source: "web", userId: user.id })
     return { success: true }
   } catch (error) {
     if (error instanceof ClaimError) return { success: false, error: error.message }

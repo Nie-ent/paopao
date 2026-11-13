@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useSyncExternalStore } from "react"
 import {
   Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts"
@@ -30,11 +30,44 @@ const axisProps = { fontSize: 11, tickLine: false, axisLine: false, stroke: AXIS
 
 type Range = 30 | 90
 
+const TABS = [
+  { key: "overview", label: "ภาพรวม" },
+  { key: "users", label: "ผู้ใช้" },
+  { key: "features", label: "ฟีเจอร์" },
+  { key: "revenue", label: "รายได้" },
+  { key: "ai", label: "AI" },
+] as const
+type Tab = (typeof TABS)[number]["key"]
+const TAB_KEY = "paopao_admin_tab"
+const noSubscribe = () => () => {}
+function readSavedTab(): Tab {
+  try {
+    const saved = localStorage.getItem(TAB_KEY)
+    return TABS.some(t => t.key === saved) ? (saved as Tab) : "overview"
+  } catch {
+    return "overview"
+  }
+}
+
+/** Relative change from the previous period; null when there is nothing to compare with. */
+function change(now: number, before: number | null | undefined): number | null {
+  if (before == null) return null
+  if (before === 0) return now === 0 ? 0 : Infinity
+  return (now - before) / before
+}
+const deltaText = (d: number | null) => (d == null ? "–" : d === Infinity ? "ใหม่" : `${d > 0 ? "▲" : d < 0 ? "▼" : ""} ${Math.abs(Math.round(d * 100))}%`.trim())
+
 export function AnalyticsDashboard({ data }: { data: AdminAnalytics }) {
   const [range, setRange] = useState<Range>(30)
   const k = data.kpis
   const slice = <T,>(rows: T[]) => rows.slice(-range)
   const aiFeatures = [...Object.keys(AI_FEATURE_LABELS), "other"]
+  // The last tab is remembered per browser; the server (and first paint) shows the overview
+  const savedTab = useSyncExternalStore(noSubscribe, readSavedTab, () => "overview" as Tab)
+  const [picked, setPicked] = useState<Tab | null>(null)
+  const tab = picked ?? savedTab
+  const selectTab = (t: Tab) => { setPicked(t); try { localStorage.setItem(TAB_KEY, t) } catch { /* private mode */ } }
+  const prev = data.previous
 
   return (
     <div className="space-y-6 pb-10">
@@ -54,35 +87,65 @@ export function AnalyticsDashboard({ data }: { data: AdminAnalytics }) {
           ))}
         </div>
       </div>
+      <nav className="sticky top-0 z-10 -mx-4 overflow-x-auto border-b border-slate-200 bg-slate-50/95 px-4 backdrop-blur md:mx-0 md:px-0" aria-label="หมวดสถิติ">
+        <div className="flex gap-1">
+          {TABS.map(t => (
+            <button key={t.key} onClick={() => selectTab(t.key)} aria-current={tab === t.key ? "page" : undefined}
+              className={`whitespace-nowrap border-b-2 px-3 py-2.5 text-sm ${tab === t.key ? "border-slate-900 font-semibold text-slate-900" : "border-transparent text-slate-500 hover:text-slate-800"}`}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </nav>
 
-      {/* ── KPIs ── */}
+      {tab === "overview" && (
+        <>
+          <Section title="ตัวเลขหลัก 30 วันล่าสุด (เทียบกับ 30 วันก่อนหน้า)">
+            <Kpi label="ผู้ใช้ใหม่" value={num(k.new30d)} delta={change(k.new30d, prev.new30d)} good="up" hint={`ทั้งหมด ${num(k.totalUsers)} คน`} />
+            <Kpi label="ผู้ใช้ active (MAU)" value={num(k.mau)} delta={change(k.mau, prev.mau)} good="up" hint="คนที่บันทึกหรือใช้ AI ใน 30 วัน" />
+            <Kpi label="รายการที่บันทึก" value={num(k.entries30d)} delta={change(k.entries30d, prev.entries30d)} good="up" hint={k.entriesPerActiveUser == null ? undefined : `เฉลี่ย ${k.entriesPerActiveUser.toFixed(1)} รายการ/คน`} />
+            <Kpi label="รายได้" value={baht(k.revenue30dThb)} delta={change(k.revenue30dThb, prev.revenue30dThb)} good="up" hint={`MRR ≈ ${baht(k.mrrThb)}`} />
+            <Kpi label="Pro ตอนนี้" value={num(k.proNow)} hint={`จ่ายเงินอยู่ ${num(k.payingNow)} คน`} />
+            <Kpi label="ทดลองแล้วจ่าย" value={pct(k.trialConversion.rate)} hint={`${num(k.trialConversion.paid)}/${num(k.trialConversion.ended)} คนที่ทดลองจบ`} />
+            <Kpi label="ค่า AI" value={data.ai.available ? baht(k.aiCost30dThb, 2) : "–"} delta={change(k.aiCost30dThb, prev.aiCost30dThb)} good="down" hint={k.aiCostPerMauThb == null ? undefined : `${baht(k.aiCostPerMauThb, 2)} ต่อคน active`} />
+            <Kpi label="Stickiness (DAU/MAU)" value={pct(k.stickiness)} hint="20%+ คือกลับมาใช้บ่อย" />
+          </Section>
+          <p className="text-xs text-slate-500">▲ ▼ คือเปลี่ยนจาก 30 วันก่อนหน้า สีเขียว = ดีขึ้น สีแดง = แย่ลง</p>
+      <ChartCard title="ผู้ใช้ที่ active" description="active = บันทึกรายการหรือใช้ AI ในวันนั้น · WAU/MAU นับย้อนหลัง 7/30 วันจากแต่ละวัน" tall>
+        <LineChart data={slice(data.active)} margin={{ top: 8, right: 12, left: -16, bottom: 0 }}>
+          <CartesianGrid stroke={GRID} vertical={false} />
+          <XAxis dataKey="day" tickFormatter={shortDay} {...axisProps} minTickGap={24} />
+          <YAxis allowDecimals={false} {...axisProps} />
+          <Tooltip contentStyle={tooltipStyle} labelFormatter={l => shortDay(String(l))} />
+          <Legend {...legendProps} />
+          <Line name="MAU" type="monotone" dataKey="mau" stroke={SERIES[0]} strokeWidth={2} dot={false} isAnimationActive={false} />
+          <Line name="WAU" type="monotone" dataKey="wau" stroke={SERIES[1]} strokeWidth={2} dot={false} isAnimationActive={false} />
+          <Line name="DAU" type="monotone" dataKey="dau" stroke={SERIES[2]} strokeWidth={2} dot={false} isAnimationActive={false} />
+        </LineChart>
+      </ChartCard>
+
+          {data.features.available && data.features.rows.length > 0 && (
+            <ChartCard title="ฟีเจอร์ยอดนิยม (30 วัน)" description="จำนวนคนที่ใช้แต่ละฟีเจอร์ · ดูทั้งหมดที่แท็บ ฟีเจอร์">
+              <BarChart data={data.features.rows.filter(r => !r.feature.startsWith("page:")).slice(0, 6)} layout="vertical" margin={{ top: 4, right: 24, left: 8, bottom: 0 }}>
+                <CartesianGrid stroke={GRID} horizontal={false} />
+                <XAxis type="number" allowDecimals={false} {...axisProps} />
+                <YAxis type="category" dataKey="label" width={150} {...axisProps} />
+                <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "#f1f5f9" }} formatter={v => [num(Number(v)), "คน"]} />
+                <Bar dataKey="people" fill={SERIES[0]} radius={[0, 4, 4, 0]} label={{ position: "right", fontSize: 11, fill: "#52514e" }} />
+              </BarChart>
+            </ChartCard>
+          )}
+        </>
+      )}
+
+      {tab === "users" && (
+        <>
       <Section title="ผู้ใช้">
         <Kpi label="ผู้ใช้ทั้งหมด" value={num(k.totalUsers)} hint={`ใหม่ 7 วัน ${num(k.new7d)} · 30 วัน ${num(k.new30d)}`} />
         <Kpi label="Active วันนี้ (DAU)" value={num(k.dau)} hint={`WAU ${num(k.wau)} · MAU ${num(k.mau)}`} />
         <Kpi label="Stickiness (DAU/MAU)" value={pct(k.stickiness)} hint="ยิ่งสูง ยิ่งกลับมาใช้ทุกวัน" />
         <Kpi label="รายการต่อ active user (30 วัน)" value={k.entriesPerActiveUser == null ? "–" : k.entriesPerActiveUser.toFixed(1)} hint={`รวม ${num(k.entries30d)} รายการ`} />
       </Section>
-      <Section title="แพ็กเกจและรายได้">
-        <Kpi label="Pro ตอนนี้" value={num(k.proNow)} hint={`จ่ายเงินอยู่ ${num(k.payingNow)} คน`} />
-        <Kpi label="MRR โดยประมาณ" value={baht(k.mrrThb)} hint="รายเดือนเต็ม + รายปี ÷ 12 ที่ยังอยู่ในรอบ" />
-        <Kpi label="รายได้รวมทั้งหมด" value={baht(k.revenueTotalThb)} hint={`ผู้เคยจ่าย ${num(k.payingUsersEver)} คน`} />
-        <Kpi label="ทดลองแล้วจ่าย (รวมทุกแบบ)" value={pct(k.trialConversion.rate)} hint={`${num(k.trialConversion.paid)} จาก ${num(k.trialConversion.ended)} คนที่ทดลองจบแล้ว`} />
-      </Section>
-      <Section title="Pro ตอนนี้ แยกตามที่มา">
-        <Kpi label={segmentLabel(data, "paid")} value={num(segmentUsers(data, "paid"))} hint={`ผู้เคยจ่ายทั้งหมด ${num(k.payingUsersEver)} คน`} />
-        <Kpi label={segmentLabel(data, "trial")} value={num(segmentUsers(data, "trial"))}
-          hint={`ทดลองจบแล้วจ่าย ${pct(k.trialConversion14.rate)} (${num(k.trialConversion14.paid)}/${num(k.trialConversion14.ended)})`} />
-        <Kpi label={segmentLabel(data, "invite_trial")} value={num(segmentUsers(data, "invite_trial"))}
-          hint={`ทดลองจบแล้วจ่าย ${pct(k.trialConversionInvite.rate)} (${num(k.trialConversionInvite.paid)}/${num(k.trialConversionInvite.ended)})`} />
-        <Kpi label={segmentLabel(data, "referral_reward")} value={num(segmentUsers(data, "referral_reward"))} hint={`แจกรางวัลไปแล้ว ${num(data.referrals.rewarded)} ครั้ง`} />
-      </Section>
-      <Section title="ต้นทุน AI (30 วัน)">
-        <Kpi label="ค่า AI รวม" value={data.ai.available ? baht(k.aiCost30dThb, 2) : "–"} hint={data.ai.available ? "ราคาตาม docs/costs.md" : "ยังไม่ได้รัน migration AiUsage"} />
-        <Kpi label="ค่า AI ต่อ active user" value={k.aiCostPerMauThb == null ? "–" : baht(k.aiCostPerMauThb, 2)} hint="ค่า AI ÷ MAU" />
-        <Kpi label="นำเข้า statement" value={num(k.statementImports30d)} hint="ครั้ง" />
-        <Kpi label="ตรวจสลิปชำระเงิน" value={num(k.slipVerifications30d)} hint="ครั้ง (EasySlip)" />
-      </Section>
-
       {/* ── Growth and activity ── */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <ChartCard title="ผู้ใช้สะสม" description="จำนวนบัญชีทั้งหมด ณ สิ้นวัน">
@@ -104,19 +167,6 @@ export function AnalyticsDashboard({ data }: { data: AdminAnalytics }) {
           </BarChart>
         </ChartCard>
       </div>
-
-      <ChartCard title="ผู้ใช้ที่ active" description="active = บันทึกรายการหรือใช้ AI ในวันนั้น · WAU/MAU นับย้อนหลัง 7/30 วันจากแต่ละวัน" tall>
-        <LineChart data={slice(data.active)} margin={{ top: 8, right: 12, left: -16, bottom: 0 }}>
-          <CartesianGrid stroke={GRID} vertical={false} />
-          <XAxis dataKey="day" tickFormatter={shortDay} {...axisProps} minTickGap={24} />
-          <YAxis allowDecimals={false} {...axisProps} />
-          <Tooltip contentStyle={tooltipStyle} labelFormatter={l => shortDay(String(l))} />
-          <Legend {...legendProps} />
-          <Line name="MAU" type="monotone" dataKey="mau" stroke={SERIES[0]} strokeWidth={2} dot={false} isAnimationActive={false} />
-          <Line name="WAU" type="monotone" dataKey="wau" stroke={SERIES[1]} strokeWidth={2} dot={false} isAnimationActive={false} />
-          <Line name="DAU" type="monotone" dataKey="dau" stroke={SERIES[2]} strokeWidth={2} dot={false} isAnimationActive={false} />
-        </LineChart>
-      </ChartCard>
 
       {/* ── Retention and engagement ── */}
       <Card className="shadow-sm">
@@ -148,6 +198,41 @@ export function AnalyticsDashboard({ data }: { data: AdminAnalytics }) {
         </Card>
       </div>
 
+        </>
+      )}
+
+      {tab === "features" && (
+        <>
+          {data.features.available ? (
+            <>
+              <ChartCard title="จำนวนคนที่ใช้แต่ละฟีเจอร์ (30 วัน)" description={`เริ่มเก็บ ${data.features.since ? new Date(data.features.since).toLocaleDateString("th-TH", { timeZone: "Asia/Bangkok" }) : "–"} · ไม่นับการเปิดหน้าเว็บ`} tall>
+                <BarChart data={data.features.rows.filter(r => !r.feature.startsWith("page:")).slice(0, 12)} layout="vertical" margin={{ top: 4, right: 24, left: 8, bottom: 0 }}>
+                  <CartesianGrid stroke={GRID} horizontal={false} />
+                  <XAxis type="number" allowDecimals={false} {...axisProps} />
+                  <YAxis type="category" dataKey="label" width={150} {...axisProps} />
+                  <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "#f1f5f9" }} formatter={v => [num(Number(v)), "คน"]} />
+                  <Bar dataKey="people" fill={SERIES[0]} radius={[0, 4, 4, 0]} label={{ position: "right", fontSize: 11, fill: "#52514e" }} />
+                </BarChart>
+              </ChartCard>
+              <TableCard title="ทุกฟีเจอร์ (30 วัน เทียบ 30 วันก่อนหน้า)"
+                head={["ฟีเจอร์", "กลุ่ม", "คนใช้", "เปลี่ยน", "ครั้ง", "% ของ MAU"]}
+                rows={data.features.rows.map(r => [r.label, r.group, num(r.people), deltaText(change(r.people, r.prevPeople)), num(r.events), k.mau ? pct(r.people / k.mau) : "–"])} />
+              <ChartCard title="การใช้งานรายวัน แยกตามช่องทาง" description="จำนวนครั้งที่ใช้ฟีเจอร์ในแต่ละวัน" tall>
+                <BarChart data={data.features.daily.slice(-Math.min(range, 60))} margin={{ top: 8, right: 12, left: -16, bottom: 0 }}>
+                  <CartesianGrid stroke={GRID} vertical={false} />
+                  <XAxis dataKey="day" tickFormatter={d => shortDay(String(d))} {...axisProps} minTickGap={24} />
+                  <YAxis allowDecimals={false} {...axisProps} />
+                  <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "#f1f5f9" }} labelFormatter={l => shortDay(String(l))} />
+                  <Legend {...legendProps} />
+                  {data.features.groups.map((g, i) => <Bar key={g} name={g} dataKey={g} stackId="g" fill={SERIES[i]} stroke="#fff" strokeWidth={1} />)}
+                </BarChart>
+              </ChartCard>
+            </>
+          ) : (
+            <Card className="border-amber-200 bg-amber-50 shadow-sm">
+              <CardContent className="text-sm text-amber-800">ยังไม่มีข้อมูลฟีเจอร์: ต้องรัน migration <code>20261116120000_feature_events</code> ก่อน ระบบจะเริ่มเก็บหลัง deploy</CardContent>
+            </Card>
+          )}
       <ChartCard title="รายการที่บันทึก แยกตามช่องทาง" description="นับตามวันที่บันทึกเข้าระบบ · statement ที่ไม่มีเลขอ้างอิงจะนับเป็น “พิมพ์ / เพิ่มเอง”" tall>
         <BarChart data={slice(data.entriesBySource)} margin={{ top: 8, right: 12, left: -16, bottom: 0 }}>
           <CartesianGrid stroke={GRID} vertical={false} />
@@ -161,6 +246,25 @@ export function AnalyticsDashboard({ data }: { data: AdminAnalytics }) {
         </BarChart>
       </ChartCard>
 
+        </>
+      )}
+
+      {tab === "revenue" && (
+        <>
+      <Section title="แพ็กเกจและรายได้">
+        <Kpi label="Pro ตอนนี้" value={num(k.proNow)} hint={`จ่ายเงินอยู่ ${num(k.payingNow)} คน`} />
+        <Kpi label="MRR โดยประมาณ" value={baht(k.mrrThb)} hint="รายเดือนเต็ม + รายปี ÷ 12 ที่ยังอยู่ในรอบ" />
+        <Kpi label="รายได้รวมทั้งหมด" value={baht(k.revenueTotalThb)} hint={`ผู้เคยจ่าย ${num(k.payingUsersEver)} คน`} />
+        <Kpi label="ทดลองแล้วจ่าย (รวมทุกแบบ)" value={pct(k.trialConversion.rate)} hint={`${num(k.trialConversion.paid)} จาก ${num(k.trialConversion.ended)} คนที่ทดลองจบแล้ว`} />
+      </Section>
+      <Section title="Pro ตอนนี้ แยกตามที่มา">
+        <Kpi label={segmentLabel(data, "paid")} value={num(segmentUsers(data, "paid"))} hint={`ผู้เคยจ่ายทั้งหมด ${num(k.payingUsersEver)} คน`} />
+        <Kpi label={segmentLabel(data, "trial")} value={num(segmentUsers(data, "trial"))}
+          hint={`ทดลองจบแล้วจ่าย ${pct(k.trialConversion14.rate)} (${num(k.trialConversion14.paid)}/${num(k.trialConversion14.ended)})`} />
+        <Kpi label={segmentLabel(data, "invite_trial")} value={num(segmentUsers(data, "invite_trial"))}
+          hint={`ทดลองจบแล้วจ่าย ${pct(k.trialConversionInvite.rate)} (${num(k.trialConversionInvite.paid)}/${num(k.trialConversionInvite.ended)})`} />
+        <Kpi label={segmentLabel(data, "referral_reward")} value={num(segmentUsers(data, "referral_reward"))} hint={`แจกรางวัลไปแล้ว ${num(data.referrals.rewarded)} ครั้ง`} />
+      </Section>
       {/* ── Plans and revenue ── */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <ChartCard title="ผู้ใช้แยกตามแพ็กเกจและที่มา" description="จำนวนคนตอนนี้ · ถ้ามีหลายอย่างซ้อนกัน นับการจ่ายเงินที่ยังอยู่ในรอบก่อน แล้วจึงนับอันล่าสุด">
@@ -210,6 +314,18 @@ export function AnalyticsDashboard({ data }: { data: AdminAnalytics }) {
         <Kpi label="ผู้ชวนได้รางวัล" value={num(data.referrals.rewarded)} hint="ครั้ง (Pro 30 วัน)" />
       </Section>
 
+        </>
+      )}
+
+      {tab === "ai" && (
+        <>
+      <Section title="ต้นทุน AI (30 วัน)">
+        <Kpi label="ค่า AI รวม" value={data.ai.available ? baht(k.aiCost30dThb, 2) : "–"} hint={data.ai.available ? "ราคาตาม docs/costs.md" : "ยังไม่ได้รัน migration AiUsage"} />
+        <Kpi label="ค่า AI ต่อ active user" value={k.aiCostPerMauThb == null ? "–" : baht(k.aiCostPerMauThb, 2)} hint="ค่า AI ÷ MAU" />
+        <Kpi label="นำเข้า statement" value={num(k.statementImports30d)} hint="ครั้ง" />
+        <Kpi label="ตรวจสลิปชำระเงิน" value={num(k.slipVerifications30d)} hint="ครั้ง (EasySlip)" />
+      </Section>
+
       {/* ── AI ── */}
       {data.ai.available ? (
         <>
@@ -246,6 +362,8 @@ export function AnalyticsDashboard({ data }: { data: AdminAnalytics }) {
           </CardContent>
         </Card>
       )}
+        </>
+      )}
     </div>
   )
 }
@@ -262,11 +380,18 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
-function Kpi({ label, value, hint }: { label: string; value: string; hint?: string }) {
+/** A headline number; with `delta`, an arrow says how it moved and its colour whether that's good. */
+function Kpi({ label, value, hint, delta, good }: { label: string; value: string; hint?: string; delta?: number | null; good?: "up" | "down" }) {
+  const better = delta == null || delta === 0 || !good ? null : (delta > 0) === (good === "up")
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
       <div className="text-xs font-medium text-slate-500">{label}</div>
-      <div className="mt-1 text-2xl font-bold text-slate-900">{value}</div>
+      <div className="mt-1 flex flex-wrap items-baseline gap-x-2">
+        <span className="text-xl font-bold text-slate-900 sm:text-2xl">{value}</span>
+        {delta !== undefined && delta !== null && (
+          <span className={`text-xs font-semibold ${better === null ? "text-slate-500" : better ? "text-emerald-700" : "text-red-600"}`}>{deltaText(delta)}</span>
+        )}
+      </div>
       {hint && <div className="mt-1 text-xs text-slate-400">{hint}</div>}
     </div>
   )

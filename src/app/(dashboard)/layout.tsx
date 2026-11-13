@@ -9,6 +9,7 @@ import { useState } from "react"
 import { readSavedLanguage } from "@/contexts/LanguageContext"
 import { prefetchApp } from "@/lib/data-cache"
 import { WhatsNewDialog } from "@/components/releases/WhatsNewDialog"
+import { PageViewTracker } from "@/components/analytics/PageViewTracker"
 
 export default function DashboardLayout({
   children,
@@ -29,6 +30,7 @@ export default function DashboardLayout({
           <div className="flex-1 flex flex-col min-w-0 pb-[calc(76px+env(safe-area-inset-bottom))] md:pb-0">
             <DashboardHeader />
             <WhatsNewDialog />
+            <PageViewTracker />
             <main className="flex-1 p-4 md:p-6 lg:p-8 relative">
               <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5 pointer-events-none" />
               <div className="relative h-full max-w-7xl mx-auto">

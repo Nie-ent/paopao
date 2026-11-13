@@ -1,6 +1,6 @@
 "use client"
 import React, { useEffect, useState } from "react"
-import { getAdminUsers, adjustUserPoints } from "@/features/admin/actions"
+import { getAdminUsers, adjustUserPoints, type AdminUser } from "@/features/admin/actions"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { useSingleFlight } from "@/hooks/use-single-flight"
@@ -8,9 +8,9 @@ import { Input } from "@/components/ui/input"
 import { Users, Edit2, History, Search } from "lucide-react"
 
 export default function AdminUsersPage() {
-  const [users, setUsers] = useState<any[]>([])
+  const [users, setUsers] = useState<AdminUser[]>([])
   const [searchTerm, setSearchTerm] = useState('')
-  const [adjustModal, setAdjustModal] = useState<{isOpen: boolean, user: any}>({ isOpen: false, user: null })
+  const [adjustModal, setAdjustModal] = useState<{isOpen: boolean, user: AdminUser | null}>({ isOpen: false, user: null })
   const [pointsInput, setPointsInput] = useState<string>('')
   
   const loadUsers = () => getAdminUsers().then(setUsers)
@@ -31,6 +31,7 @@ export default function AdminUsersPage() {
     if (!amount || amount <= 0) return
 
     const delta = isAdd ? amount : -amount
+    if (!adjustModal.user) return
     const res = await adjustUserPoints(adjustModal.user.id, delta)
     if (res?.success) {
       setAdjustModal({ isOpen: false, user: null })
@@ -43,8 +44,8 @@ export default function AdminUsersPage() {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:justify-between md:items-center bg-white p-6 rounded-xl border border-slate-200 shadow-sm gap-4">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight">จัดการบัญชีผู้เล่น</h2>
-          <p className="text-slate-500">ดูข้อมูลผู้เล่นและปรับเพิ่มลดยอด PaoPoints ได้อย่างอิสระ</p>
+          <h2 className="text-2xl font-bold tracking-tight">ผู้ใช้ทั้งหมด ({users.length})</h2>
+          <p className="text-slate-500">วันที่สมัคร แพ็กเกจ การใช้งานล่าสุด และปรับ PaoPoints · เรียงจากสมัครล่าสุด</p>
         </div>
         <div className="relative w-full md:w-64">
           <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
@@ -62,16 +63,19 @@ export default function AdminUsersPage() {
           <table className="w-full text-sm text-left">
             <thead className="bg-slate-50 text-slate-500 font-medium border-b whitespace-nowrap">
               <tr>
-                <th className="px-6 py-4">ข้อมูลผู้เล่น</th>
-                <th className="px-6 py-4">แต้มปัจจุบัน</th>
-                <th className="px-6 py-4">วันที่เข้าร่วม</th>
+                <th className="px-4 py-3">ผู้ใช้</th>
+                <th className="px-4 py-3">สมัครเมื่อ</th>
+                <th className="px-4 py-3">แพ็กเกจ</th>
+                <th className="px-4 py-3">ใช้ล่าสุด</th>
+                <th className="px-4 py-3 text-right">รายการ</th>
+                <th className="px-4 py-3 text-right">แต้ม</th>
                 <th className="px-6 py-4 text-right">การกระทำ</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredUsers.map(user => (
                 <tr key={user.id} className="hover:bg-slate-50/50">
-                  <td className="px-6 py-4">
+                  <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       {user.avatarUrl ? (
                          <img src={user.avatarUrl} className="w-10 h-10 rounded-full border border-slate-200 object-cover" alt="avatar" />
@@ -86,15 +90,12 @@ export default function AdminUsersPage() {
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4">
-                    <span className="inline-flex items-center gap-1 font-bold text-orange-600 bg-orange-50 px-3 py-1 rounded-full border border-orange-100">
-                      {user.paoPoints || 0} <span className="text-xs font-normal">Pts</span>
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-slate-500">
-                    {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A'}
-                  </td>
-                  <td className="px-6 py-4 text-right">
+                  <td className="px-4 py-3 whitespace-nowrap text-slate-600">{thDate(user.createdAt)}</td>
+                  <td className="px-4 py-3"><PlanBadge plan={user.plan} /></td>
+                  <td className="px-4 py-3 whitespace-nowrap text-slate-600">{user.lastActiveAt ? ago(user.lastActiveAt) : <span className="text-slate-400">ยังไม่เคยใช้</span>}</td>
+                  <td className="px-4 py-3 text-right tabular-nums text-slate-700">{user.entries.toLocaleString("th-TH")}</td>
+                  <td className="px-4 py-3 text-right tabular-nums font-semibold text-orange-600">{user.paoPoints || 0}</td>
+                  <td className="px-4 py-3 text-right">
                     <Button 
                       variant="outline" 
                       size="sm"
@@ -107,7 +108,7 @@ export default function AdminUsersPage() {
                 </tr>
               ))}
               {filteredUsers.length === 0 && (
-                <tr><td colSpan={4} className="px-6 py-12 text-center text-slate-500">ไม่พบผู้เล่นในระบบ.</td></tr>
+                <tr><td colSpan={7} className="px-6 py-12 text-center text-slate-500">ไม่พบผู้เล่นในระบบ.</td></tr>
               )}
             </tbody>
           </table>
@@ -160,4 +161,26 @@ export default function AdminUsersPage() {
       </Dialog>
     </div>
   )
+}
+
+const thDate = (iso: string) => new Date(iso).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit", timeZone: "Asia/Bangkok" })
+
+/** "วันนี้", "3 วันก่อน", or a date for anything older than a month */
+function ago(iso: string) {
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000)
+  if (days <= 0) return "วันนี้"
+  if (days === 1) return "เมื่อวาน"
+  return days < 30 ? `${days} วันก่อน` : thDate(iso)
+}
+
+const PLAN_STYLES: Record<AdminUser["plan"], [string, string]> = {
+  PRO_PAID: ["Pro จ่ายเงิน", "bg-emerald-50 text-emerald-700 border-emerald-200"],
+  PRO_FREE: ["Pro ฟรี (ทดลอง/รางวัล)", "bg-sky-50 text-sky-700 border-sky-200"],
+  FREE_LAPSED: ["Free (เคย Pro)", "bg-amber-50 text-amber-700 border-amber-200"],
+  FREE: ["Free", "bg-slate-50 text-slate-600 border-slate-200"],
+}
+
+function PlanBadge({ plan }: { plan: AdminUser["plan"] }) {
+  const [label, cls] = PLAN_STYLES[plan]
+  return <span className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium ${cls}`}>{label}</span>
 }

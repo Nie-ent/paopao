@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/current-user"
 import { trackedGoalAmount } from "@/lib/goal-progress"
 import { parseBangkokDateTime } from "@/lib/dates"
 import { isValidAmount } from "@/lib/money"
+import { trackFeature } from "@/lib/feature-events"
 
 export async function getGoals() {
   const prismaUser = await getCurrentUser()
@@ -54,6 +55,7 @@ export async function createGoal(formData: FormData) {
       deadline: parseBangkokDateTime(deadlineStr)
     }
   })
+  await trackFeature("web_goal", { source: "web", userId: prismaUser.id })
 
   return { success: true }
 }

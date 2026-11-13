@@ -75,6 +75,7 @@ model User {
   subscriptionPayments SubscriptionPayment[]
   usageEvents      UsageEvent[]
   aiUsages         AiUsage[]
+  featureEvents    FeatureEvent[]
   recurringBills   RecurringBill[]
   pendingEntry     PendingEntry?
   /// LINE summary for Pro: weekly (Mondays) by default to save LINE pushes, daily or off by choice
@@ -256,6 +257,24 @@ model LoginAttempt {
 }
 
 /// One use of a metered feature (e.g. a statement import or a slip verification), for daily limits
+/// One use of a feature, for the admin page (src/lib/feature-events.ts)
+model FeatureEvent {
+  id         String   @id @default(uuid())
+  /// The PaoPao account; null for LINE group members without one (then lineUserId) or a deleted account
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  lineUserId String?
+  /// Key from src/lib/feature-catalog.ts, or "page:/path" for a web page view
+  feature    String
+  /// line, web or group
+  source     String
+  createdAt  DateTime @default(now())
+
+  @@index([feature, createdAt])
+  @@index([userId, createdAt])
+  @@index([createdAt])
+}
+
 /// Tokens of one successful Gemini call (src/lib/ai-usage.ts); cost is priced when read
 model AiUsage {
   id           String   @id @default(uuid())

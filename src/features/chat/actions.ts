@@ -10,6 +10,7 @@ import { bangkokDate, bangkokParts, startOfBangkokDay } from "@/lib/dates"
 import { effectivePlan, LIMITS } from "@/lib/subscription"
 import { MAX_AMOUNT } from "@/lib/money"
 import { financeContext } from "@/lib/finance-context"
+import { trackFeature } from "@/lib/feature-events"
 
 
 const SYSTEM_INSTRUCTION = `You are PaoPao, a friendly and expert financial assistant.
@@ -180,6 +181,7 @@ export async function sendChatMessage(sessionId: string | null, message: string,
       data: { messages: historyMessages as any }
     })
 
+    await trackFeature("web_chat", { source: "web", userId: user.id })
     return { 
       success: true, 
       sessionId: activeSessionId,

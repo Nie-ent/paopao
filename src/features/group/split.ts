@@ -10,6 +10,7 @@ import { debtsFor, GROUP_LIMITS, splitBill } from "@/lib/group-split"
 import { isValidAmount } from "@/lib/money"
 import { fetchMemberProfile } from "@/services/group.service"
 import { isPaymentQr, maskPromptPay, payQr } from "@/lib/emv-qr"
+import { trackFeature } from "@/lib/feature-events"
 
 export class SplitError extends Error {
   constructor(public code: "UNAUTHORIZED" | "NOT_FOUND" | "NOT_MEMBER" | "FORBIDDEN" | "INVALID" | "CLOSED" | "HAS_PAYMENTS" | "NO_PARTICIPANTS", public status: number) {
@@ -123,6 +124,7 @@ export async function applyAction(billId: string, me: string, body: unknown) {
       if (!item) throw new SplitError("NOT_FOUND", 404)
       const units = Math.min(input.units, item.quantity)
       if (units > 0) {
+        await trackFeature("group_claim", { source: "group", lineUserId: me })
         await prisma.groupBillClaim.upsert({ where: { itemId_lineUserId: { itemId: item.id, lineUserId: me } }, create: { itemId: item.id, lineUserId: me, units }, update: { units } })
       } else {
         await prisma.groupBillClaim.deleteMany({ where: { itemId: item.id, lineUserId: me } })
@@ -168,6 +170,7 @@ export async function applyAction(billId: string, me: string, body: unknown) {
         if (count === 0) throw new SplitError("CLOSED", 409)
         await tx.groupDebt.createMany({ data: debts.map(d => ({ groupId: bill.groupId, billId, debtorId: d.debtorId, creditorId: bill.paidBy, amount: d.amount })) })
       })
+      await trackFeature("group_close", { source: "group", lineUserId: me })
       break
     }
     case "reopen": {
@@ -192,11 +195,13 @@ export async function applyAction(billId: string, me: string, body: unknown) {
     }
     // One way to get paid at a time: setting one clears the other
     case "setPromptPay": {
+      await trackFeature("group_payout", { source: "group", lineUserId: me })
       const data = { promptPayId: input.promptPayId, qrPayload: null }
       await prisma.linePayee.upsert({ where: { lineUserId: me }, create: { lineUserId: me, ...data }, update: data })
       break
     }
     case "setPayQr": {
+      await trackFeature("group_payout", { source: "group", lineUserId: me })
       const data = { promptPayId: null, qrPayload: input.payload }
       await prisma.linePayee.upsert({ where: { lineUserId: me }, create: { lineUserId: me, ...data }, update: data })
       break
