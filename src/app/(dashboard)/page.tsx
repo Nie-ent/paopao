@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react"
 import { motion } from "framer-motion"
-import { ChevronRight, Loader2 } from "lucide-react"
+import { ChevronRight, Loader2, RotateCcw } from "lucide-react"
 import { toast } from "sonner"
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -153,6 +153,13 @@ export default function DashboardOverview() {
           <Select variant="glass" aria-label="Year" value={String(selectedYear || shown.year)} onValueChange={v => { setSelectedYear(Number(v)); if (!selectedMonth) setSelectedMonth(shown.month) }}
             options={Array.from({ length: 5 }, (_, i) => Math.max(thisYear, shown.year) - i).map(y => ({ value: String(y), label: String(y + (language === "th" ? 543 : 0)) }))} />
         </div>
+      )}
+      {/* Looking at another month: one tap back to the current one */}
+      {timeframe === "MONTH" && dbData.period && !dbData.period.isCurrent && (
+        <button type="button" onClick={() => { setSelectedMonth(0); setSelectedYear(0) }}
+          className="flex items-center gap-1 rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#D45E3E] shadow-sm hover:bg-white/90">
+          <RotateCcw className="h-3.5 w-3.5" /> {t("dash.to_current")}
+        </button>
       )}
     </div>
   )
