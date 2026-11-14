@@ -10,6 +10,7 @@ import { readSavedLanguage } from "@/contexts/LanguageContext"
 import { prefetchApp } from "@/lib/data-cache"
 import { WhatsNewDialog } from "@/components/releases/WhatsNewDialog"
 import { PageViewTracker } from "@/components/analytics/PageViewTracker"
+import { TourProvider } from "@/components/tour/TourProvider"
 
 export default function DashboardLayout({
   children,
@@ -24,6 +25,7 @@ export default function DashboardLayout({
   })
   return (
       <SidebarProvider>
+       <TourProvider>
         <div className="flex min-h-screen w-full bg-background selection:bg-primary/20">
           <DashboardSidebar />
           {/* Add safe bottom padding on mobile so content isn't covered by MobileMenuBar */}
@@ -40,6 +42,7 @@ export default function DashboardLayout({
           </div>
           <MobileMenuBar />
         </div>
+      </TourProvider>
       </SidebarProvider>
   )
 }

@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Bell, Search, Settings, LogOut, Globe, Sparkles, Crown, Gift } from "lucide-react"
+import { Bell, Search, Settings, LogOut, Globe, Sparkles, Crown, Gift, HelpCircle } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
 import { signOut } from "@/features/auth/actions"
@@ -13,17 +13,22 @@ import { useLanguage } from "@/contexts/LanguageContext"
 import { LanguageToggle } from "@/components/layouts/LanguageToggle"
 
 import { Input } from "@/components/ui/input"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { UserAvatar } from "@/components/ui/user-avatar"
+import { useTour } from "@/components/tour/TourProvider"
+import { TOUR_UI } from "@/features/tour/tours"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useRouter, usePathname } from "next/navigation"
 
 export function DashboardHeader() {
   const { t, language, setLanguage } = useLanguage()
+  const { openMenu: openTours } = useTour()
   const signingOut = React.useRef(false)
   const router = useRouter()
   const pathname = usePathname()
-  const [avatarUrl, setAvatarUrl] = React.useState<string>("https://github.com/shadcn.png")
+  // The LINE picture when there is one; otherwise UserAvatar shows the initials (never a placeholder face)
+  const [avatarUrl, setAvatarUrl] = React.useState<string | null>(null)
+  const [displayName, setDisplayName] = React.useState<string | null>(null)
   const [paoPoints, setPaoPoints] = React.useState<number>(0)
   const [isDemo, setIsDemo] = React.useState(false)
   const [searchQuery, setSearchQuery] = React.useState<string>("")
@@ -40,7 +45,8 @@ export function DashboardHeader() {
     const fetchUserData = (force = false) => {
       fetchProfileDataCached(force).then(user => {
         if (user) {
-          if (user.avatarUrl) setAvatarUrl(user.avatarUrl)
+          setAvatarUrl(user.avatarUrl ?? null)
+          setDisplayName(user.name ?? null)
           if (user.paoPoints !== undefined) setPaoPoints(user.paoPoints)
           setIsDemo(user.lineId === 'demo')
         }
@@ -89,19 +95,29 @@ export function DashboardHeader() {
           </form>
         )}
       </div>
-      <div className="flex items-center gap-3 shrink-0 ml-4">
+      <div className="flex items-center gap-1.5 min-[400px]:gap-3 shrink-0 ml-2 min-[400px]:ml-4">
         {isDemo && (
           <span title={t('header.demo_banner')} className="hidden lg:inline-flex items-center rounded-full border border-amber-300/60 bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-400 whitespace-nowrap">
             {t('header.demo_banner')}
           </span>
         )}
-        <LanguageToggle />
+        <span className="hidden min-[360px]:contents"><LanguageToggle /></span>
         <Link href="/rewards" className="flex">
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-100 dark:bg-orange-950/30 text-orange-600 dark:text-orange-400 font-bold text-sm cursor-pointer hover:bg-orange-200 transition-colors border border-orange-200 dark:border-orange-900/50">
             <span className="text-base">{paoPoints}</span>
             <img src="/favicon.png" alt="PaoPao Point" className="w-5 h-5 rounded-full object-cover" />
           </div>
         </Link>
+        <button
+          type="button"
+          onClick={openTours}
+          data-tour="help"
+          aria-label={TOUR_UI.help[language === "en" ? "en" : "th"]}
+          title={TOUR_UI.help[language === "en" ? "en" : "th"]}
+          className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-muted/50"
+        >
+          <HelpCircle className="h-5 w-5" />
+        </button>
         <Link
           href="/updates"
           aria-label={t('updates.title')}
@@ -114,17 +130,7 @@ export function DashboardHeader() {
 
         <DropdownMenu>
           <DropdownMenuTrigger className="outline-none border-none bg-transparent p-0 flex items-center justify-center cursor-pointer select-none">
-            {avatarUrl ? (
-              <img 
-                src={avatarUrl} 
-                alt="User Profile" 
-                className="h-8 w-8 rounded-full object-cover ring-2 ring-primary/20 hover:ring-primary/50 transition-all" 
-              />
-            ) : (
-              <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center ring-2 ring-primary/20 hover:ring-primary/50 transition-all">
-                <span className="text-sm font-medium text-muted-foreground">U</span>
-              </div>
-            )}
+            <UserAvatar name={displayName} src={avatarUrl} size={32} className="ring-2 ring-primary/20 transition-all hover:ring-primary/50" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56 glass-panel border border-border/50">
             <div className="px-2 py-1.5 text-sm font-semibold text-primary">{t('header.account')}</div>

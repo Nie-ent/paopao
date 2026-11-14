@@ -193,3 +193,45 @@
 @media (prefers-reduced-motion: reduce) {
   .cta-shine::after { animation: none; display: none; }
 }
+
+
+/* Guided tours (src/components/tour): driver.js popovers in the app's theme */
+.driver-popover.paopao-tour {
+  border-radius: 1rem;
+  padding: 1rem 1.1rem;
+  background: var(--card);
+  color: var(--card-foreground);
+  box-shadow: 0 18px 40px -12px rgb(0 0 0 / 0.25);
+  font-family: inherit;
+  max-width: min(340px, calc(100vw - 24px));
+}
+.driver-popover.paopao-tour .driver-popover-title { font-size: 1rem; font-weight: 700; color: var(--foreground); }
+.driver-popover.paopao-tour .driver-popover-description { font-size: 0.875rem; line-height: 1.55; color: var(--muted-foreground); margin-top: 0.35rem; }
+.driver-popover.paopao-tour .driver-popover-progress-text { color: var(--muted-foreground); font-size: 0.75rem; }
+.driver-popover.paopao-tour .driver-popover-footer button {
+  border-radius: 0.6rem; padding: 0.4rem 0.8rem; font-size: 0.8rem; font-weight: 600; text-shadow: none;
+  border: 1px solid var(--border); background: var(--card); color: var(--foreground);
+}
+.driver-popover.paopao-tour .driver-popover-footer .driver-popover-next-btn {
+  background: var(--primary); border-color: var(--primary); color: var(--primary-foreground);
+}
+.driver-popover.paopao-tour .driver-popover-close-btn { color: var(--muted-foreground); }
+.driver-popover.paopao-tour .driver-popover-arrow-side-left { border-left-color: var(--card); }
+.driver-popover.paopao-tour .driver-popover-arrow-side-right { border-right-color: var(--card); }
+.driver-popover.paopao-tour .driver-popover-arrow-side-top { border-top-color: var(--card); }
+.driver-popover.paopao-tour .driver-popover-arrow-side-bottom { border-bottom-color: var(--card); }
+
+
+/*
+ * Dual-screen and spanned foldables (Surface Duo, a Fold spanning both halves): the viewport is
+ * split by a hinge. Grids marked .fold-split become two columns, one per screen, with the gap
+ * set to the hinge so nothing is drawn under it. Single-screen devices ignore this.
+ */
+@media (horizontal-viewport-segments: 2) {
+  .fold-split {
+    /* Two equal columns: the sidebar and page padding make exact segment widths overflow */
+    grid-template-columns: 1fr 1fr !important;
+    column-gap: calc(env(viewport-segment-left 1 0, 0px) - env(viewport-segment-right 0 0, 0px)) !important;
+  }
+  .fold-split > .fold-span-1 { grid-column: span 1 / span 1 !important; }
+}

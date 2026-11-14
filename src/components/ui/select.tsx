@@ -24,6 +24,7 @@ export function Select({
   className,
   "aria-label": ariaLabel,
   id,
+  variant = "default",
 }: {
   value: string
   onValueChange: (value: string) => void
@@ -35,6 +36,8 @@ export function Select({
   className?: string
   "aria-label"?: string
   id?: string
+  /** "glass": a compact translucent pill for coloured surfaces (e.g. the dashboard balance card) */
+  variant?: "default" | "glass"
 }) {
   const items = React.useMemo(() => options.map(o => ({ value: o.value, label: o.label })), [options])
   return (
@@ -51,7 +54,9 @@ export function Select({
         aria-label={ariaLabel}
         data-slot="select-trigger"
         className={cn(
-          "flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-input bg-card px-3 text-left text-sm text-foreground transition-colors outline-none",
+          variant === "glass"
+            ? "flex h-7 min-w-0 items-center justify-between gap-1 rounded-full border-0 bg-white/15 px-3 text-left text-xs font-medium text-white transition-colors outline-none hover:bg-white/25 data-[popup-open]:bg-white/25"
+            : "flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-input bg-card px-3 text-left text-sm text-foreground transition-colors outline-none",
           "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 data-[popup-open]:border-ring",
           "disabled:cursor-not-allowed disabled:opacity-50",
           className
@@ -60,7 +65,7 @@ export function Select({
         <SelectPrimitive.Value className="truncate data-[placeholder]:text-muted-foreground">
           {(v: string | null) => (v == null || v === "" ? placeholder ?? "" : options.find(o => o.value === v)?.label ?? v)}
         </SelectPrimitive.Value>
-        <SelectPrimitive.Icon className="shrink-0 text-muted-foreground">
+        <SelectPrimitive.Icon className={cn("shrink-0", variant === "glass" ? "text-white/80" : "text-muted-foreground")}>
           <ChevronDown className="size-4" aria-hidden />
         </SelectPrimitive.Icon>
       </SelectPrimitive.Trigger>
