@@ -46,19 +46,19 @@ export function BalanceCard({ label, balance, income, expense, previous, period,
       <div aria-hidden className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-white/10" />
       <div aria-hidden className="pointer-events-none absolute -bottom-24 right-24 h-48 w-48 rounded-full bg-white/5" />
       <div className="relative flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <p className="text-sm text-white/80">{label}</p>
           <p className="mt-1 text-4xl font-bold tracking-tight tabular-nums max-[359px]:text-3xl sm:text-[2.6rem]">{baht(balance)}</p>
         </div>
         <div data-tour="period" className="shrink-0">{period}</div>
       </div>
-      <div className="relative mt-4 grid grid-cols-2 gap-3">
-        <div className="rounded-2xl bg-white/15 px-3 py-2.5 backdrop-blur-sm">
+      <div className="relative mt-4 grid grid-cols-2 gap-2 min-[400px]:gap-3">
+        <div className="min-w-0 rounded-2xl bg-white/15 px-3 py-2.5 backdrop-blur-sm">
           <p className="flex items-center gap-1 text-xs text-white/80"><ArrowUpRight className="h-3.5 w-3.5" /> {t("common.income")}</p>
           <p className="text-lg font-semibold tabular-nums max-[359px]:text-base">{baht(income)}</p>
           <Change now={income} before={previous?.totalIncome} upIsGood t={t} />
         </div>
-        <div className="rounded-2xl bg-white/15 px-3 py-2.5 backdrop-blur-sm">
+        <div className="min-w-0 rounded-2xl bg-white/15 px-3 py-2.5 backdrop-blur-sm">
           <p className="flex items-center gap-1 text-xs text-white/80"><ArrowDownRight className="h-3.5 w-3.5" /> {t("common.expense")}</p>
           <p className="text-lg font-semibold tabular-nums max-[359px]:text-base">{baht(expense)}</p>
           <Change now={expense} before={previous?.totalExpense} upIsGood={false} t={t} />

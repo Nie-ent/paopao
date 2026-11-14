@@ -126,7 +126,7 @@ export default function DashboardOverview() {
 
   return (
     <div className="space-y-4">
-      <div className="fold-split grid gap-4 lg:grid-cols-3">
+      <div className="fold-split grid grid-cols-1 gap-4 lg:grid-cols-3 [&>*]:min-w-0">
         <div className="fold-span-1 lg:col-span-2">
           <BalanceCard label={balanceLabel} balance={stats.totalBalance} income={stats.totalIncome} expense={stats.totalExpense}
             previous={timeframe === "MONTH" ? dbData.previous : null} period={period} t={t} />
