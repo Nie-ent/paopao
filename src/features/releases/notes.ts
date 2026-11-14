@@ -23,6 +23,10 @@ export const RELEASES: ReleaseNote[] = [
   {
     id: "2026-11-14",
     version: "1.1.0",
+    media: {
+      kind: "video", src: "/releases/1.1.0-pay-cycle.mp4", poster: "/releases/1.1.0-pay-cycle.png", width: 680, height: 1296,
+      alt: { th: "ตัวอย่างหน้าแรกใหม่: ยืนยันวันเงินเดือนออก ยอดเงินรอบนี้พร้อมยอดยกมา ใช้ได้วันละเท่าไหร่ บทวิเคราะห์รายเดือน แล้วไปหน้าเป้าหมายและบิลประจำ", en: "The new home screen: confirm your payday, this cycle's money with carry-over, what you can spend a day, the monthly analysis, then Goals and Bills" },
+    },
     title: { th: "เป๋าเป๋า 1.1: นับเดือนตามวันเงินเดือนออก และหน้าแรกใหม่", en: "PaoPao 1.1: months that follow your payday, and a new home screen" },
     items: [
       { th: "ตั้งวันเงินเดือนออกได้ที่หน้าตั้งค่า (หรือแตะยืนยันเมื่อเป๋าเป๋าเดาให้) แต่ละเดือนจะนับจากวันเงินเดือนออกถึงวันก่อนรอบถัดไป ต้นเดือนจะไม่ดูเหมือนติดลบอีก และเงินที่เหลือจากรอบก่อนจะยกมาให้", en: "Set your payday in Settings (or confirm the day PaoPao suggests). Each month then runs from payday to payday, so the start of the month no longer looks like a loss, and money left from last cycle carries over" },
