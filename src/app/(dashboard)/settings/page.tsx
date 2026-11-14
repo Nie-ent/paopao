@@ -12,6 +12,7 @@ import { Separator } from "@/components/ui/separator"
 import { signOut } from "@/features/auth/actions"
 import { CategorySettingsCard } from "@/components/settings/CategorySettingsCard"
 import { BriefFrequencySetting } from "@/components/settings/BriefFrequencySetting"
+import { PaydaySetting } from "@/components/settings/PaydaySetting"
 import { useLanguage } from "@/contexts/LanguageContext"
 
 /**
@@ -102,6 +103,8 @@ export default function SettingsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              <PaydaySetting />
+              <Separator className="bg-border/50" />
               <BriefFrequencySetting />
               <Separator className="bg-border/50" />
               <div className="flex items-center justify-between">

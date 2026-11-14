@@ -81,6 +81,9 @@ model User {
   pendingEntry     PendingEntry?
   /// LINE summary for Pro: weekly (Mondays) by default to save LINE pushes, daily or off by choice
   briefFrequency   BriefFrequency   @default(WEEKLY)
+  /// Day of the month the user is paid (1–31), so "this month" runs payday to payday
+  /// (src/lib/pay-cycle.ts). Null = calendar months.
+  payday           Int?
   /// When the "your trial ends soon" LINE message was sent (once per account)
   trialReminderSentAt DateTime?
   /// Newest "what's new" release the user dismissed (src/features/releases/notes.ts)

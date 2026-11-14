@@ -9,7 +9,7 @@
 import { Type, type Schema } from "@google/genai"
 import prisma from "@/lib/db"
 import { getCurrentUser } from "@/lib/current-user"
-import { bangkokMonthRange, bangkokParts } from "@/lib/dates"
+import { currentCycle, daysLeft, previousCycle, type Cycle } from "@/lib/pay-cycle"
 import { AI_MODELS, generateContent, isQuotaError, modelsForPlan } from "@/lib/ai"
 import { withAiUser } from "@/lib/ai-usage"
 import { effectivePlan } from "@/lib/subscription"
@@ -27,9 +27,10 @@ export type MonthlyInsight =
   | { status: "none"; period: string }
   | { status: "error"; period: string; reason: "NO_DATA" | "QUOTA" | "AI_ERROR" | "LIMIT" | "UNAUTHORIZED" }
 
-const periodOf = (now = new Date()) => {
-  const { year, month } = bangkokParts(now)
-  return { year, month, key: `${year}-${String(month + 1).padStart(2, "0")}` }
+/** The month analysed: the user's current pay cycle (a calendar month without a payday: src/lib/pay-cycle.ts) */
+const periodOf = (payday: number | null = null, now = new Date()) => {
+  const cycle = currentCycle(payday, now)
+  return { cycle, key: `${cycle.year}-${String(cycle.month + 1).padStart(2, "0")}` }
 }
 const lang = (l: string): Lang => (l === "en" ? "en" : "th")
 const ready = (row: { period: string; headline: string; report: string; updatedAt: Date }): MonthlyInsight =>
@@ -37,9 +38,9 @@ const ready = (row: { period: string; headline: string; report: string; updatedA
 
 /** This month's saved analysis, if any. Never calls the AI. */
 export async function getMonthlyInsight(language: string): Promise<MonthlyInsight> {
-  const { key } = periodOf()
   const user = await getCurrentUser()
-  if (!user) return { status: "error", period: key, reason: "UNAUTHORIZED" }
+  if (!user) return { status: "error", period: periodOf().key, reason: "UNAUTHORIZED" }
+  const { key } = periodOf(user.payday)
   const row = await prisma.aiInsight.findUnique({ where: { userId_period_language: { userId: user.id, period: key, language: lang(language) } } })
   return row ? ready(row) : { status: "none", period: key }
 }
@@ -49,10 +50,10 @@ export async function getMonthlyInsight(language: string): Promise<MonthlyInsigh
  * "analyse again" button on /ai-insights), which is limited per day.
  */
 export async function analyzeMonth(language: string, fresh = false): Promise<MonthlyInsight> {
-  const { year, month, key } = periodOf()
   const l = lang(language)
   const user = await getCurrentUser()
-  if (!user) return { status: "error", period: key, reason: "UNAUTHORIZED" }
+  if (!user) return { status: "error", period: periodOf().key, reason: "UNAUTHORIZED" }
+  const { cycle, key } = periodOf(user.payday)
 
   const saved = await prisma.aiInsight.findUnique({ where: { userId_period_language: { userId: user.id, period: key, language: l } } })
   if (saved && !fresh) return ready(saved)
@@ -61,7 +62,7 @@ export async function analyzeMonth(language: string, fresh = false): Promise<Mon
   const usageId = saved ? await consumeDailyUsage(user.id, "insight_redo", INSIGHT_REDOS_PER_DAY) : null
   if (saved && !usageId) return { status: "error", period: key, reason: "LIMIT" }
 
-  const prompt = await buildPrompt(user.id, year, month, l)
+  const prompt = await buildPrompt(user.id, user.payday, cycle, l)
   if (!prompt) {
     if (usageId) await refundUsage(usageId)
     return { status: "error", period: key, reason: "NO_DATA" }
@@ -100,9 +101,10 @@ const SCHEMA: Schema = {
 }
 
 /** The month's numbers as an AI prompt, or null when nothing was recorded this month. */
-async function buildPrompt(userId: string, year: number, month: number, l: Lang) {
-  const range = bangkokMonthRange(year, month)
-  const prev = bangkokMonthRange(year, month - 1)
+async function buildPrompt(userId: string, payday: number | null, cycle: Cycle, l: Lang) {
+  const range = { gte: cycle.gte, lt: cycle.lt }
+  const prevCycle = previousCycle(payday, cycle)
+  const prev = { gte: prevCycle.gte, lt: prevCycle.lt }
   const [transactions, prevTotals, fixed] = await Promise.all([
     prisma.transaction.findMany({ where: { userId, date: range }, include: { category: true }, orderBy: { amount: "desc" } }),
     prisma.transaction.groupBy({ by: ["type"], where: { userId, date: prev }, _sum: { amount: true } }),
@@ -126,12 +128,17 @@ async function buildPrompt(userId: string, year: number, month: number, l: Lang)
   const categories = Object.entries(byCategory).sort((a, b) => b[1] - a[1]).map(([c, a]) => `- ${c}: ฿${roundMoney(a).toLocaleString()}`).join("\n")
   const biggest = transactions.filter(t => t.type === "EXPENSE").slice(0, 5)
     .map(t => `- ${t.category?.name || "Other"} ฿${t.amount.toLocaleString()}${t.note ? ` (${t.note})` : ""}`).join("\n")
-  const today = bangkokParts(new Date()).day
-  const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate()
+  // How far into the cycle we are: "day 12 of 31"
+  const cycleDays = Math.round((cycle.lt.getTime() - cycle.gte.getTime()) / 86_400_000)
+  const today = Math.min(cycleDays, cycleDays - daysLeft(cycle) + 1)
+  const daysInMonth = cycleDays
   const fixedLines = fixedCostContext(fixed.summary, l)
 
+  const cycleNote = payday
+    ? (l === "th" ? `\n- "เดือน" นี้คือรอบเงินเดือน (เงินเดือนเข้าทุกวันที่ ${payday}) ไม่ใช่เดือนปฏิทิน` : `\n- This "month" is a pay cycle (salary arrives on day ${payday} each month), not a calendar month`)
+    : ""
   const data = `
-- ${l === "th" ? "วันที่" : "Day"} ${today}/${daysInMonth}
+- ${l === "th" ? "วันที่" : "Day"} ${today}/${daysInMonth}${cycleNote}
 - ${l === "th" ? "รายรับ" : "Income"}: ฿${income.toLocaleString()} (${l === "th" ? "เดือนก่อน" : "last month"} ฿${prevIncome.toLocaleString()})
 - ${l === "th" ? "รายจ่าย" : "Spending"}: ฿${expense.toLocaleString()} (${l === "th" ? "เดือนก่อน" : "last month"} ฿${prevExpense.toLocaleString()})
 - ${l === "th" ? "คงเหลือ" : "Left over"}: ฿${roundMoney(income - expense).toLocaleString()}
