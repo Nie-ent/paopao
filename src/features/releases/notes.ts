@@ -24,7 +24,7 @@ export const RELEASES: ReleaseNote[] = [
     id: "2026-11-13",
     version: "1.0.0",
     media: {
-      kind: "image", src: "/releases/1.0.0-group-split.png", width: 680, height: 1296,
+      kind: "video", src: "/releases/1.0.0-group-split.mp4", poster: "/releases/1.0.0-group-split.png", width: 680, height: 1296,
       alt: { th: "ตัวอย่างการแยกบิลในกลุ่ม LINE: ส่งรูปใบเสร็จ เป๋าเป๋าแยกรายการ บอกยอดแต่ละคน และทวงคนที่ยังไม่จ่าย", en: "Splitting a bill in a LINE group: send the receipt, PaoPao lists the items, shows each person's share and reminds whoever hasn't paid" },
     },
     title: { th: "เป๋าเป๋า 1.0: แยกบิลและทวงเงินในกลุ่ม LINE", en: "PaoPao 1.0: split bills and chase debts in LINE groups" },
