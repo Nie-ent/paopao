@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Select } from "@/components/ui/select"
 import { BalanceCard, CashflowMini, CategoryMini, DetailDialog, InsightCard, Tile, type Detail, type Slice } from "@/components/dashboard/Overview"
 import { getDashboardData } from "@/features/dashboard/actions"
+import { getPaydaySetting, setPayday } from "@/features/settings/actions"
 import { analyzeMonth, getMonthlyInsight, type MonthlyInsight } from "@/features/ai/insight"
 import { claimDynamicQuest, getActiveQuests } from "@/features/quests/actions"
 import { useLanguage } from "@/contexts/LanguageContext"
@@ -20,6 +21,7 @@ import { cacheKeys } from "@/lib/cache-keys"
 import { invalidateAll, load as loadCached, peek } from "@/lib/data-cache"
 
 type Timeframe = "ALL" | "YTD" | "MONTH"
+const PAYDAY_HINT_KEY = "paopao_payday_hint_dismissed"
 type DashboardData = Awaited<ReturnType<typeof getDashboardData>>
 
 /**
@@ -29,10 +31,11 @@ type DashboardData = Awaited<ReturnType<typeof getDashboardData>>
 export default function DashboardOverview() {
   const { t, tc, language, locale, hydrated } = useLanguage()
   const [timeframe, setTimeframe] = useState<Timeframe>("MONTH")
-  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1)
-  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear())
+  // 0 = the current pay cycle, worked out by the server from the user's payday (src/lib/pay-cycle.ts)
+  const [selectedMonth, setSelectedMonth] = useState<number>(0)
+  const [selectedYear, setSelectedYear] = useState<number>(0)
   // This month's numbers from the cache (an earlier visit or the app snapshot) show at once
-  const [dbData, setDbData] = useState<DashboardData | null>(() => peek(cacheKeys.dashboard("MONTH", new Date().getMonth() + 1, new Date().getFullYear(), locale)) ?? null)
+  const [dbData, setDbData] = useState<DashboardData | null>(() => peek(cacheKeys.dashboard("MONTH", 0, 0, locale)) ?? null)
   const [detail, setDetail] = useState<Detail | null>(null)
   const [insight, setInsight] = useState<MonthlyInsight | null>(null)
   const [analysing, setAnalysing] = useState(false)
@@ -49,10 +52,33 @@ export default function DashboardOverview() {
     if (!hydrated) return
     const key = cacheKeys.dashboard(timeframe, selectedMonth, selectedYear, locale)
     setDbData(peek(key) ?? null)
-    loadCached(key, () => getDashboardData(timeframe, selectedMonth, selectedYear, locale))
+    loadCached(key, () => getDashboardData(timeframe, selectedMonth || undefined, selectedYear || undefined, locale))
       .then(setDbData)
       .catch(() => setDbData({ error: "Failed to load" } as DashboardData))
   }, [timeframe, selectedMonth, selectedYear, locale, hydrated])
+
+  // Offer pay cycles to people whose salary arrives on the same day each month (once; "no" is remembered)
+  const [paydayHint, setPaydayHint] = useState<number | null>(null)
+  useEffect(() => {
+    if (!hydrated) return
+    let dismissed = false
+    try { dismissed = localStorage.getItem(PAYDAY_HINT_KEY) === "1" } catch { /* private mode */ }
+    if (dismissed) return
+    getPaydaySetting().then(s => { if (s && !s.payday && s.suggested) setPaydayHint(s.suggested) }).catch(() => {})
+  }, [hydrated])
+  const answerPayday = async (use: boolean) => {
+    const day = paydayHint
+    setPaydayHint(null)
+    try { localStorage.setItem(PAYDAY_HINT_KEY, "1") } catch { /* private mode */ }
+    if (!use || !day) return
+    const res = await setPayday(day)
+    if (res?.success) {
+      invalidateAll()
+      setSelectedMonth(0); setSelectedYear(0)
+      loadCached(cacheKeys.dashboard(timeframe, 0, 0, locale), () => getDashboardData(timeframe, undefined, undefined, locale), { force: true }).then(setDbData)
+      toast.success(t("settings.payday_saved"))
+    }
+  }
 
   // The saved analysis only: opening the dashboard never runs the AI
   useEffect(() => {
@@ -72,7 +98,7 @@ export default function DashboardOverview() {
       toast.success(t("dashboard.quests.claim_success"))
       invalidateAll()
       loadQuests(true)
-      loadCached(cacheKeys.dashboard(timeframe, selectedMonth, selectedYear, locale), () => getDashboardData(timeframe, selectedMonth, selectedYear, locale), { force: true }).then(setDbData)
+      loadCached(cacheKeys.dashboard(timeframe, selectedMonth, selectedYear, locale), () => getDashboardData(timeframe, selectedMonth || undefined, selectedYear || undefined, locale), { force: true }).then(setDbData)
       window.dispatchEvent(new Event("points_updated"))
     } else {
       toast.error(t(res.error || "common.something_wrong"))
@@ -100,8 +126,15 @@ export default function DashboardOverview() {
   const named = (list: Slice[]) => list.map(c => ({ ...c, name: tc(c.name) }))
   const income = named(dbData.incomeByCategory)
   const expense = named(dbData.expenseByCategory)
-  const balanceLabel = t(timeframe === "MONTH" ? "dash.balance_month" : timeframe === "YTD" ? "dash.balance_year" : "dash.balance_all")
+  // With a payday, "this month" is a pay cycle: name it by its dates
+  const fmtDay = (key: string) => new Date(`${key}T12:00:00+07:00`).toLocaleDateString(locale, { day: "numeric", month: "short", timeZone: "Asia/Bangkok" })
+  const cycleLabel = timeframe === "MONTH" && dbData.period?.payday && dbData.period.start ? `${fmtDay(dbData.period.start)} – ${fmtDay(dbData.period.end)}` : undefined
+  const balanceLabel = t(timeframe === "MONTH" ? (dbData.period?.payday ? "dash.balance_cycle" : "dash.balance_month") : timeframe === "YTD" ? "dash.balance_year" : "dash.balance_all")
+  // Money on hand: what was left before this cycle plus this cycle's income minus spending
+  const onHand = Math.round(((dbData.carryOver ?? 0) + stats.totalIncome - stats.totalExpense) * 100) / 100
   const thisYear = new Date().getFullYear()
+  // The cycle on screen (a payday of the 25th makes late-November "December")
+  const shown = dbData.period ?? { year: thisYear, month: new Date().getMonth() + 1, start: "", end: "", payday: null, isCurrent: true }
 
   const period = (
     <div className="flex flex-col items-end gap-2">
@@ -115,10 +148,10 @@ export default function DashboardOverview() {
       </div>
       {timeframe === "MONTH" && (
         <div className="flex gap-1.5">
-          <Select variant="glass" aria-label="Month" value={String(selectedMonth)} onValueChange={v => setSelectedMonth(Number(v))}
+          <Select variant="glass" aria-label="Month" value={String(selectedMonth || shown.month)} onValueChange={v => { setSelectedMonth(Number(v)); if (!selectedYear) setSelectedYear(shown.year) }}
             options={Array.from({ length: 12 }, (_, i) => i + 1).map(m => ({ value: String(m), label: new Date(0, m - 1).toLocaleString(locale, { month: "short" }) }))} />
-          <Select variant="glass" aria-label="Year" value={String(selectedYear)} onValueChange={v => setSelectedYear(Number(v))}
-            options={Array.from({ length: 5 }, (_, i) => thisYear - i).map(y => ({ value: String(y), label: String(y + (language === "th" ? 543 : 0)) }))} />
+          <Select variant="glass" aria-label="Year" value={String(selectedYear || shown.year)} onValueChange={v => { setSelectedYear(Number(v)); if (!selectedMonth) setSelectedMonth(shown.month) }}
+            options={Array.from({ length: 5 }, (_, i) => Math.max(thisYear, shown.year) - i).map(y => ({ value: String(y), label: String(y + (language === "th" ? 543 : 0)) }))} />
         </div>
       )}
     </div>
@@ -128,11 +161,28 @@ export default function DashboardOverview() {
     <div className="space-y-4">
       <div className="fold-split grid grid-cols-1 gap-4 lg:grid-cols-3 [&>*]:min-w-0">
         <div className="fold-span-1 lg:col-span-2">
-          <BalanceCard label={balanceLabel} balance={stats.totalBalance} income={stats.totalIncome} expense={stats.totalExpense}
-            previous={timeframe === "MONTH" ? dbData.previous : null} period={period} t={t} />
+          <BalanceCard label={balanceLabel} sublabel={cycleLabel}
+            balance={timeframe === "MONTH" && dbData.carryOver != null ? onHand : stats.totalBalance}
+            carryOver={timeframe === "MONTH" ? dbData.carryOver : null}
+            income={stats.totalIncome} expense={stats.totalExpense}
+            previous={timeframe === "MONTH" ? dbData.previous : null}
+            allowance={timeframe === "MONTH" ? dbData.allowance : null} period={period} t={t} />
         </div>
         <InsightCard state={insight} analysing={analysing} onAnalyse={analyse} locale={locale} t={t} />
       </div>
+
+      {paydayHint && (
+        <div className="flex flex-col gap-3 rounded-2xl border border-primary/30 bg-primary/5 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="font-semibold text-foreground">💰 {t("dash.payday.ask", { day: paydayHint })}</p>
+            <p className="text-xs text-muted-foreground">{t("dash.payday.why")}</p>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <button onClick={() => answerPayday(true)} className="rounded-xl bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90">{t("dash.payday.use")}</button>
+            <button onClick={() => answerPayday(false)} className="rounded-xl border border-border px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted">{t("dash.payday.no")}</button>
+          </div>
+        </div>
+      )}
 
       {/* Compact charts: a swipeable row on phones, three columns on wider screens */}
       <div data-tour="tiles" className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-1 no-scrollbar sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0">

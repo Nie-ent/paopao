@@ -37,7 +37,8 @@ export async function getAppSnapshot(input: { month: number; year: number; local
     [cacheKeys.claims, getUserClaims],
     [cacheKeys.releases, getReleaseNotes],
     [cacheKeys.referral, getReferralInfo],
-    [cacheKeys.dashboard("MONTH", month, year, locale), () => getDashboardData("MONTH", month, year, locale)],
+    // Month 0 = the current pay cycle (the server knows the user's payday)
+    [cacheKeys.dashboard("MONTH", 0, 0, locale), () => getDashboardData("MONTH", undefined, undefined, locale)],
     [cacheKeys.transactions(txQuery), () => getTransactions(txQuery)],
   ]
 

@@ -19,10 +19,22 @@ export const TOURS: Tour[] = [
     summary: { th: "ดูยอดเงิน เปลี่ยนช่วงเวลา และกราฟย่อ", en: "Your balance, periods and chart tiles" },
     steps: [
       { element: at("balance"), title: { th: "ยอดคงเหลือ", en: "What's left" }, body: { th: "รายรับลบรายจ่ายของช่วงที่เลือก พร้อมลูกศรบอกว่าเพิ่มหรือลดจากเดือนก่อน", en: "Income minus spending for the period, with arrows showing the change from last month" } },
+      { element: at("allowance"), title: { th: "ใช้ได้วันละเท่าไหร่", en: "What you can spend a day" }, body: { th: "เงินที่มีหักค่าใช้จ่ายคงที่ที่ยังไม่ถึงรอบจ่าย หารด้วยจำนวนวันที่เหลือ ถ้าไม่พอจะเตือนว่าขาดเท่าไหร่", en: "Money on hand minus fixed costs still due, spread over the days left. If it won't cover them, you'll see how much is missing" } },
       { element: at("period"), title: { th: "เปลี่ยนช่วงเวลา", en: "Change the period" }, body: { th: "ดูรายเดือน รายปี หรือทั้งหมด และเลือกเดือนที่ต้องการได้", en: "Switch between month, year and all time, and pick a month" } },
       { element: at("actions"), title: { th: "ปุ่มลัด", en: "Shortcuts" }, body: { th: "เพิ่มรายการ ค่าใช้จ่ายคงที่ เป้าหมาย แชท AI และชวนเพื่อน แตะเดียวถึง", en: "Add an entry, fixed costs, goals, AI chat and invites, one tap away" } },
       { element: at("tiles"), title: { th: "กราฟย่อ", en: "Chart tiles" }, body: { th: "แตะการ์ดไหนก็ได้เพื่อดูกราฟเต็มและรายการทุกหมวด", en: "Tap any tile for the full chart and every category" } },
       { element: at("insight"), title: { th: "PaoPao วิเคราะห์", en: "PaoPao's analysis" }, body: { th: "กดวิเคราะห์เดือนนี้ครั้งเดียว ผลจะเก็บไว้ แตะ \"ดูการวิเคราะห์เต็ม\" เพื่ออ่านรายงานทั้งหมด", en: "Analyse the month once and it's saved. Tap \"read the full analysis\" for the whole report" } },
+    ],
+  },
+  {
+    id: "payday",
+    path: "/settings",
+    icon: "💰",
+    title: { th: "รอบเงินเดือน", en: "Pay cycles" },
+    summary: { th: "นับเดือนจากวันเงินเดือนออก ต้นเดือนไม่ติดลบ", en: "Count months payday to payday" },
+    steps: [
+      { title: { th: "เงินเดือนออกปลายเดือน?", en: "Paid at the end of the month?" }, body: { th: "ถ้านับวันที่ 1–สิ้นเดือน ช่วงก่อนเงินเดือนเข้าจะดูเหมือนติดลบ ตั้งวันเงินเดือนออก แล้วเป๋าเป๋าจะนับเดือนเป็นรอบ เช่น 25 ต.ค. – 24 พ.ย.", en: "Counting the 1st to the 31st makes the days before payday look like a loss. Set your payday and PaoPao counts each month as a cycle, e.g. 25 Oct – 24 Nov" } },
+      { element: at("payday"), title: { th: "ตั้งวันเงินเดือนออก", en: "Set your payday" }, body: { th: "เลือกวันที่เงินเดือนเข้า หน้าแรก การวิเคราะห์ และสรุปใน LINE จะใช้รอบนี้ เงินที่เหลือจากรอบก่อนจะยกมาด้วย", en: "Pick the day your salary arrives. The home screen, analysis and LINE summaries follow it, and what's left from last cycle carries over" } },
     ],
   },
   {

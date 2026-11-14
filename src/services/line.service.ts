@@ -514,11 +514,11 @@ async function handleSummaryAnswer(lineId: string, replyToken: string, period: S
   const now = new Date();
   const transactions = user
     ? await prisma.transaction.findMany({
-        where: { userId: user.id, date: summaryRange(period, now) },
+        where: { userId: user.id, date: summaryRange(period, now, user.payday) },
         select: { type: true, amount: true, date: true, category: { select: { name: true, color: true } } },
       })
     : [];
-  const summary = buildSummary(period, transactions, now);
+  const summary = buildSummary(period, transactions, now, user?.payday ?? null);
   const card = summaryCard(summary, appUrl("/"));
   return reply(replyToken, [card], card.altText);
 }

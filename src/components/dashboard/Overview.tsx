@@ -29,9 +29,12 @@ function Change({ now, before, upIsGood, t }: { now: number; before: number | nu
   )
 }
 
-export function BalanceCard({ label, balance, income, expense, previous, period, t }: {
-  label: string; balance: number; income: number; expense: number
+export type Allowance = { perDay: number | null; shortfall: number; daysLeft: number; upcoming: number }
+
+export function BalanceCard({ label, sublabel, balance, carryOver, income, expense, previous, allowance, period, t }: {
+  label: string; sublabel?: string; balance: number; carryOver?: number | null; income: number; expense: number
   previous: { totalIncome: number; totalExpense: number } | null
+  allowance?: Allowance | null
   period: React.ReactNode; t: T
 }) {
   const actions = [
@@ -47,8 +50,11 @@ export function BalanceCard({ label, balance, income, expense, previous, period,
       <div aria-hidden className="pointer-events-none absolute -bottom-24 right-24 h-48 w-48 rounded-full bg-white/5" />
       <div className="relative flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm text-white/80">{label}</p>
+          <p className="text-sm text-white/80">{label}{sublabel && <span className="text-white/60"> · {sublabel}</span>}</p>
           <p className="mt-1 text-4xl font-bold tracking-tight tabular-nums max-[359px]:text-3xl sm:text-[2.6rem]">{baht(balance)}</p>
+          {carryOver != null && carryOver !== 0 && (
+            <p className="text-xs text-white/75" data-tour="carry">{t("dash.carry_over", { amount: baht(carryOver) })}</p>
+          )}
         </div>
         <div data-tour="period" className="shrink-0">{period}</div>
       </div>
@@ -64,6 +70,16 @@ export function BalanceCard({ label, balance, income, expense, previous, period,
           <Change now={expense} before={previous?.totalExpense} upIsGood={false} t={t} />
         </div>
       </div>
+      {allowance && (
+        <div data-tour="allowance" className={`relative mt-3 rounded-2xl px-3 py-2.5 text-sm ${allowance.shortfall > 0 ? "bg-amber-100 text-amber-900" : "bg-white text-[#B54A2E]"}`}>
+          {allowance.shortfall > 0 ? (
+            <p><span className="font-semibold">{t("dash.allowance.short", { amount: baht(allowance.shortfall) })}</span> <span className="opacity-80">{t("dash.allowance.days", { n: allowance.daysLeft })}</span></p>
+          ) : allowance.perDay != null ? (
+            <p><span className="font-semibold">{t("dash.allowance.per_day", { amount: baht(allowance.perDay) })}</span> <span className="opacity-80">{t("dash.allowance.days", { n: allowance.daysLeft })}</span></p>
+          ) : null}
+          {allowance.upcoming > 0 && <p className="text-xs opacity-75">{t("dash.allowance.after_bills", { amount: baht(allowance.upcoming) })}</p>}
+        </div>
+      )}
       <nav data-tour="actions" className="relative mt-4 grid grid-cols-5 gap-1" aria-label="quick actions">
         {actions.map(a => (
           <Link key={a.href} href={a.href} className="group flex min-w-0 flex-col items-center gap-1.5 rounded-xl py-1.5 text-center text-[11px] leading-tight text-white/90 hover:bg-white/10 max-[359px]:text-[10px] sm:text-xs">

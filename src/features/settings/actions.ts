@@ -2,6 +2,7 @@
 
 import prisma from "@/lib/db"
 import { getCurrentUser } from "@/lib/current-user"
+import { suggestPayday } from "@/lib/pay-cycle"
 
 export async function updateCategoryColors(categoryColors: Record<string, string>) {
   const prismaUser = await getCurrentUser()
@@ -82,4 +83,23 @@ export async function setBriefFrequency(frequency: string) {
   if (!BRIEF_FREQUENCIES.includes(frequency as (typeof BRIEF_FREQUENCIES)[number])) return { error: "Invalid" }
   await prisma.user.update({ where: { id: user.id }, data: { briefFrequency: frequency as (typeof BRIEF_FREQUENCIES)[number] } })
   return { success: true }
+}
+
+/** Sets the day the user is paid (1–31), or null for calendar months (src/lib/pay-cycle.ts). */
+export async function setPayday(day: number | null) {
+  const user = await getCurrentUser()
+  if (!user) return { error: "Unauthorized" }
+  if (day !== null && (!Number.isInteger(day) || day < 1 || day > 31)) return { error: "Invalid" }
+  await prisma.user.update({ where: { id: user.id }, data: { payday: day === 1 ? null : day } })
+  return { success: true }
+}
+
+/** The user's payday and, when none is set, the day their salary history suggests. */
+export async function getPaydaySetting() {
+  const user = await getCurrentUser()
+  if (!user) return null
+  if (user.payday) return { payday: user.payday, suggested: null }
+  const since = new Date(Date.now() - 120 * 24 * 60 * 60 * 1000)
+  const incomes = await prisma.transaction.findMany({ where: { userId: user.id, type: "INCOME", date: { gte: since } }, select: { date: true, amount: true } })
+  return { payday: null, suggested: suggestPayday(incomes) }
 }

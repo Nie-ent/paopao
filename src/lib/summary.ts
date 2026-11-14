@@ -3,6 +3,7 @@
  * Pure: takes transactions, returns totals, chart buckets and top categories.
  */
 import { bangkokDate, bangkokParts } from "@/lib/dates"
+import { currentCycle } from "@/lib/pay-cycle"
 import { roundMoney, sumMoney } from "@/lib/money"
 
 export type SummaryPeriod = "DAY" | "MONTH" | "YEAR"
@@ -29,27 +30,35 @@ export type Summary = {
 const TH_MONTHS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."]
 const TH_MONTHS_LONG = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"]
 const buddhistYear = (y: number) => y + 543
+/** "25 ต.ค. – 24 พ.ย. 2569" for a pay cycle */
+const cycleTitle = (c: { gte: Date; lt: Date }) => {
+  const a = bangkokParts(c.gte), b = bangkokParts(new Date(c.lt.getTime() - 1))
+  return `${a.day} ${TH_MONTHS[a.month]} – ${b.day} ${TH_MONTHS[b.month]} ${buddhistYear(b.year)}`
+}
 
 /** [start, end) of the Bangkok day, month or year containing `now`. */
-export function summaryRange(period: SummaryPeriod, now = new Date()) {
+/** "This month" is the pay cycle when the user set a payday (src/lib/pay-cycle.ts). */
+export function summaryRange(period: SummaryPeriod, now = new Date(), payday: number | null = null) {
   const { year, month, day } = bangkokParts(now)
   if (period === "DAY") return { gte: bangkokDate(year, month, day), lt: bangkokDate(year, month, day + 1) }
-  if (period === "MONTH") return { gte: bangkokDate(year, month, 1), lt: bangkokDate(year, month + 1, 1) }
+  if (period === "MONTH") { const c = currentCycle(payday, now); return { gte: c.gte, lt: c.lt } }
   return { gte: bangkokDate(year, 0, 1), lt: bangkokDate(year + 1, 0, 1) }
 }
 
-export function buildSummary(period: SummaryPeriod, transactions: Tx[], now = new Date()): Summary {
+export function buildSummary(period: SummaryPeriod, transactions: Tx[], now = new Date(), payday: number | null = null): Summary {
   const { year, month, day } = bangkokParts(now)
   const income = sumMoney(transactions.filter(t => t.type === "INCOME").map(t => t.amount))
   const expense = sumMoney(transactions.filter(t => t.type === "EXPENSE").map(t => t.amount))
 
   // Chart columns
   let buckets: SummaryBucket[] = []
+  const cycle = currentCycle(payday, now)
   if (period === "MONTH") {
-    const days = new Date(Date.UTC(year, month + 1, 0)).getUTCDate()
-    buckets = Array.from({ length: days }, (_, i) => ({ label: String(i + 1), income: 0, expense: 0 }))
+    // One column per day of the month (or pay cycle)
+    const days = Math.round((cycle.lt.getTime() - cycle.gte.getTime()) / 86_400_000)
+    buckets = Array.from({ length: days }, (_, i) => ({ label: String(bangkokParts(new Date(cycle.gte.getTime() + i * 86_400_000)).day), income: 0, expense: 0 }))
     for (const t of transactions) {
-      const b = buckets[bangkokParts(t.date).day - 1]
+      const b = buckets[Math.floor((t.date.getTime() - cycle.gte.getTime()) / 86_400_000)]
       if (b) b[t.type === "INCOME" ? "income" : "expense"] += t.amount
     }
   } else if (period === "YEAR") {
@@ -73,7 +82,7 @@ export function buildSummary(period: SummaryPeriod, transactions: Tx[], now = ne
 
   const title = period === "DAY"
     ? `${day} ${TH_MONTHS[month]} ${buddhistYear(year)}`
-    : period === "MONTH" ? `${TH_MONTHS_LONG[month]} ${buddhistYear(year)}` : `ปี ${buddhistYear(year)}`
+    : period === "MONTH" ? (payday ? cycleTitle(cycle) : `${TH_MONTHS_LONG[month]} ${buddhistYear(year)}`) : `ปี ${buddhistYear(year)}`
 
   return { period, title, income, expense, net: roundMoney(income - expense), count: transactions.length, buckets, topCategories }
 }
