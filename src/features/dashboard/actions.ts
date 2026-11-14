@@ -121,7 +121,18 @@ export async function getDashboardData(timeframe: 'ALL' | 'YTD' | 'MONTH' | 'WEE
     chartDataValues = chartDataValues.map(({ _sortKey, ...rest }) => rest);
   }
 
+  // The month before, so the dashboard can say whether spending went up or down
+  let previous: { totalIncome: number; totalExpense: number } | null = null
+  if (timeframe === 'MONTH') {
+    const sums = await prisma.transaction.groupBy({ by: ['type'], where: { userId: prismaUser.id, date: bangkokMonthRange(y, m - 1) }, _sum: { amount: true } })
+    previous = {
+      totalIncome: roundMoney(Number(sums.find(s => s.type === 'INCOME')?._sum.amount ?? 0)),
+      totalExpense: roundMoney(Number(sums.find(s => s.type === 'EXPENSE')?._sum.amount ?? 0)),
+    }
+  }
+
   return {
+    previous,
     chartData: chartDataValues,
     incomeByCategory,
     expenseByCategory,
