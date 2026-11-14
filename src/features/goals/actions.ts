@@ -113,3 +113,18 @@ export async function updateGoal(goalId: string, formData: FormData) {
 
   return { success: true }
 }
+
+/**
+ * Adds to (or, with a negative amount, takes from) a goal tracked by hand. Goals that follow a
+ * category fill up from entries instead, so they can't be changed here.
+ */
+export async function addGoalProgress(goalId: string, amount: number) {
+  const prismaUser = await getCurrentUser()
+  if (!prismaUser) return { error: 'User not found' }
+  if (!Number.isFinite(amount) || amount === 0 || !isValidAmount(Math.abs(amount))) return { error: 'Invalid amount' }
+  const goal = await prisma.goal.findFirst({ where: { id: goalId, userId: prismaUser.id } })
+  if (!goal || goal.type !== 'FINANCIAL' || goal.trackCategory) return { error: 'Not a manual goal' }
+  const next = Math.max(0, Math.round((goal.currentAmount + amount) * 100) / 100)
+  await prisma.goal.update({ where: { id: goal.id }, data: { currentAmount: next } })
+  return { success: true, currentAmount: next }
+}

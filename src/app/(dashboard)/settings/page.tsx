@@ -1,141 +1,126 @@
 "use client"
 
-import React from "react"
+import React, { useEffect, useState } from "react"
+import Link from "next/link"
 import { useFormStatus } from "react-dom"
-import { motion } from "framer-motion"
-import { Settings, LogOut, Webhook, BadgeCheck, BellRing, Smartphone, Shield } from "lucide-react"
+import { BadgeCheck, Bell, ChevronRight, Crown, FileText, Globe, GraduationCap, LogOut, Palette, Sparkles } from "lucide-react"
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
-import { signOut } from "@/features/auth/actions"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { UserAvatar } from "@/components/ui/user-avatar"
 import { CategorySettingsCard } from "@/components/settings/CategorySettingsCard"
 import { BriefFrequencySetting } from "@/components/settings/BriefFrequencySetting"
 import { PaydaySetting } from "@/components/settings/PaydaySetting"
+import { LanguageToggle } from "@/components/layouts/LanguageToggle"
+import { useTour } from "@/components/tour/TourProvider"
+import { signOut } from "@/features/auth/actions"
+import { getSubscriptionData } from "@/features/subscription/actions"
+import { fetchProfileDataCached } from "@/lib/clientCache"
+import { cacheKeys } from "@/lib/cache-keys"
+import { load as loadCached } from "@/lib/data-cache"
 import { useLanguage } from "@/contexts/LanguageContext"
 
-/**
- * Shows a spinner while signing out. The pending state comes from the form itself: disabling the
- * button in its own onClick would cancel the submission before it is sent.
- */
+/** Shows a spinner while signing out (the pending state comes from the form itself). */
 function SignOutButton({ label }: { label: string }) {
   const { pending } = useFormStatus()
   return (
-    <Button type="submit" variant="destructive" disabled={pending} className="shadow-lg shadow-destructive/20">
-      {pending ? <div className="animate-spin w-4 h-4 mr-2 border-2 border-white/30 border-t-white rounded-full"/> : <LogOut className="h-4 w-4 mr-2" />}
-      {label}
-    </Button>
+    <button type="submit" disabled={pending} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-destructive/30 bg-card py-3 text-sm font-semibold text-destructive hover:bg-destructive/5 disabled:opacity-60">
+      {pending ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-destructive/30 border-t-destructive" /> : <LogOut className="h-4 w-4" />} {label}
+    </button>
   )
 }
 
+/** A titled group of rows, like a phone's settings screen */
+function Group({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="space-y-2">
+      <h3 className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h3>
+      <div className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/60 bg-card [&>*]:px-4 [&>*]:py-3.5">{children}</div>
+    </section>
+  )
+}
+
+/** One row: icon, label and hint on the left, a control or a chevron on the right */
+function Row({ icon: Icon, title, desc, right, onClick, href }: { icon: React.ElementType; title: string; desc?: string; right?: React.ReactNode; onClick?: () => void; href?: string }) {
+  const body = (
+    <>
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Icon className="h-4 w-4" /></span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-medium text-foreground">{title}</span>
+        {desc && <span className="block text-xs text-muted-foreground">{desc}</span>}
+      </span>
+      {right ?? ((onClick || href) && <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />)}
+    </>
+  )
+  const cls = "flex w-full items-center gap-3 text-left"
+  if (href) return <Link href={href} className={`${cls} hover:bg-muted/40`}>{body}</Link>
+  if (onClick) return <button type="button" onClick={onClick} className={`${cls} hover:bg-muted/40`}>{body}</button>
+  return <div className={cls}>{body}</div>
+}
+
+/**
+ * Settings, grouped the way people look for them: their account and plan, money (payday,
+ * categories), LINE notifications, app preferences and help, then sign out.
+ */
 export default function SettingsPage() {
-  const { t } = useLanguage()
+  const { t, locale } = useLanguage()
+  const { openMenu } = useTour()
+  const [profile, setProfile] = useState<{ name: string | null; avatarUrl: string | null } | null>(null)
+  const [plan, setPlan] = useState<Awaited<ReturnType<typeof getSubscriptionData>>>(null)
+  const [categoriesOpen, setCategoriesOpen] = useState(false)
+
+  useEffect(() => {
+    fetchProfileDataCached().then(u => u && setProfile({ name: u.name ?? null, avatarUrl: u.avatarUrl ?? null })).catch(() => {})
+    loadCached(cacheKeys.subscription, getSubscriptionData).then(setPlan).catch(() => {})
+  }, [])
+
+  const planText = !plan ? "" : plan.plan === "PRO"
+    ? t(plan.onTrial ? "settings2.plan_trial" : "settings2.plan_pro", { date: plan.proExpiresAt ? new Date(plan.proExpiresAt).toLocaleDateString(locale, { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Bangkok" }) : "" })
+    : t("settings2.plan_free")
 
   return (
-    <div className="space-y-6 max-w-4xl">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight text-foreground/90 flex items-center gap-2">
-            <Settings className="h-8 w-8 text-primary" /> {t('settings.title')}
-          </h2>
-          <p className="text-muted-foreground">{t('settings.subtitle')}</p>
-        </div>
-      </div>
+    <div className="mx-auto max-w-2xl space-y-6 pb-8">
+      <h2 className="text-3xl font-bold tracking-tight text-foreground/90">{t("settings2.title")}</h2>
 
-      <div className="grid gap-6">
-        {/* Connection Status Card */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-          <Card className="glass-panel border-border/50">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-xl">
-                <Webhook className="h-5 w-5 text-primary" />
-                {t('settings.integrations')}
-              </CardTitle>
-              <CardDescription>{t('settings.integrations_desc')}</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between p-4 rounded-lg bg-background/50 border border-border/50 shadow-sm">
-                <div className="flex items-center gap-4">
-                  <div className="bg-[#00B900]/10 p-2 rounded-full">
-                    <Smartphone className="h-6 w-6 text-[#00B900]" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-foreground">LINE Official Account</h4>
-                    <p className="text-xs text-muted-foreground">{t('settings.line_desc')}</p>
-                  </div>
-                </div>
-                <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/30">
-                  <BadgeCheck className="w-3 h-3 mr-1" /> {t('settings.active')}
-                </Badge>
-              </div>
-              
-              <div className="flex items-center justify-between p-4 rounded-lg bg-background/50 border border-border/50 shadow-sm">
-                <div className="flex items-center gap-4">
-                  <div className="bg-blue-500/10 p-2 rounded-full">
-                    <Shield className="h-6 w-6 text-blue-500" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold text-foreground">{t('settings.line_login')}</h4>
-                    <p className="text-xs text-muted-foreground">{t('settings.line_login_desc')}</p>
-                  </div>
-                </div>
-                <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/30">
-                  <BadgeCheck className="w-3 h-3 mr-1" /> {t('settings.connected')}
-                </Badge>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+      {/* Who's signed in and their plan */}
+      <Link href="/subscription" className="flex items-center gap-4 rounded-2xl border border-border/60 bg-card p-4 hover:bg-muted/40">
+        <UserAvatar name={profile?.name} src={profile?.avatarUrl} size={52} />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-lg font-semibold text-foreground">{profile?.name ?? " "}</span>
+          <span className="flex items-center gap-1 text-sm text-muted-foreground">
+            {plan?.plan === "PRO" && <Crown className="h-3.5 w-3.5 text-primary" />} {planText}
+          </span>
+        </span>
+        <span className="flex shrink-0 items-center gap-1 text-sm font-medium text-primary">{t("settings2.plans")} <ChevronRight className="h-4 w-4" /></span>
+      </Link>
 
-        {/* Category Colors & Custom Categories */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.05 }}>
+      <Group title={t("settings2.group_money")}>
+        <PaydaySetting />
+        <Row icon={Palette} title={t("settings2.categories")} desc={t("settings2.categories_desc")} onClick={() => setCategoriesOpen(true)} />
+      </Group>
+
+      <Group title={t("settings2.group_line")}>
+        <BriefFrequencySetting />
+        <Row icon={Bell} title={t("settings.budget_title")} desc={t("settings.budget_desc")}
+          right={<span className="shrink-0 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-600">{t("settings.enabled")}</span>} />
+        <Row icon={BadgeCheck} title="LINE Official Account" desc={t("settings.line_desc")}
+          right={<span className="shrink-0 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-600">{t("settings.connected")}</span>} />
+      </Group>
+
+      <Group title={t("settings2.group_app")}>
+        <Row icon={Globe} title={t("settings2.language")} right={<LanguageToggle />} />
+        <Row icon={GraduationCap} title={t("settings2.guides")} desc={t("settings2.guides_desc")} onClick={openMenu} />
+        <Row icon={Sparkles} title={t("updates.title")} href="/updates" />
+        <Row icon={FileText} title={t("settings2.privacy")} href="/privacy" />
+      </Group>
+
+      <form action={signOut}><SignOutButton label={t("settings.logout")} /></form>
+
+      <Dialog open={categoriesOpen} onOpenChange={setCategoriesOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto p-0 sm:max-w-lg">
+          <DialogHeader className="sr-only"><DialogTitle>{t("settings2.categories")}</DialogTitle></DialogHeader>
           <CategorySettingsCard />
-        </motion.div>
-
-        {/* Notifications Preference */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.1 }}>
-          <Card className="glass-panel border-border/50">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-xl">
-                <BellRing className="h-5 w-5 text-primary" />
-                {t('settings.notifications')}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <PaydaySetting />
-              <Separator className="bg-border/50" />
-              <BriefFrequencySetting />
-              <Separator className="bg-border/50" />
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-medium text-foreground">{t('settings.budget_title')}</h4>
-                  <p className="text-sm text-muted-foreground">{t('settings.budget_desc')}</p>
-                </div>
-                <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/30">{t('settings.enabled')}</Badge>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        {/* Danger Zone */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.2 }}>
-          <Card className="border-destructive/30 bg-destructive/5">
-            <CardHeader>
-              <CardTitle className="text-destructive text-lg">{t('settings.danger')}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground mb-4">
-                {t('settings.danger_desc')}
-              </p>
-              <form action={signOut}>
-                <SignOutButton label={t('settings.logout')} />
-              </form>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-      </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

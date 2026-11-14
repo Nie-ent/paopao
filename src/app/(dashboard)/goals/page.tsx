@@ -1,524 +1,388 @@
 "use client"
 
-import { toBangkokDateTimeInput } from "@/lib/dates"
-import React, { useEffect, useState, useRef } from "react"
-import { motion, AnimatePresence } from "framer-motion"
-import { Target, TrendingUp, Trophy, Plus, Loader2, Trash2, CheckCircle2, Circle, ListTodo, CalendarClock, Flag, Link as LinkIcon } from "lucide-react"
+import React, { useEffect, useRef, useState } from "react"
 import confetti from "canvas-confetti"
+import { CalendarClock, Check, ChevronDown, ChevronLeft, Circle, CheckCircle2, Link as LinkIcon, Plus, Target, Trash2 } from "lucide-react"
+import { toast } from "sonner"
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Progress } from "@/components/ui/progress"
 import { Button } from "@/components/ui/button"
-import { Select } from "@/components/ui/select"
-import { useSingleFlight } from "@/hooks/use-single-flight"
-import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from "@/components/ui/sheet"
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
-import { getGoals, createGoal, deleteGoal, toggleGoalCompletion, updateGoal } from "@/features/goals/actions"
+import { Select } from "@/components/ui/select"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { addGoalProgress, createGoal, deleteGoal, getGoals, toggleGoalCompletion, updateGoal } from "@/features/goals/actions"
 import { getCategoryColors } from "@/features/settings/actions"
 import { goalSyncCategories } from "@/lib/goal-sync-options"
-import { toast } from "sonner"
+import { toBangkokDateTimeInput } from "@/lib/dates"
 import { useLanguage } from "@/contexts/LanguageContext"
 import { cacheKeys } from "@/lib/cache-keys"
 import { invalidateAll, load as loadCached, peek } from "@/lib/data-cache"
 import { cn } from "@/lib/utils"
 
+type Goal = NonNullable<Awaited<ReturnType<typeof getGoals>>["data"]>[number]
+/** What the person wants to do; decides the form and the default way progress is counted */
+type Kind = "SAVE" | "DEBT" | "DAILY" | "TODO"
+type Source = "CATEGORY" | "MANUAL"
+
+const KINDS: { kind: Kind; icon: string; category?: string }[] = [
+  { kind: "SAVE", icon: "🐷", category: "Saving" },
+  { kind: "DEBT", icon: "💳", category: "Debt Payment" },
+  { kind: "DAILY", icon: "📅" },
+  { kind: "TODO", icon: "✅" },
+]
+const DAY_MS = 86_400_000
+const baht = (n: number) => `฿${n.toLocaleString("th-TH", { maximumFractionDigits: 2 })}`
+
+function kindOf(g: Goal): Kind {
+  if (g.type === "TODO") return "TODO"
+  if (g.trackCategory === "DAILY_BALANCE") return "DAILY"
+  return g.trackCategory === "Debt Payment" ? "DEBT" : "SAVE"
+}
+
+/**
+ * Goals: money goals with how much is left and what it takes per month, a checklist of to-dos,
+ * and finished ones tucked away. New goals start from what the person wants to do (save, pay off
+ * a debt, save daily, a to-do) and get a sensible way of counting progress by default.
+ */
 export default function GoalsPage() {
   const { t, tc, locale } = useLanguage()
-  // Cached goals (another visit or the app snapshot) show at once, then refresh
-  const [goals, setGoals] = useState<any[]>(() => peek<Awaited<ReturnType<typeof getGoals>>>(cacheKeys.goals)?.data ?? [])
+  const [goals, setGoals] = useState<Goal[]>(() => peek<Awaited<ReturnType<typeof getGoals>>>(cacheKeys.goals)?.data ?? [])
   const [loading, setLoading] = useState(() => !peek(cacheKeys.goals))
-  const [isSubmitLoading, setIsSubmitLoading] = useState(false)
-  const [isSheetOpen, setIsSheetOpen] = useState(false)
-  const [goalToDelete, setGoalToDelete] = useState<string | null>(null)
-  const [editId, setEditId] = useState<string | null>(null)
-  const evaluatedRef = useRef<Set<string>>(new Set())
-  const submitLockRef = useRef(false)
-  const togglingIds = useRef(new Set<string>())
-  const { run: runDelete, pending: isDeleting } = useSingleFlight()
-  // Built-in and the user's own categories, for "auto-sync with category"
   const [categoryNames, setCategoryNames] = useState<string[]>(() => Object.keys(peek<Awaited<ReturnType<typeof getCategoryColors>>>(cacheKeys.categoryColors)?.categoryColors ?? {}))
-  
-  const [sheetType, setSheetType] = useState<"FINANCIAL" | "TODO" | "DAILY">("FINANCIAL")
-  const [formData, setFormData] = useState({
-    title: "",
-    targetAmount: "",
-    trackCategory: "",
-    description: "",
-    deadline: ""
-  })
+  const [editor, setEditor] = useState<{ goal: Goal | null; kind: Kind | null } | null>(null)
+  const [adding, setAdding] = useState<Goal | null>(null)
+  const [showDone, setShowDone] = useState(false)
+  const celebrated = useRef(new Set<string>())
+  // "Now" for days-left labels, fixed for the visit
+  const [now] = useState(() => Date.now())
+  const toggling = useRef(new Set<string>())
 
-  const openCreateSheet = () => {
-    setEditId(null)
-    setFormData({ title: "", targetAmount: "", trackCategory: "", description: "", deadline: "" })
-    setIsSheetOpen(true)
-  }
-
-  const openEditSheet = (goal: any) => {
-    setEditId(goal.id)
-    if (goal.type === "TODO") {
-      setSheetType("TODO")
-    } else if (goal.trackCategory === "DAILY_BALANCE") {
-      setSheetType("DAILY")
-    } else {
-      setSheetType("FINANCIAL")
-    }
-    setFormData({
-      title: goal.title,
-      targetAmount: goal.targetAmount?.toString() || "",
-      trackCategory: goal.trackCategory || "",
-      description: goal.description || "",
-      deadline: goal.deadline ? toBangkokDateTimeInput(new Date(goal.deadline)) : ""
-    })
-    setIsSheetOpen(true)
-  }
-
+  const fetchGoals = (force = false) =>
+    loadCached(cacheKeys.goals, getGoals, { force })
+      .then(res => { if (res?.data) setGoals(res.data); else toast.error(t("goals.load_failed")) })
+      .catch(() => toast.error(t("goals.load_failed")))
+      .finally(() => setLoading(false))
   useEffect(() => {
     fetchGoals()
-    loadCached(cacheKeys.categoryColors, getCategoryColors).then(res => setCategoryNames(Object.keys(res.categoryColors ?? {}))).catch(() => {})
+    loadCached(cacheKeys.categoryColors, getCategoryColors).then(r => setCategoryNames(Object.keys(r.categoryColors ?? {}))).catch(() => {})
   }, [])
 
-  const syncCats = goalSyncCategories(categoryNames)
-
+  // A goal that reaches its target: celebrate once and mark it done
   useEffect(() => {
-    if (goals.length > 0 && typeof window !== "undefined" && window.location.hash) {
-      const elementId = window.location.hash.substring(1)
+    for (const g of goals) {
+      if (celebrated.current.has(g.id) || g.type !== "FINANCIAL" || g.isCompleted || !(g.targetAmount > 0) || g.currentAmount < g.targetAmount) continue
+      celebrated.current.add(g.id)
       setTimeout(() => {
-        const element = document.getElementById(elementId)
-        if (element) {
-          element.scrollIntoView({ behavior: "smooth", block: "center" })
-        }
-      }, 300)
+        confetti({ particleCount: 180, spread: 90, origin: { y: 0.6 } })
+        toast.success(t("goals.achieved_toast", { title: g.title }), { duration: 8000 })
+      }, 600)
+      toggleGoalCompletion(g.id, true).then(invalidateAll)
     }
+    // Links from LINE reminders point at a to-do: scroll to it
+    if (goals.length && window.location.hash) setTimeout(() => document.getElementById(window.location.hash.slice(1))?.scrollIntoView({ behavior: "smooth", block: "center" }), 300)
+  }, [goals, t])
 
-    // Goal Completion Celebrations (Auto-complete if target reached)
-    if (goals.length > 0) {
-      goals.forEach(goal => {
-        if (evaluatedRef.current.has(goal.id) || goal.type !== "FINANCIAL" || goal.isCompleted) return
-        
-        // If the goal target is reached!
-        if (goal.targetAmount > 0 && goal.currentAmount >= goal.targetAmount) {
-          evaluatedRef.current.add(goal.id)
-          
-          setTimeout(() => {
-            confetti({
-              particleCount: 200,
-              spread: 100,
-              origin: { y: 0.6 },
-              colors: ['#26ccff', '#a25afd', '#ff5e7e', '#88ff5a', '#fcff42', '#ffa62d', '#ff36ff']
-            })
-            toast.success(t('goals.achieved_toast', { title: goal.title }), { duration: 8000 })
-          }, 1000)
-          
-          // Auto complete in DB
-          toggleGoalCompletion(goal.id, true).then(invalidateAll)
-        }
-      })
-    }
-  }, [goals])
-
-  const fetchGoals = async (force = false) => {
+  const toggleTodo = async (g: Goal) => {
+    if (toggling.current.has(g.id)) return
+    toggling.current.add(g.id)
+    setGoals(prev => prev.map(x => (x.id === g.id ? { ...x, isCompleted: !g.isCompleted } : x)))
     try {
-      // Only show the spinner when there is nothing to show yet
-      if (!peek(cacheKeys.goals)) setLoading(true)
-      const res = await loadCached(cacheKeys.goals, getGoals, { force })
-      if (res?.data) {
-        setGoals(res.data)
-      } else {
-        toast.error(t('goals.load_failed'))
-      }
-    } catch (err) {
-      console.error(err)
-      toast.error(t('goals.load_failed'))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    if (isSubmitLoading || submitLockRef.current) return
-    
-    submitLockRef.current = true
-    setIsSubmitLoading(true)
-    
-    try {
-      const payload = new FormData(e.currentTarget)
-      if (sheetType === "DAILY") {
-        payload.set("type", "FINANCIAL")
-        payload.set("trackCategory", "DAILY_BALANCE")
-      } else {
-        payload.set("type", sheetType)
-      }
-      
-      let res
-      if (editId) {
-        res = await updateGoal(editId, payload)
-      } else {
-        res = await createGoal(payload)
-      }
-      
-      if (res.success) {
-        toast.success(editId ? t('goals.toast.updated') : (sheetType === "FINANCIAL" || sheetType === "DAILY" ? t('goals.toast.created') : t('goals.toast.task_added')), {
-          description: t('goals.toast.saved_desc')
-        })
-        setIsSheetOpen(false)
-        invalidateAll()
-        fetchGoals(true)
-      } else {
-        toast.error(t('common.error'), { description: res.error || t('common.something_wrong') })
-      }
-    } finally {
-      setIsSubmitLoading(false)
-      submitLockRef.current = false
-    }
-  }
-
-  const executeDelete = () => runDelete(async () => {
-    if (!goalToDelete) return;
-    const res = await deleteGoal(goalToDelete)
-    if (res.success) {
-      toast.success(t('goals.toast.deleted'), { description: t('goals.toast.deleted_desc') })
+      const res = await toggleGoalCompletion(g.id, !g.isCompleted)
       invalidateAll()
-      fetchGoals(true)
-    } else {
-      toast.error(t('common.error'), { description: t('goals.toast.delete_failed') })
-    }
-    setGoalToDelete(null)
-  })
-
-  const handleToggleCompletion = async (id: string, isCompleted: boolean) => {
-    // Ignore taps on a to-do whose previous toggle is still saving
-    if (togglingIds.current.has(id)) return
-    togglingIds.current.add(id)
-    const updatedGoals = goals.map(g => g.id === id ? { ...g, isCompleted: !isCompleted } : g)
-    setGoals(updatedGoals) // Optimistic update
-    
-    try {
-      const res = await toggleGoalCompletion(id, !isCompleted)
-      invalidateAll()
-      if (!res.success) {
-        toast.error(t('goals.toast.status_failed'))
-        fetchGoals(true) // revert
-      }
+      if (!res.success) { toast.error(t("goals.toast.status_failed")); fetchGoals(true) }
     } finally {
-      togglingIds.current.delete(id)
+      toggling.current.delete(g.id)
     }
   }
 
-  const financialGoals = goals.filter(g => (g.type === "FINANCIAL" || !g.type) && !g.isCompleted)
-  const todoTasks = goals.filter(g => g.type === "TODO" && !g.isCompleted)
-
-  const formatDate = (dateStr: string, includeTime: boolean = false) => {
-    if (!dateStr) return t('common.no_deadline')
-    const d = new Date(dateStr)
-    if (includeTime) {
-      return d.toLocaleDateString(locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-    }
-    return d.toLocaleDateString(locale, { month: 'long', year: 'numeric' })
-  }
+  const money = goals.filter(g => g.type !== "TODO" && !g.isCompleted)
+  const todos = goals.filter(g => g.type === "TODO" && !g.isCompleted)
+  const done = goals.filter(g => g.isCompleted)
+  const daysTo = (d: Date | string | null) => (d ? Math.ceil((new Date(d).getTime() - now) / DAY_MS) : null)
+  const shortDate = (d: Date | string, time = false) => new Date(d).toLocaleDateString(locale, { day: "numeric", month: "short", ...(time ? { hour: "2-digit", minute: "2-digit" } : { year: "2-digit" }), timeZone: "Asia/Bangkok" })
 
   return (
-    <div className="space-y-6 pb-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight text-foreground/90 flex items-center gap-2">
-            <Target className="h-8 w-8 text-primary" /> {t('goals.title')}
-          </h2>
-          <p className="text-muted-foreground">{t('goals.subtitle')}</p>
+    <div className="mx-auto max-w-5xl space-y-6 pb-8">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-foreground/90 sm:text-3xl"><Target className="h-7 w-7 shrink-0 text-primary sm:h-8 sm:w-8" /> {t("goals.title")}</h2>
+          <p className="text-muted-foreground">{t("goals2.lead")}</p>
         </div>
-        
-        <Button data-tour="goals-add" className="shrink-0 shadow-lg shadow-primary/20" onClick={openCreateSheet}>
-          <Plus className="h-4 w-4 mr-2" /> {t('goals.btn.add')}
+        <Button data-tour="goals-add" className="shrink-0 rounded-xl shadow-lg shadow-primary/20" onClick={() => setEditor({ goal: null, kind: null })}>
+          <Plus className="mr-1.5 h-4 w-4" /> {t("goals2.add")}
         </Button>
       </div>
 
-      <Tabs defaultValue="all" className="w-full">
-        <TabsList className="mb-4">
-          <TabsTrigger value="all">{t('goals.tab.all')}</TabsTrigger>
-          <TabsTrigger value="financial">{t('goals.tab.financial')}</TabsTrigger>
-          <TabsTrigger value="todo">{t('goals.tab.todo')}</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="all" className="space-y-6 mt-0">
-          <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
-            {/* Mix both lists but maybe visually we can separate them or just list as is */}
-            {financialGoals.length > 0 && (
-              <div className="col-span-full mb-2 flex items-center gap-2 text-lg font-semibold text-primary">
-                <TrendingUp className="w-5 h-5" /> {t('goals.tab.financial')}
-              </div>
-            )}
-            <RenderFinancial goals={financialGoals} setGoalToDelete={setGoalToDelete} openEditSheet={openEditSheet} formatDate={formatDate} loading={loading} />
-
-            {todoTasks.length > 0 && (
-              <div className="col-span-full mt-6 mb-2 flex items-center gap-2 text-lg font-semibold text-primary">
-                <ListTodo className="w-5 h-5" /> {t('goals.tab.todo')}
-              </div>
-            )}
-            <RenderTodos todos={todoTasks} setGoalToDelete={setGoalToDelete} openEditSheet={openEditSheet} toggleCompletion={handleToggleCompletion} formatDate={formatDate} loading={loading} />
-            
-            {!loading && goals.length === 0 && (
-              <div className="col-span-full flex flex-col items-center justify-center py-24 glass-panel rounded-xl text-muted-foreground">
-                <Trophy className="h-12 w-12 mb-4 opacity-20" />
-                <p className="text-lg font-medium text-foreground">{t('goals.empty.title')}</p>
-                <p className="max-w-sm text-center mt-2">{t('goals.empty.desc')}</p>
-              </div>
-            )}
+      {!loading && goals.length === 0 && (
+        <div className="rounded-3xl border border-dashed border-border bg-card/60 p-8 text-center">
+          <p className="text-lg font-semibold text-foreground">{t("goals2.empty_title")}</p>
+          <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">{t("goals2.empty_desc")}</p>
+          <div className="mx-auto mt-5 grid max-w-xl grid-cols-2 gap-2 sm:grid-cols-4">
+            {KINDS.map(k => (
+              <button key={k.kind} onClick={() => setEditor({ goal: null, kind: k.kind })} className="rounded-2xl border border-border bg-card p-3 text-sm font-medium hover:border-primary/50 hover:bg-primary/5">
+                <span className="block text-2xl">{k.icon}</span>{t(`goals2.kind.${k.kind}`)}
+              </button>
+            ))}
           </div>
-        </TabsContent>
+        </div>
+      )}
 
-        <TabsContent value="financial" className="mt-0">
-          <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
-             <RenderFinancial goals={financialGoals} setGoalToDelete={setGoalToDelete} openEditSheet={openEditSheet} formatDate={formatDate} loading={loading} />
-          </div>
-        </TabsContent>
-        <TabsContent value="todo" className="mt-0">
-          <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
-             <RenderTodos todos={todoTasks} setGoalToDelete={setGoalToDelete} openEditSheet={openEditSheet} toggleCompletion={handleToggleCompletion} formatDate={formatDate} loading={loading} />
-          </div>
-        </TabsContent>
-      </Tabs>
-
-      {/* Alert Dialog */}
-      <AlertDialog open={!!goalToDelete} onOpenChange={(open) => !open && setGoalToDelete(null)}>
-        <AlertDialogContent className="glass-panel border-destructive/20 border">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-destructive flex items-center gap-2">
-              <Trash2 className="w-5 h-5"/>
-              {t('goals.delete.title')}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {t('goals.delete.desc')}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
-            <Button onClick={executeDelete} loading={isDeleting} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
-              {t('common.confirm_delete')}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Creation Sheet */}
-      <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-        <SheetContent className="bg-background border-border overflow-y-auto w-full sm:max-w-xl p-8 pt-14 md:p-12">
-          <SheetHeader>
-            <SheetTitle>{editId ? t('goals.sheet.title_edit') : t('goals.sheet.title_new')}</SheetTitle>
-            <SheetDescription>{t('goals.sheet.desc')}</SheetDescription>
-          </SheetHeader>
-          
-          <div className="mt-6">
-            <Tabs value={sheetType} onValueChange={(val: any) => setSheetType(val)} className="w-full">
-              <TabsList className="w-full grid border-border bg-muted/50 p-1 rounded-xl" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
-                <TabsTrigger value="FINANCIAL" className="rounded-lg">{t('goals.sheet.type_financial')}</TabsTrigger>
-                <TabsTrigger value="DAILY" className="rounded-lg">{t('goals.sheet.type_daily')}</TabsTrigger>
-                <TabsTrigger value="TODO" className="rounded-lg">{t('goals.sheet.type_todo')}</TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
-
-          <form onSubmit={onSubmit} className="space-y-6 mt-8">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">{t('goals.form.title')}</label>
-              <Input name="title" required value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder={sheetType === "FINANCIAL" ? t('goals.form.title_ph_financial') : (sheetType === "DAILY" ? t('goals.form.title_ph_daily') : t('goals.form.title_ph_todo'))} className="bg-muted/50" />
-            </div>
-            
-            {(sheetType === "FINANCIAL" || sheetType === "DAILY") && (
-              <>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">{t('goals.form.target')}</label>
-                  <Input name="targetAmount" type="number" value={formData.targetAmount} onChange={e => setFormData({...formData, targetAmount: e.target.value})} required placeholder="50000" className="bg-muted/50" />
-                </div>
-                {sheetType === "FINANCIAL" && (
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium flex items-center gap-2">
-                      <LinkIcon className="w-4 h-4 text-orange-500" /> {t('goals.form.sync')}
-                    </label>
-                    <p className="text-xs text-muted-foreground mb-2">{t('goals.form.sync_desc')}</p>
-                    {/* Hidden input carries the value into the FormData; "" means manual tracking */}
-                    <input type="hidden" name="trackCategory" value={formData.trackCategory} />
-                    <Select
-                      aria-label={t('goals.form.sync')}
-                      className="h-10 bg-muted/50"
-                      value={formData.trackCategory || "NONE"}
-                      onValueChange={v => setFormData({...formData, trackCategory: v === "NONE" ? "" : v})}
-                      options={[
-                        { value: "NONE", label: t('goals.form.sync_none') },
-                        { value: "DAILY_BALANCE", label: t('goals.form.sync_daily') },
-                        // Each category on its own: e.g. a 7,000 debt goal fills up from "Debt Payment" entries
-                        ...syncCats.expense.map(c => ({ value: c, label: `${t('goals.form.sync_group_expense')} · ${tc(c)}` })),
-                        ...syncCats.custom.map(c => ({ value: c, label: `${c} · ${t('transactions.form.custom_group')}` })),
-                        ...syncCats.income.map(c => ({ value: c, label: `${t('goals.form.sync_group_income')} · ${tc(c)}` })),
-                        { value: "Income", label: t('goals.form.sync_income') },
-                        { value: "Expense", label: t('goals.form.sync_expense') },
-                        // A goal saved with a category since renamed or removed still shows what it tracks
-                        ...(formData.trackCategory && formData.trackCategory !== "DAILY_BALANCE" && !["Income", "Expense", ...syncCats.expense, ...syncCats.income, ...syncCats.custom].includes(formData.trackCategory)
-                          ? [{ value: formData.trackCategory, label: formData.trackCategory }] : []),
-                      ]}
-                    />
-                    {formData.trackCategory && formData.trackCategory !== "DAILY_BALANCE" && (
-                      <p className="text-xs text-muted-foreground">{t('goals.form.sync_window')}</p>
-                    )}
+      {money.length > 0 && (
+        <section className="space-y-3">
+          <h3 className="text-sm font-semibold text-muted-foreground">{t("goals2.money_title")} · {money.length}</h3>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {money.map(g => {
+              const pct = g.targetAmount > 0 ? Math.min(100, (g.currentAmount / g.targetAmount) * 100) : 0
+              const left = Math.max(0, g.targetAmount - g.currentAmount)
+              const days = daysTo(g.deadline)
+              const months = days != null && days > 0 ? Math.max(1, days / 30.4) : null
+              const kind = kindOf(g)
+              const manual = !g.trackCategory
+              return (
+                <div key={g.id} className="flex flex-col rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
+                  <button onClick={() => setEditor({ goal: g, kind })} className="text-left">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="font-semibold leading-tight text-foreground">{KINDS.find(k => k.kind === kind)?.icon} {g.title}</p>
+                      <span className="shrink-0 text-sm font-bold tabular-nums text-primary">{Math.floor(pct)}%</span>
+                    </div>
+                    <p className="mt-2 text-xl font-bold tabular-nums text-foreground">{baht(g.currentAmount)} <span className="text-sm font-normal text-muted-foreground">/ {baht(g.targetAmount)}</span></p>
+                    <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary transition-all" style={{ width: `${pct}%` }} /></div>
+                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                      {kind !== "DAILY" && <span>{t("goals2.left", { amount: baht(left) })}</span>}
+                      {days != null && <span className={cn(days < 0 && "text-destructive")}>{days < 0 ? t("goals2.overdue") : t("goals2.days_left", { n: days })}</span>}
+                      {months && left > 0 && kind !== "DAILY" && <span className="font-medium text-foreground/80">{t("goals2.per_month", { amount: baht(Math.ceil(left / months)) })}</span>}
+                    </div>
+                  </button>
+                  <div className="mt-3 flex items-center justify-between gap-2 border-t border-border/50 pt-3 text-xs">
+                    <span className="flex min-w-0 items-center gap-1 text-muted-foreground">
+                      {manual ? t("goals2.source_manual_short") : <><LinkIcon className="h-3 w-3 shrink-0" /><span className="truncate">{g.trackCategory === "DAILY_BALANCE" ? t("goals2.source_daily_short") : t("goals2.source_category_short", { category: tc(g.trackCategory!) })}</span></>}
+                    </span>
+                    {manual && <button onClick={() => setAdding(g)} className="shrink-0 rounded-lg bg-primary/10 px-2.5 py-1 font-semibold text-primary hover:bg-primary/20">+ {t("goals2.add_amount")}</button>}
                   </div>
-                )}
-              </>
-            )}
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      )}
 
-            {sheetType === "TODO" && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium">{t('goals.form.details')}</label>
-                <textarea 
-                  name="description" 
-                  value={formData.description}
-                  onChange={e => setFormData({...formData, description: e.target.value})}
-                  placeholder={t('goals.form.details_ph')} 
-                  className="flex min-h-[80px] w-full rounded-md border border-input bg-muted/50 px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                />
-              </div>
-            )}
+      {todos.length > 0 && (
+        <section className="space-y-3">
+          <h3 className="text-sm font-semibold text-muted-foreground">{t("goals2.todo_title")} · {todos.length}</h3>
+          <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/60 bg-card">
+            {todos.map(g => {
+              const days = daysTo(g.deadline)
+              return (
+                <li key={g.id} id={g.id} className="flex items-center gap-3 px-4 py-3 target:bg-primary/5">
+                  <button onClick={() => toggleTodo(g)} aria-label={t("goals2.mark_done")} className="shrink-0 text-muted-foreground hover:text-primary"><Circle className="h-6 w-6" /></button>
+                  <button onClick={() => setEditor({ goal: g, kind: "TODO" })} className="min-w-0 flex-1 text-left">
+                    <p className="truncate font-medium text-foreground">{g.title}</p>
+                    {g.description && <p className="truncate text-xs text-muted-foreground">{g.description}</p>}
+                  </button>
+                  {g.deadline && (
+                    <span className={cn("flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs", days != null && days < 0 ? "bg-destructive/10 text-destructive" : days != null && days <= 1 ? "bg-amber-100 text-amber-800" : "bg-muted text-muted-foreground")}>
+                      <CalendarClock className="h-3 w-3" /> {shortDate(g.deadline, true)}
+                    </span>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      )}
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">{sheetType === "TODO" ? t('goals.form.deadline_todo') : (sheetType === "DAILY" ? t('goals.form.deadline_daily') : t('goals.form.deadline_financial'))}</label>
-              <Input 
-                name="deadline" 
-                type={sheetType === "TODO" ? "datetime-local" : "date"} 
-                required={sheetType !== "DAILY"} 
-                value={formData.deadline.slice(0, sheetType === "TODO" ? 16 : 10)}
-                onChange={e => setFormData({...formData, deadline: e.target.value})}
-                className="bg-muted/50" 
-              />
-            </div>
-            
-            <SheetFooter className="mt-8">
-              <Button type="submit" loading={isSubmitLoading} className="w-full">
-                {t('goals.form.submit')}
-              </Button>
-            </SheetFooter>
-          </form>
-        </SheetContent>
-      </Sheet>
+      {done.length > 0 && (
+        <section>
+          <button onClick={() => setShowDone(v => !v)} className="flex items-center gap-1 text-sm font-semibold text-muted-foreground hover:text-foreground">
+            <ChevronDown className={cn("h-4 w-4 transition-transform", !showDone && "-rotate-90")} /> {t("goals2.done_title")} · {done.length}
+          </button>
+          {showDone && (
+            <ul className="mt-3 divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/60 bg-card/60">
+              {done.map(g => (
+                <li key={g.id} className="flex items-center gap-3 px-4 py-2.5">
+                  {g.type === "TODO"
+                    ? <button onClick={() => toggleTodo(g)} aria-label={t("goals2.mark_undone")} className="shrink-0 text-primary"><CheckCircle2 className="h-5 w-5" /></button>
+                    : <span className="shrink-0 text-primary"><Check className="h-5 w-5" /></span>}
+                  <button onClick={() => setEditor({ goal: g, kind: kindOf(g) })} className="min-w-0 flex-1 truncate text-left text-sm text-muted-foreground line-through">{g.title}</button>
+                  {g.type !== "TODO" && <span className="text-xs tabular-nums text-muted-foreground">{baht(g.targetAmount)}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+
+      <GoalEditor state={editor} onClose={() => setEditor(null)} onSaved={() => { setEditor(null); invalidateAll(); fetchGoals(true) }} categoryNames={categoryNames} />
+      <AddAmountDialog goal={adding} onClose={() => setAdding(null)} onSaved={() => { setAdding(null); invalidateAll(); fetchGoals(true) }} />
     </div>
   )
 }
 
-function RenderFinancial({ goals, setGoalToDelete, openEditSheet, formatDate, loading }: any) {
+/** New goal (pick what you want to do first) or edit; delete lives here, behind a confirm */
+function GoalEditor({ state, onClose, onSaved, categoryNames }: { state: { goal: Goal | null; kind: Kind | null } | null; onClose: () => void; onSaved: () => void; categoryNames: string[] }) {
   const { t, tc } = useLanguage()
-  if (loading) return <LoadingPlaceholder />
+  const [kind, setKind] = useState<Kind | null>(null)
+  const [title, setTitle] = useState("")
+  const [target, setTarget] = useState("")
+  const [source, setSource] = useState<Source>("CATEGORY")
+  const [category, setCategory] = useState("Saving")
+  const [deadline, setDeadline] = useState("")
+  const [notes, setNotes] = useState("")
+  const [saving, setSaving] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const goal = state?.goal ?? null
+
+  // Load the goal (or a fresh form) each time the dialog opens
+  const openKey = state ? (goal?.id ?? `new-${state.kind ?? ""}`) : null
+  const [loadedKey, setLoadedKey] = useState<string | null>(null)
+  if (openKey !== loadedKey) {
+    setLoadedKey(openKey)
+    setConfirmDelete(false)
+    const k = state?.kind ?? null
+    setKind(k)
+    setTitle(goal?.title ?? "")
+    setTarget(goal?.targetAmount ? String(goal.targetAmount) : "")
+    const tracked = goal?.trackCategory && goal.trackCategory !== "DAILY_BALANCE" ? goal.trackCategory : null
+    setSource(goal ? (tracked ? "CATEGORY" : "MANUAL") : "CATEGORY")
+    setCategory(tracked ?? KINDS.find(x => x.kind === k)?.category ?? "Saving")
+    setDeadline(goal?.deadline ? toBangkokDateTimeInput(new Date(goal.deadline)) : "")
+    setNotes(goal?.description ?? "")
+  }
+
+  const pickKind = (k: Kind) => { setKind(k); setCategory(KINDS.find(x => x.kind === k)?.category ?? "Saving"); setSource("CATEGORY") }
+  const sync = goalSyncCategories(categoryNames)
+  const categoryOptions = [
+    ...sync.expense.map(c => ({ value: c, label: `${t("goals.form.sync_group_expense")} · ${tc(c)}` })),
+    ...sync.custom.map(c => ({ value: c, label: c })),
+    ...sync.income.map(c => ({ value: c, label: `${t("goals.form.sync_group_income")} · ${tc(c)}` })),
+    { value: "Income", label: t("goals.form.sync_income") },
+    ...(category && ![...sync.expense, ...sync.custom, ...sync.income, "Income"].includes(category) ? [{ value: category, label: category }] : []),
+  ]
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!kind || saving) return
+    setSaving(true)
+    const fd = new FormData()
+    fd.set("title", title.trim())
+    fd.set("type", kind === "TODO" ? "TODO" : "FINANCIAL")
+    if (kind !== "TODO") fd.set("targetAmount", target)
+    fd.set("trackCategory", kind === "DAILY" ? "DAILY_BALANCE" : kind === "TODO" || source === "MANUAL" ? "" : category)
+    fd.set("description", kind === "TODO" ? notes : "")
+    fd.set("deadline", kind === "TODO" ? deadline.slice(0, 16) : deadline.slice(0, 10))
+    const res = goal ? await updateGoal(goal.id, fd) : await createGoal(fd)
+    setSaving(false)
+    if (res.success) { toast.success(goal ? t("goals.toast.updated") : t("goals.toast.created")); onSaved() }
+    else toast.error(res.error || t("common.something_wrong"))
+  }
+
+  const remove = async () => {
+    if (!goal) return
+    setSaving(true)
+    const res = await deleteGoal(goal.id)
+    setSaving(false)
+    if (res.success) { toast.success(t("goals.toast.deleted")); onSaved() }
+    else toast.error(t("goals.toast.delete_failed"))
+  }
+
   return (
-    <AnimatePresence>
-      {goals.map((goal: any, idx: number) => {
-        const progressPercentage = Math.min(100, Math.max(0, (goal.currentAmount / goal.targetAmount) * 100))
-        const isCompleted = progressPercentage === 100
-        
-        return (
-          <motion.div key={goal.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: idx * 0.1 }}>
-            <Card onClick={() => openEditSheet(goal)} className={cn("h-full overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-1 glass-panel cursor-pointer", isCompleted ? 'border-primary/50' : 'border-border/50')}>
-              <CardHeader className="pb-2">
-                <div className="flex justify-between items-start gap-4">
-                  <div>
-                    <CardTitle className="text-xl flex items-center gap-2">
-                      {goal.title}
-                    </CardTitle>
-                    {goal.trackCategory && (
-                      <Badge variant="outline" className="mt-2 text-xs font-normal border-orange-200 text-orange-600 dark:border-orange-900 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/30">
-                        <LinkIcon className="w-3 h-3 mr-1" /> {t('goals.card.syncs', { category: goal.trackCategory === 'DAILY_BALANCE' ? t('goals.form.sync_daily') : tc(goal.trackCategory) })}
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {isCompleted && <Badge className="bg-emerald-500 text-white border-none shadow-sm">{t('goals.card.achieved')}</Badge>}
-                    <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0" onClick={(e) => { e.stopPropagation(); setGoalToDelete(goal.id); }}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-                <CardDescription className="flex items-center gap-1 font-medium text-foreground/80">
-                  <TrendingUp className="h-4 w-4" /> 
-                  ฿{goal.currentAmount.toLocaleString()} / ฿{goal.targetAmount.toLocaleString()}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-4 space-y-4">
-                <div>
-                  <div className="flex justify-between text-xs mb-1.5 font-medium text-muted-foreground">
-                    <span>{t('goals.card.progress')}</span>
-                    <span className={cn("font-bold", progressPercentage >= 100 ? "text-emerald-500" : "text-primary")}>
-                      {((goal.currentAmount / goal.targetAmount) * 100).toFixed(1)}%
-                    </span>
-                  </div>
-                  <Progress value={progressPercentage} className={cn("h-2.5", progressPercentage >= 100 ? "[&>div]:bg-emerald-500" : "")} />
-                </div>
-                <div className="pt-2 text-xs text-muted-foreground border-t border-border/50">
-                  <span className="font-medium text-foreground/70">{t('goals.card.deadline')}</span> {formatDate(goal.deadline)}
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        )
-      })}
-    </AnimatePresence>
+    <Dialog open={!!state} onOpenChange={o => { if (!o) onClose() }}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            {!goal && kind && <button onClick={() => setKind(null)} aria-label={t("goals2.back")} className="-ml-1 rounded-full p-1 hover:bg-muted"><ChevronLeft className="h-4 w-4" /></button>}
+            {goal ? t("goals2.edit_title") : kind ? `${KINDS.find(k => k.kind === kind)?.icon} ${t(`goals2.kind.${kind}`)}` : t("goals2.new_title")}
+          </DialogTitle>
+          {!kind && <DialogDescription>{t("goals2.pick_kind")}</DialogDescription>}
+        </DialogHeader>
+
+        {!kind ? (
+          <div className="grid gap-2">
+            {KINDS.map(k => (
+              <button key={k.kind} onClick={() => pickKind(k.kind)} className="flex items-center gap-3 rounded-2xl border border-border p-3 text-left hover:border-primary/50 hover:bg-primary/5">
+                <span className="text-2xl">{k.icon}</span>
+                <span><span className="block font-semibold text-foreground">{t(`goals2.kind.${k.kind}`)}</span><span className="block text-xs text-muted-foreground">{t(`goals2.kind_desc.${k.kind}`)}</span></span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <form onSubmit={save} className="space-y-4">
+            <Field label={t("goals.form.title")}>
+              <Input required maxLength={80} value={title} onChange={e => setTitle(e.target.value)} placeholder={t(`goals2.title_ph.${kind}`)} />
+            </Field>
+            {kind !== "TODO" && (
+              <Field label={kind === "DAILY" ? t("goals2.target_daily") : kind === "DEBT" ? t("goals2.target_debt") : t("goals2.target_save")}>
+                <Input required type="number" inputMode="decimal" min="1" step="0.01" value={target} onChange={e => setTarget(e.target.value)} placeholder={kind === "DAILY" ? "100" : "10000"} />
+              </Field>
+            )}
+            {(kind === "SAVE" || kind === "DEBT") && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium">{t("goals2.source_title")}</p>
+                <label className={cn("flex cursor-pointer gap-3 rounded-xl border p-3", source === "CATEGORY" ? "border-primary bg-primary/5" : "border-border")}>
+                  <input type="radio" className="mt-1 accent-[var(--primary)]" checked={source === "CATEGORY"} onChange={() => setSource("CATEGORY")} />
+                  <span className="min-w-0 flex-1 space-y-2">
+                    <span className="block text-sm font-medium">{t("goals2.source_category", { category: tc(category) })}</span>
+                    <span className="block text-xs text-muted-foreground">{t(kind === "DEBT" ? "goals2.source_category_hint_debt" : "goals2.source_category_hint_save")}</span>
+                    {source === "CATEGORY" && <Select aria-label={t("goals.form.sync")} value={category} onValueChange={setCategory} options={categoryOptions} />}
+                  </span>
+                </label>
+                <label className={cn("flex cursor-pointer gap-3 rounded-xl border p-3", source === "MANUAL" ? "border-primary bg-primary/5" : "border-border")}>
+                  <input type="radio" className="mt-1 accent-[var(--primary)]" checked={source === "MANUAL"} onChange={() => setSource("MANUAL")} />
+                  <span><span className="block text-sm font-medium">{t("goals2.source_manual")}</span><span className="block text-xs text-muted-foreground">{t("goals2.source_manual_hint")}</span></span>
+                </label>
+              </div>
+            )}
+            {kind === "DAILY" && <p className="rounded-xl bg-muted/60 p-3 text-xs text-muted-foreground">{t("goals2.daily_hint")}</p>}
+            {kind === "TODO" && (
+              <Field label={t("goals.form.details")}>
+                <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder={t("goals.form.details_ph")} className="flex min-h-[72px] w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring" />
+              </Field>
+            )}
+            <Field label={kind === "TODO" ? t("goals2.deadline_todo") : t("goals2.deadline_money")}>
+              <Input type={kind === "TODO" ? "datetime-local" : "date"} value={deadline.slice(0, kind === "TODO" ? 16 : 10)} onChange={e => setDeadline(e.target.value)} />
+            </Field>
+
+            <Button type="submit" loading={saving} className="w-full rounded-xl">{goal ? t("common.save") : t("goals2.create")}</Button>
+            {goal && (confirmDelete ? (
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" className="flex-1" onClick={() => setConfirmDelete(false)}>{t("common.cancel")}</Button>
+                <Button type="button" className="flex-1 bg-destructive text-destructive-foreground hover:bg-destructive/90" loading={saving} onClick={remove}>{t("common.confirm_delete")}</Button>
+              </div>
+            ) : (
+              <button type="button" onClick={() => setConfirmDelete(true)} className="flex w-full items-center justify-center gap-1.5 py-1 text-sm text-destructive hover:underline"><Trash2 className="h-4 w-4" /> {t("goals2.delete")}</button>
+            ))}
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }
 
-function RenderTodos({ todos, setGoalToDelete, openEditSheet, toggleCompletion, formatDate, loading }: any) {
-  if (loading) return <LoadingPlaceholder />
-  return (
-    <AnimatePresence>
-      {todos.map((todo: any, idx: number) => {
-        return (
-          <motion.div key={todo.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: idx * 0.1 }}>
-            <Card id={todo.id} onClick={() => openEditSheet(todo)} className={cn("h-full overflow-hidden transition-all duration-300 hover:shadow-md glass-panel target:ring-2 target:ring-primary target:ring-offset-2 target:ring-offset-background cursor-pointer", todo.isCompleted ? 'opacity-60 bg-muted/20 border-border/20' : 'border-border/50 hover:border-primary/50')}>
-              <CardContent className="p-5">
-                <div className="flex gap-4">
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); toggleCompletion(todo.id, todo.isCompleted); }}
-                    className="mt-0.5 shrink-0 text-muted-foreground hover:text-primary transition-colors focus:outline-none"
-                  >
-                    {todo.isCompleted ? <CheckCircle2 className="w-6 h-6 text-primary" /> : <Circle className="w-6 h-6" />}
-                  </button>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-start gap-2 mb-1">
-                      <h4 className={cn("font-semibold text-base break-words", todo.isCompleted && "line-through text-muted-foreground")}>{todo.title}</h4>
-                      <Button variant="ghost" size="icon" className="h-6 w-6 -mt-1 -mr-2 text-muted-foreground hover:text-destructive shrink-0" onClick={(e) => { e.stopPropagation(); setGoalToDelete(todo.id); }}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    {todo.description && (
-                      <p className={cn("text-sm text-balance mb-3", todo.isCompleted ? "text-muted-foreground/60" : "text-muted-foreground")}>
-                        {todo.description}
-                      </p>
-                    )}
-                    <div className="flex items-center gap-1.5 pt-3 border-t border-border/50 text-xs font-medium">
-                      <CalendarClock className="w-3.5 h-3.5 text-primary/70" />
-                      <span className={todo.isCompleted ? "text-muted-foreground/80" : "text-foreground/80"}>
-                        {formatDate(todo.deadline, true)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        )
-      })}
-    </AnimatePresence>
-  )
-}
-
-function LoadingPlaceholder() {
+/** "+ add amount" for goals tracked by hand (taking some back is allowed too) */
+function AddAmountDialog({ goal, onClose, onSaved }: { goal: Goal | null; onClose: () => void; onSaved: () => void }) {
   const { t } = useLanguage()
+  const [amount, setAmount] = useState("")
+  const [saving, setSaving] = useState(false)
+  const submit = async (sign: 1 | -1) => {
+    if (!goal || !Number(amount)) return
+    setSaving(true)
+    const res = await addGoalProgress(goal.id, sign * Number(amount))
+    setSaving(false)
+    if (res.success) { setAmount(""); onSaved() } else toast.error(t("common.something_wrong"))
+  }
   return (
-     <div className="col-span-full flex flex-col items-center justify-center py-10 text-muted-foreground animate-in fade-in">
-        <motion.img 
-          src="/favicon.png" 
-          alt="Loading..." 
-          className="w-12 h-12 mb-2 drop-shadow-md"
-          animate={{ y: [0, -15, 0] }}
-          transition={{ repeat: Infinity, duration: 0.8, ease: "easeInOut" }}
-        />
-        <p className="font-medium animate-pulse text-sm">{t('common.loading')}</p>
-     </div>
+    <Dialog open={!!goal} onOpenChange={o => { if (!o) { setAmount(""); onClose() } }}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader><DialogTitle>{goal?.title}</DialogTitle><DialogDescription>{goal && t("goals2.add_amount_desc", { current: baht(goal.currentAmount), target: baht(goal.targetAmount) })}</DialogDescription></DialogHeader>
+        <Input autoFocus type="number" inputMode="decimal" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="500" />
+        <div className="flex gap-2">
+          <Button variant="outline" className="flex-1" disabled={!Number(amount) || saving} onClick={() => submit(-1)}>− {t("goals2.take_back")}</Button>
+          <Button className="flex-1" disabled={!Number(amount)} loading={saving} onClick={() => submit(1)}>+ {t("goals2.add_amount")}</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return <label className="block space-y-1.5"><span className="text-sm font-medium">{label}</span>{children}</label>
 }
