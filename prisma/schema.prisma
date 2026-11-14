@@ -76,6 +76,7 @@ model User {
   usageEvents      UsageEvent[]
   aiUsages         AiUsage[]
   featureEvents    FeatureEvent[]
+  aiInsights       AiInsight[]
   recurringBills   RecurringBill[]
   pendingEntry     PendingEntry?
   /// LINE summary for Pro: weekly (Mondays) by default to save LINE pushes, daily or off by choice
@@ -257,6 +258,26 @@ model LoginAttempt {
 }
 
 /// One use of a metered feature (e.g. a statement import or a slip verification), for daily limits
+/// A month's AI analysis, kept so the dashboard and /ai-insights show it without asking the AI again
+/// (src/features/ai/insight.ts). Regenerated only when the user asks on /ai-insights.
+model AiInsight {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Bangkok calendar month analysed, "YYYY-MM"
+  period    String
+  /// th or en
+  language  String
+  /// One sentence for the dashboard card (encrypted)
+  headline  String
+  /// The full Markdown report (encrypted)
+  report    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@unique([userId, period, language])
+}
+
 /// One use of a feature, for the admin page (src/lib/feature-events.ts)
 model FeatureEvent {
   id         String   @id @default(uuid())

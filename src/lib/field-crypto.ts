@@ -21,6 +21,7 @@ export const ENCRYPTED_FIELDS: Record<string, { strings?: string[]; json?: strin
   ChatSession: { strings: ["title"], json: ["messages"] },
   PendingEntry: { json: ["items"] },
   LinePayee: { strings: ["promptPayId", "qrPayload"] },
+  AiInsight: { strings: ["headline", "report"] },
 }
 
 export const PREFIX = "enc:v1:"

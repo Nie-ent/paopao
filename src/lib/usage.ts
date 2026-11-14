@@ -1,7 +1,7 @@
 import prisma from "@/lib/db"
 import { bangkokDate, bangkokParts, startOfBangkokDay } from "@/lib/dates"
 
-export type UsageKind = "statement_import" | "slip_verification"
+export type UsageKind = "statement_import" | "slip_verification" | "insight_redo"
 
 /**
  * Records one use of a metered feature if the user is still under today's (Bangkok day) limit.
