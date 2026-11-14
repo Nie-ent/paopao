@@ -21,6 +21,18 @@ export type ReleaseNote = {
 
 export const RELEASES: ReleaseNote[] = [
   {
+    id: "2026-11-14",
+    version: "1.1.0",
+    title: { th: "เป๋าเป๋า 1.1: นับเดือนตามวันเงินเดือนออก และหน้าแรกใหม่", en: "PaoPao 1.1: months that follow your payday, and a new home screen" },
+    items: [
+      { th: "ตั้งวันเงินเดือนออกได้ที่หน้าตั้งค่า (หรือแตะยืนยันเมื่อเป๋าเป๋าเดาให้) แต่ละเดือนจะนับจากวันเงินเดือนออกถึงวันก่อนรอบถัดไป ต้นเดือนจะไม่ดูเหมือนติดลบอีก และเงินที่เหลือจากรอบก่อนจะยกมาให้", en: "Set your payday in Settings (or confirm the day PaoPao suggests). Each month then runs from payday to payday, so the start of the month no longer looks like a loss, and money left from last cycle carries over" },
+      { th: "หน้าแรกบอกว่าใช้ได้วันละเท่าไหร่จนถึงเงินเดือนรอบหน้า โดยหักค่าใช้จ่ายคงที่ที่ยังไม่ถึงกำหนดไว้ให้แล้ว", en: "The home screen shows how much you can spend a day until next payday, after the fixed costs still to come" },
+      { th: "หน้าแรกใหม่ ดูภาพรวมได้ในหน้าเดียว และมีบทวิเคราะห์รายเดือนจากเป๋าเป๋า แตะครั้งเดียวแล้วเก็บผลไว้ อยากได้ผลจากตัวเลขล่าสุดก็กดวิเคราะห์ใหม่ได้", en: "A new one-screen home, plus a monthly analysis from PaoPao: tap once and it's saved, or run it again with the latest numbers" },
+      { th: "หน้าเป้าหมาย บิลประจำ และตั้งค่าใช้ง่ายขึ้น: เป้าหมายเลือกประเภทก่อน ไม่ต้องใส่วันครบกำหนดก็ได้ และเพิ่มยอดออมเองได้ ส่วนบิลบอกวันครบกำหนดถัดไปของแต่ละรายการ", en: "Easier Goals, Bills and Settings: pick a goal type first, skip the deadline if you like, and add to savings by hand. Bills show when each is next due" },
+      { th: "มีคู่มือพาใช้งานแต่ละหน้า เปิดดูใหม่ได้ที่หน้าตั้งค่า และแอปแสดงผลพอดีบนมือถือจอพับและจอเล็ก", en: "Guided tours for each page (replay them from Settings), and layouts that fit foldables and small phones" },
+    ],
+  },
+  {
     id: "2026-11-13",
     version: "1.0.0",
     media: {
