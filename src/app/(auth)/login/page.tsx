@@ -45,7 +45,8 @@ export default function LoginPage() {
 
   // Every sign-in (and every sign-out) passes through this page: drop the previous user's cached
   // profile so the header doesn't show their avatar and points after switching accounts.
-  useEffect(() => { clearProfileCache() }, []);
+  // Signed out: clear the cached profile and close the header's "signing out…" toast
+  useEffect(() => { clearProfileCache(); toast.dismiss('signing-out') }, []);
 
   useEffect(() => {
     async function initLiff() {
