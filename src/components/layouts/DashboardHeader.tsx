@@ -183,9 +183,17 @@ export function DashboardHeader() {
               onClick={() => {
                 if (signingOut.current) return
                 signingOut.current = true
-                toast.loading(t('header.signing_out'))
+                // The toaster lives in the root layout and outlives this page, so the toast is
+                // closed by id on the login page (or here if signing out fails)
+                toast.loading(t('header.signing_out'), { id: 'signing-out' })
                 React.startTransition(async () => {
-                  await signOut();
+                  try {
+                    await signOut()
+                  } catch (e) {
+                    signingOut.current = false
+                    toast.dismiss('signing-out')
+                    throw e
+                  }
                 });
               }}
             >
