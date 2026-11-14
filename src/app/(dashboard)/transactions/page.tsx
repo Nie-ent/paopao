@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useRef, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { ArrowLeftRight, ArrowDownRight, ArrowUpRight, Loader2, FileX2, Edit, Plus, Cat, Sparkle, Download, FileUp } from "lucide-react"
+import { ArrowLeftRight, ArrowDownRight, ArrowUpRight, Loader2, FileX2, Edit, Plus, Cat, Sparkle, Download, FileUp, RotateCcw } from "lucide-react"
 import * as XLSX from "xlsx"
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -49,6 +49,8 @@ export default function TransactionsPage() {
   const [filterType, setFilterType] = useState<TransactionType>('ALL')
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL')
   const [sortBy, setSortBy] = useState<SortBy>('DATE_DESC')
+  // The month the page opened on, for the "current month" shortcut
+  const [current] = useState(() => ({ month: new Date().getMonth() + 1, year: new Date().getFullYear() }))
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1)
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear())
 
@@ -299,6 +301,12 @@ export default function TransactionsPage() {
                 onValueChange={v => { setPage(1); setSelectedYear(Number(v)) }}
                 options={Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(y => ({ value: String(y), label: String(y + (locale === 'th-TH' ? 543 : 0)) }))}
               />
+              {(selectedMonth !== current.month || selectedYear !== current.year) && (
+                <button type="button" onClick={() => { setPage(1); setSelectedMonth(current.month); setSelectedYear(current.year) }}
+                  className="flex h-8 items-center gap-1 rounded-md border border-primary/30 bg-primary/5 px-2.5 text-xs font-semibold text-primary hover:bg-primary/10">
+                  <RotateCcw className="h-3.5 w-3.5" /> {t('dash.to_current')}
+                </button>
+              )}
               <Select
                 aria-label={t('transactions.sort.date_desc')}
                 className="h-8 w-auto min-w-36 font-medium"

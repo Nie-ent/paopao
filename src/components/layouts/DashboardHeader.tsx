@@ -72,11 +72,11 @@ export function DashboardHeader() {
 
   return (
     <header className="sticky top-0 z-10 flex h-16 w-full items-center justify-between border-b border-border/40 bg-background/80 px-4 backdrop-blur-md">
-      <div className="flex items-center gap-3 w-full">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
         {/* Logo specifically for mobile screens to brand the Navbar */}
         <div className="md:hidden flex items-center">
            <Link href="/">
-             <img src="/paopao-logo.png" alt="PaoPao Logo" className="h-9 min-w-[70px] w-auto mix-blend-multiply dark:mix-blend-normal object-contain drop-shadow-sm cursor-pointer hover:opacity-90 transition-opacity" />
+             <img src="/paopao-logo.png" alt="PaoPao Logo" className="h-8 w-auto max-w-[72px] mix-blend-multiply dark:mix-blend-normal object-contain drop-shadow-sm cursor-pointer hover:opacity-90 transition-opacity" />
            </Link>
         </div>
         {/* Sidebar Trigger only visible on larger screens but generally we rely on permanent sidebar */}
@@ -95,15 +95,15 @@ export function DashboardHeader() {
           </form>
         )}
       </div>
-      <div className="flex items-center gap-1.5 min-[400px]:gap-3 shrink-0 ml-2 min-[400px]:ml-4">
+      <div className="ml-2 flex shrink-0 items-center gap-1 min-[400px]:gap-2 sm:ml-4 sm:gap-3">
         {isDemo && (
           <span title={t('header.demo_banner')} className="hidden lg:inline-flex items-center rounded-full border border-amber-300/60 bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-400 whitespace-nowrap">
             {t('header.demo_banner')}
           </span>
         )}
-        <span className="hidden min-[360px]:contents"><LanguageToggle /></span>
+        <span className="hidden sm:contents"><LanguageToggle /></span>
         <Link href="/rewards" className="flex">
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-100 dark:bg-orange-950/30 text-orange-600 dark:text-orange-400 font-bold text-sm cursor-pointer hover:bg-orange-200 transition-colors border border-orange-200 dark:border-orange-900/50">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full bg-orange-100 dark:bg-orange-950/30 text-orange-600 dark:text-orange-400 font-bold text-sm cursor-pointer hover:bg-orange-200 transition-colors border border-orange-200 dark:border-orange-900/50">
             <span className="text-base">{paoPoints}</span>
             <img src="/favicon.png" alt="PaoPao Point" className="w-5 h-5 rounded-full object-cover" />
           </div>
