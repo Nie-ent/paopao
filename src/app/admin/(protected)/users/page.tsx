@@ -1,11 +1,12 @@
 "use client"
 import React, { useEffect, useState } from "react"
-import { getAdminUsers, adjustUserPoints, type AdminUser } from "@/features/admin/actions"
+import { getAdminUsers, adjustUserPoints, adminSetPlan, type AdminUser } from "@/features/admin/actions"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { useSingleFlight } from "@/hooks/use-single-flight"
 import { Input } from "@/components/ui/input"
-import { Users, Edit2, History, Search } from "lucide-react"
+import { Users, Edit2, Search, Copy, Check, Crown } from "lucide-react"
+import { toast } from "sonner"
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<AdminUser[]>([])
@@ -19,9 +20,13 @@ export default function AdminUsersPage() {
     loadUsers()
   }, [])
 
-  const filteredUsers = users.filter(u => 
-    u.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    u.lineId?.toLowerCase().includes(searchTerm.toLowerCase())
+  const [planUser, setPlanUser] = useState<AdminUser | null>(null)
+  // Name, full LINE id or account id: paste what the user or the database shows
+  const q = searchTerm.trim().toLowerCase()
+  const filteredUsers = users.filter(u => !q ||
+    u.name?.toLowerCase().includes(q) ||
+    u.lineId?.toLowerCase().includes(q) ||
+    u.id.toLowerCase().includes(q)
   )
 
   // Adjusting points is not idempotent: a double click would add the points twice
@@ -50,7 +55,7 @@ export default function AdminUsersPage() {
         <div className="relative w-full md:w-64">
           <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
           <Input 
-            placeholder="ค้นหาชื่อหรือ ID..." 
+            placeholder="ค้นหาชื่อ, LINE ID หรือ user id" 
             className="pl-9 bg-slate-50"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -84,26 +89,30 @@ export default function AdminUsersPage() {
                            <Users className="w-5 h-5 text-slate-400" />
                          </div>
                       )}
-                      <div>
+                      <div className="min-w-0">
                         <p className="font-semibold text-slate-900">{user.name || "Unknown User"}</p>
-                        <p className="text-xs text-slate-500 font-mono">{user.lineId.substring(0, 15)}...</p>
+                        <IdLine label="LINE" value={user.lineId} />
+                        <IdLine label="ID" value={user.id} />
                       </div>
                     </div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-slate-600">{thDate(user.createdAt)}</td>
-                  <td className="px-4 py-3"><PlanBadge plan={user.plan} /></td>
+                  <td className="px-4 py-3">
+                    <PlanBadge plan={user.plan} />
+                    {user.plan.startsWith("PRO") && user.proExpiresAt && <p className="mt-1 whitespace-nowrap text-[11px] text-slate-500">ถึง {thDate(user.proExpiresAt)}</p>}
+                  </td>
                   <td className="px-4 py-3 whitespace-nowrap text-slate-600">{user.lastActiveAt ? ago(user.lastActiveAt) : <span className="text-slate-400">ยังไม่เคยใช้</span>}</td>
                   <td className="px-4 py-3 text-right tabular-nums text-slate-700">{user.entries.toLocaleString("th-TH")}</td>
                   <td className="px-4 py-3 text-right tabular-nums font-semibold text-orange-600">{user.paoPoints || 0}</td>
                   <td className="px-4 py-3 text-right">
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => { setAdjustModal({ isOpen: true, user }); setPointsInput(''); }}
-                    >
-                      <Edit2 className="w-3 h-3 justify-center" /> 
-                      <span className="ml-2 hidden sm:inline">แก้ไขแต้ม</span>
-                    </Button>
+                    <div className="flex justify-end gap-2">
+                      <Button variant="outline" size="sm" onClick={() => setPlanUser(user)}>
+                        <Crown className="h-3 w-3" /> <span className="ml-1.5 hidden sm:inline">แพ็กเกจ</span>
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => { setAdjustModal({ isOpen: true, user }); setPointsInput(''); }}>
+                        <Edit2 className="h-3 w-3" /> <span className="ml-1.5 hidden sm:inline">แต้ม</span>
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -159,6 +168,7 @@ export default function AdminUsersPage() {
           </div>
         </DialogContent>
       </Dialog>
+      <PlanDialog user={planUser} onClose={() => setPlanUser(null)} onSaved={() => { setPlanUser(null); loadUsers() }} />
     </div>
   )
 }
@@ -183,4 +193,83 @@ const PLAN_STYLES: Record<AdminUser["plan"], [string, string]> = {
 function PlanBadge({ plan }: { plan: AdminUser["plan"] }) {
   const [label, cls] = PLAN_STYLES[plan]
   return <span className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium ${cls}`}>{label}</span>
+}
+
+/** A full id in monospace with a copy button (LINE ids are what users and the database show) */
+function IdLine({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false)
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(value); setCopied(true); setTimeout(() => setCopied(false), 1500) } catch { toast.error("คัดลอกไม่สำเร็จ") }
+  }
+  return (
+    <p className="flex items-center gap-1 text-[11px] text-slate-500">
+      <span className="w-8 shrink-0 font-medium text-slate-400">{label}</span>
+      <span className="break-all font-mono">{value}</span>
+      <button onClick={copy} aria-label={`คัดลอก ${label}`} className="shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+        {copied ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
+      </button>
+    </p>
+  )
+}
+
+/** Give Pro days, set the Pro end date, or end Pro (src/features/admin/actions.ts adminSetPlan) */
+function PlanDialog({ user, onClose, onSaved }: { user: AdminUser | null; onClose: () => void; onSaved: () => void }) {
+  const [days, setDays] = useState("30")
+  const [until, setUntil] = useState("")
+  const [confirmFree, setConfirmFree] = useState(false)
+  const { run, pendingKey } = useSingleFlight()
+  const apply = (key: string, change: Parameters<typeof adminSetPlan>[1]) => run(async () => {
+    if (!user) return
+    const res = await adminSetPlan(user.id, change)
+    if (res?.success) { toast.success("ปรับแพ็กเกจแล้ว"); setConfirmFree(false); onSaved() }
+    else toast.error(res?.error === "INVALID" ? "ข้อมูลไม่ถูกต้อง" : "ปรับแพ็กเกจไม่สำเร็จ")
+  }, key)
+  const pro = user?.plan.startsWith("PRO")
+  return (
+    <Dialog open={!!user} onOpenChange={v => { if (!v) { setConfirmFree(false); onClose() } }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle>ปรับแพ็กเกจ: {user?.name || "LINE User"}</DialogTitle></DialogHeader>
+        {user && (
+          <div className="space-y-5 py-2 text-sm">
+            <div className="flex items-center justify-between rounded-lg border bg-slate-50 p-3">
+              <span className="text-slate-500">ตอนนี้</span>
+              <span className="text-right"><PlanBadge plan={user.plan} />{pro && user.proExpiresAt && <span className="block text-xs text-slate-500">ถึง {thDate(user.proExpiresAt)}</span>}</span>
+            </div>
+            <div className="space-y-2">
+              <p className="font-medium">เพิ่ม Pro {pro ? "(ต่อจากวันหมดอายุเดิม)" : "(เริ่มวันนี้)"}</p>
+              <div className="flex flex-wrap gap-2">
+                {[7, 30, 90, 365].map(d => (
+                  <button key={d} onClick={() => setDays(String(d))} className={`rounded-full border px-3 py-1 text-xs ${days === String(d) ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}>{d} วัน</button>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <Input type="number" min={1} max={3660} value={days} onChange={e => setDays(e.target.value)} className="w-28" aria-label="จำนวนวัน" />
+                <Button className="flex-1" disabled={!Number(days) || pendingKey !== null} loading={pendingKey === "extend"} onClick={() => apply("extend", { action: "extend", days: Number(days) })}>ให้ Pro +{days || 0} วัน</Button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <p className="font-medium">หรือกำหนดวันหมดอายุ Pro</p>
+              <div className="flex gap-2">
+                <Input type="date" value={until} onChange={e => setUntil(e.target.value)} className="flex-1" aria-label="วันหมดอายุ" />
+                <Button variant="outline" disabled={!until || pendingKey !== null} loading={pendingKey === "until"} onClick={() => apply("until", { action: "until", date: until })}>ตั้งวันที่</Button>
+              </div>
+            </div>
+            {pro && (
+              <div className="border-t pt-4">
+                {confirmFree ? (
+                  <div className="flex gap-2">
+                    <Button variant="outline" className="flex-1" onClick={() => setConfirmFree(false)}>ไม่ยกเลิก</Button>
+                    <Button className="flex-1 bg-red-600 hover:bg-red-700" loading={pendingKey === "free"} onClick={() => apply("free", { action: "free" })}>ยืนยัน กลับเป็น Free</Button>
+                  </div>
+                ) : (
+                  <Button variant="outline" className="w-full border-red-200 text-red-600 hover:bg-red-50" onClick={() => setConfirmFree(true)}>ยกเลิก Pro ตอนนี้</Button>
+                )}
+                <p className="mt-2 text-xs text-slate-400">ไม่คืนเงินอัตโนมัติ ถ้าผู้ใช้จ่ายเงินมาแล้วให้คุยกับผู้ใช้ก่อน</p>
+              </div>
+            )}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
 }
