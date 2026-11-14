@@ -10,8 +10,8 @@ import { ENTRY_SOURCE_LABELS } from "@/features/admin/analytics-core"
 import { AI_FEATURE_LABELS } from "@/lib/ai-features"
 
 // Categorical slots in fixed order (validated for colour-blind separation on a light surface)
-const SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]
-const GRID = "#e1e0d9"
+export const SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]
+export const GRID = "#e1e0d9"
 const AXIS = "#898781"
 const FREE_GRAY = "#b4b2aa"
 // One colour per Pro source, the same in every chart that shows sources
@@ -19,14 +19,14 @@ const SOURCE_COLORS: Record<string, string> = { paid: SERIES[0], trial: SERIES[1
 // Sequential blue for the retention heatmap, lightest = near zero
 const BLUE_RAMP = ["#f3f8fe", "#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95"]
 
-const baht = (n: number, digits = 0) => `฿${n.toLocaleString("th-TH", { minimumFractionDigits: digits, maximumFractionDigits: digits })}`
-const num = (n: number) => n.toLocaleString("th-TH")
-const pct = (n: number | null) => (n == null ? "–" : `${Math.round(n * 100)}%`)
-const shortDay = (day: string) => `${Number(day.slice(8, 10))}/${Number(day.slice(5, 7))}`
-const tooltipStyle = { borderRadius: 8, border: "1px solid rgba(11,11,11,0.10)", fontSize: 12, boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.08)" }
+export const baht = (n: number, digits = 0) => `฿${n.toLocaleString("th-TH", { minimumFractionDigits: digits, maximumFractionDigits: digits })}`
+export const num = (n: number) => n.toLocaleString("th-TH")
+export const pct = (n: number | null) => (n == null ? "–" : `${Math.round(n * 100)}%`)
+export const shortDay = (day: string) => `${Number(day.slice(8, 10))}/${Number(day.slice(5, 7))}`
+export const tooltipStyle = { borderRadius: 8, border: "1px solid rgba(11,11,11,0.10)", fontSize: 12, boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.08)" }
 // Legend text stays in neutral ink (the swatch carries the colour), in the order the series are drawn
-const legendProps = { wrapperStyle: { fontSize: 12 }, itemSorter: null, formatter: (value: unknown) => <span style={{ color: "#52514e" }}>{String(value)}</span> } as const
-const axisProps = { fontSize: 11, tickLine: false, axisLine: false, stroke: AXIS } as const
+export const legendProps = { wrapperStyle: { fontSize: 12 }, itemSorter: null, formatter: (value: unknown) => <span style={{ color: "#52514e" }}>{String(value)}</span> } as const
+export const axisProps = { fontSize: 11, tickLine: false, axisLine: false, stroke: AXIS } as const
 
 type Range = 30 | 90
 
@@ -50,12 +50,12 @@ function readSavedTab(): Tab {
 }
 
 /** Relative change from the previous period; null when there is nothing to compare with. */
-function change(now: number, before: number | null | undefined): number | null {
+export function change(now: number, before: number | null | undefined): number | null {
   if (before == null) return null
   if (before === 0) return now === 0 ? 0 : Infinity
   return (now - before) / before
 }
-const deltaText = (d: number | null) => (d == null ? "–" : d === Infinity ? "ใหม่" : `${d > 0 ? "▲" : d < 0 ? "▼" : ""} ${Math.abs(Math.round(d * 100))}%`.trim())
+export const deltaText = (d: number | null) => (d == null ? "–" : d === Infinity ? "ใหม่" : `${d > 0 ? "▲" : d < 0 ? "▼" : ""} ${Math.abs(Math.round(d * 100))}%`.trim())
 
 export function AnalyticsDashboard({ data }: { data: AdminAnalytics }) {
   const [range, setRange] = useState<Range>(30)
@@ -371,7 +371,7 @@ export function AnalyticsDashboard({ data }: { data: AdminAnalytics }) {
 const segmentLabel = (data: AdminAnalytics, segment: string) => data.planMix.find(p => p.segment === segment)?.label ?? segment
 const segmentUsers = (data: AdminAnalytics, segment: string) => data.planMix.find(p => p.segment === segment)?.users ?? 0
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+export function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
       <h3 className="mb-2 text-sm font-semibold text-slate-500">{title}</h3>
@@ -381,7 +381,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 /** A headline number; with `delta`, an arrow says how it moved and its colour whether that's good. */
-function Kpi({ label, value, hint, delta, good }: { label: string; value: string; hint?: string; delta?: number | null; good?: "up" | "down" }) {
+export function Kpi({ label, value, hint, delta, good }: { label: string; value: string; hint?: string; delta?: number | null; good?: "up" | "down" }) {
   const better = delta == null || delta === 0 || !good ? null : (delta > 0) === (good === "up")
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
@@ -397,7 +397,7 @@ function Kpi({ label, value, hint, delta, good }: { label: string; value: string
   )
 }
 
-function ChartCard({ title, description, tall, children }: { title: string; description?: string; tall?: boolean; children: React.ReactElement }) {
+export function ChartCard({ title, description, tall, children }: { title: string; description?: string; tall?: boolean; children: React.ReactElement }) {
   return (
     <Card className="shadow-sm">
       <CardHeader>
@@ -466,7 +466,7 @@ function RetentionTable({ rows }: { rows: AdminAnalytics["retention"] }) {
   )
 }
 
-function Funnel({ rows }: { rows: AdminAnalytics["funnel"] }) {
+export function Funnel({ rows }: { rows: AdminAnalytics["funnel"] }) {
   const top = rows[0]?.users || 1
   return (
     <div className="space-y-3">

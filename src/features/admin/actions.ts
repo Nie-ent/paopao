@@ -64,53 +64,6 @@ export async function isAdmin() {
   return !!token && !!cookie && safeEqual(cookie, token)
 }
 
-export async function getAdminStats() {
-  if (!await isAdmin()) return null
-  const totalUsers = await prisma.user.count()
-  const pendingClaims = await prisma.rewardClaim.count({ where: { status: 'PENDING' } })
-  const totalRewards = await prisma.reward.count()
-
-  // Economy calculation
-  const users = await prisma.user.findMany({ select: { paoPoints: true } })
-  const unspentPoints = users.reduce((sum, u) => sum + (u.paoPoints || 0), 0)
-  
-  const claims = await prisma.rewardClaim.findMany({ include: { reward: true } })
-  const burnedPoints = claims.reduce((sum, c) => sum + (c.reward.points || 0), 0)
-  const totalMintedPoints = unspentPoints + burnedPoints
-
-  // Activity Volume last 7 days
-  const last7Days = Array.from({length: 7}, (_, i) => {
-    const d = new Date()
-    d.setUTCDate(d.getUTCDate() - (6 - i))
-    return { date: d.toISOString().split('T')[0], count: 0 }
-  })
-  
-  const sevenDaysAgo = new Date()
-  sevenDaysAgo.setUTCDate(sevenDaysAgo.getUTCDate() - 7)
-  const recentTx = await prisma.transaction.findMany({ where: { date: { gte: sevenDaysAgo } } })
-  
-  recentTx.forEach(tx => {
-    const txDate = tx.date.toISOString().split('T')[0]
-    const day = last7Days.find(d => d.date === txDate)
-    if (day) day.count += 1
-  })
-
-  const recentActivity = await prisma.rewardClaim.findMany({
-    take: 4,
-    orderBy: { createdAt: 'desc' },
-    include: { user: true, reward: true }
-  })
-
-  return { 
-    totalUsers, 
-    pendingClaims, 
-    totalRewards, 
-    pointEconomy: { unspent: unspentPoints, burned: burnedPoints, minted: totalMintedPoints }, 
-    txChart: last7Days.map(d => ({ name: d.date.slice(5), volume: d.count })),
-    recentActivity 
-  }
-}
-
 export async function getAdminRewards() {
   if (!await isAdmin()) return []
   return prisma.reward.findMany({ orderBy: { createdAt: 'desc' } })
@@ -259,5 +212,37 @@ export async function adjustUserPoints(userId: string, pointsDelta: number) {
     where: { id: userId },
     data: { paoPoints: newPoints }
   })
+  return { success: true }
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Changes a user's plan from the admin page: add Pro days (on top of any Pro time left), set the
+ * exact Pro end date, or end Pro now. Such Pro shows as "admin grant" in the stats when there is no
+ * payment, trial or referral behind it.
+ */
+export async function adminSetPlan(userId: string, change: { action: "extend"; days: number } | { action: "until"; date: string } | { action: "free" }) {
+  if (!await isAdmin()) return { error: "Unauthorized" }
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, subscriptionTier: true, proExpiresAt: true } })
+  if (!user) return { error: "User not found" }
+  const now = new Date()
+
+  if (change.action === "free") {
+    await prisma.user.update({ where: { id: userId }, data: { subscriptionTier: "FREE", proExpiresAt: now } })
+  } else if (change.action === "extend") {
+    const days = Math.round(Number(change.days))
+    if (!Number.isFinite(days) || days < 1 || days > 3660) return { error: "INVALID" }
+    const from = isProActive(user, now) ? user.proExpiresAt! : now
+    await prisma.user.update({ where: { id: userId }, data: { subscriptionTier: "PRO", proExpiresAt: new Date(from.getTime() + days * DAY_MS) } })
+  } else {
+    // A date from the picker means the end of that Bangkok day
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(change.date)
+    if (!m) return { error: "INVALID" }
+    const until = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3] + 1) - 7 * 60 * 60 * 1000 - 1)
+    if (until <= now) return { error: "INVALID" }
+    await prisma.user.update({ where: { id: userId }, data: { subscriptionTier: "PRO", proExpiresAt: until } })
+  }
+  console.info("[admin] plan changed", userId, change)
   return { success: true }
 }
