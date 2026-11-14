@@ -265,13 +265,13 @@ export default function TransactionsPage() {
           <p className="text-muted-foreground">{t('transactions.subtitle')}</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="shrink-0 bg-background/50 backdrop-blur" onClick={() => setImportOpen(true)}>
+          <Button data-tour="tx-import" variant="outline" className="shrink-0 bg-background/50 backdrop-blur" onClick={() => setImportOpen(true)}>
             <FileUp className="h-4 w-4 mr-2" /> {t('statement.btn')}
           </Button>
-          <Button variant="outline" className="shrink-0 bg-background/50 backdrop-blur" onClick={exportToExcel} loading={isExporting}>
+          <Button data-tour="tx-export" variant="outline" className="shrink-0 bg-background/50 backdrop-blur" onClick={exportToExcel} loading={isExporting}>
             {!isExporting && <Download className="h-4 w-4 mr-2" />} {t('transactions.btn.export')}
           </Button>
-          <Button className="shrink-0 shadow-lg" onClick={openCreateSheet}>
+          <Button data-tour="tx-add" className="shrink-0 shadow-lg" onClick={openCreateSheet}>
             <Plus className="h-4 w-4 mr-2" /> {t('transactions.btn.add')}
           </Button>
         </div>

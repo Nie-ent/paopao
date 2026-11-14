@@ -112,13 +112,13 @@ export default function BillsPage() {
           <p className="text-muted-foreground mt-1">{t('bills.subtitle')}</p>
         </div>
         {loaded && !form && (
-          <Button onClick={openNew} disabled={bills.length >= limit} className="rounded-xl gap-2 shrink-0">
+          <Button data-tour="bills-add" onClick={openNew} disabled={bills.length >= limit} className="rounded-xl gap-2 shrink-0">
             <Plus className="w-4 h-4" /> {t('bills.add')}
           </Button>
         )}
       </div>
 
-      {fixed && <FixedCostSummaryCard summary={fixed.summary} />}
+      {fixed && <div data-tour="bills-summary"><FixedCostSummaryCard summary={fixed.summary} /></div>}
       {fixed && <FixedCostSuggestions suggestions={fixed.suggestions} onAdd={addSuggestion} adding={adding} />}
 
       {loaded && !isPro && bills.length > 0 && (

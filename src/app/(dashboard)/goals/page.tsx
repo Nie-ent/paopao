@@ -230,7 +230,7 @@ export default function GoalsPage() {
           <p className="text-muted-foreground">{t('goals.subtitle')}</p>
         </div>
         
-        <Button className="shrink-0 shadow-lg shadow-primary/20" onClick={openCreateSheet}>
+        <Button data-tour="goals-add" className="shrink-0 shadow-lg shadow-primary/20" onClick={openCreateSheet}>
           <Plus className="h-4 w-4 mr-2" /> {t('goals.btn.add')}
         </Button>
       </div>

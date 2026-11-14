@@ -7,6 +7,7 @@ import { toast } from "sonner"
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
+import { Select } from "@/components/ui/select"
 import { BalanceCard, CashflowMini, CategoryMini, DetailDialog, InsightCard, Tile, type Detail, type Slice } from "@/components/dashboard/Overview"
 import { getDashboardData } from "@/features/dashboard/actions"
 import { analyzeMonth, getMonthlyInsight, type MonthlyInsight } from "@/features/ai/insight"
@@ -114,14 +115,10 @@ export default function DashboardOverview() {
       </div>
       {timeframe === "MONTH" && (
         <div className="flex gap-1.5">
-          <select aria-label="Month" value={selectedMonth} onChange={e => setSelectedMonth(Number(e.target.value))}
-            className="rounded-full border-0 bg-white/15 px-2.5 py-1 text-xs text-white [&>option]:text-slate-900">
-            {Array.from({ length: 12 }, (_, i) => i + 1).map(m => <option key={m} value={m}>{new Date(0, m - 1).toLocaleString(locale, { month: "short" })}</option>)}
-          </select>
-          <select aria-label="Year" value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))}
-            className="rounded-full border-0 bg-white/15 px-2.5 py-1 text-xs text-white [&>option]:text-slate-900">
-            {Array.from({ length: 5 }, (_, i) => thisYear - i).map(y => <option key={y} value={y}>{y + (language === "th" ? 543 : 0)}</option>)}
-          </select>
+          <Select variant="glass" aria-label="Month" value={String(selectedMonth)} onValueChange={v => setSelectedMonth(Number(v))}
+            options={Array.from({ length: 12 }, (_, i) => i + 1).map(m => ({ value: String(m), label: new Date(0, m - 1).toLocaleString(locale, { month: "short" }) }))} />
+          <Select variant="glass" aria-label="Year" value={String(selectedYear)} onValueChange={v => setSelectedYear(Number(v))}
+            options={Array.from({ length: 5 }, (_, i) => thisYear - i).map(y => ({ value: String(y), label: String(y + (language === "th" ? 543 : 0)) }))} />
         </div>
       )}
     </div>
@@ -129,8 +126,8 @@ export default function DashboardOverview() {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2">
+      <div className="fold-split grid gap-4 lg:grid-cols-3">
+        <div className="fold-span-1 lg:col-span-2">
           <BalanceCard label={balanceLabel} balance={stats.totalBalance} income={stats.totalIncome} expense={stats.totalExpense}
             previous={timeframe === "MONTH" ? dbData.previous : null} period={period} t={t} />
         </div>
@@ -138,7 +135,7 @@ export default function DashboardOverview() {
       </div>
 
       {/* Compact charts: a swipeable row on phones, three columns on wider screens */}
-      <div className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-1 no-scrollbar sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0">
+      <div data-tour="tiles" className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-1 no-scrollbar sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0">
         <Tile title={t("dash.tile.cashflow")} onOpen={() => setDetail({ kind: "cashflow", title: t("dashboard.cashflow.title"), data: chartData })} t={t}>
           <CashflowMini data={chartData} t={t} />
         </Tile>

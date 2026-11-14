@@ -42,32 +42,32 @@ export function BalanceCard({ label, balance, income, expense, previous, period,
     { href: "/invite", label: t("dash.actions.invite"), icon: UserPlus },
   ]
   return (
-    <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#F28C6E] via-[#EC7656] to-[#D45E3E] p-5 text-white shadow-lg shadow-primary/20 sm:p-6">
+    <section data-tour="balance" className="relative overflow-clip rounded-3xl bg-gradient-to-br from-[#F28C6E] via-[#EC7656] to-[#D45E3E] p-5 text-white shadow-lg shadow-primary/20 sm:p-6">
       <div aria-hidden className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-white/10" />
       <div aria-hidden className="pointer-events-none absolute -bottom-24 right-24 h-48 w-48 rounded-full bg-white/5" />
       <div className="relative flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-sm text-white/80">{label}</p>
-          <p className="mt-1 text-4xl font-bold tracking-tight tabular-nums sm:text-[2.6rem]">{baht(balance)}</p>
+          <p className="mt-1 text-4xl font-bold tracking-tight tabular-nums max-[359px]:text-3xl sm:text-[2.6rem]">{baht(balance)}</p>
         </div>
-        <div className="shrink-0">{period}</div>
+        <div data-tour="period" className="shrink-0">{period}</div>
       </div>
       <div className="relative mt-4 grid grid-cols-2 gap-3">
         <div className="rounded-2xl bg-white/15 px-3 py-2.5 backdrop-blur-sm">
           <p className="flex items-center gap-1 text-xs text-white/80"><ArrowUpRight className="h-3.5 w-3.5" /> {t("common.income")}</p>
-          <p className="text-lg font-semibold tabular-nums">{baht(income)}</p>
+          <p className="text-lg font-semibold tabular-nums max-[359px]:text-base">{baht(income)}</p>
           <Change now={income} before={previous?.totalIncome} upIsGood t={t} />
         </div>
         <div className="rounded-2xl bg-white/15 px-3 py-2.5 backdrop-blur-sm">
           <p className="flex items-center gap-1 text-xs text-white/80"><ArrowDownRight className="h-3.5 w-3.5" /> {t("common.expense")}</p>
-          <p className="text-lg font-semibold tabular-nums">{baht(expense)}</p>
+          <p className="text-lg font-semibold tabular-nums max-[359px]:text-base">{baht(expense)}</p>
           <Change now={expense} before={previous?.totalExpense} upIsGood={false} t={t} />
         </div>
       </div>
-      <nav className="relative mt-4 grid grid-cols-5 gap-1" aria-label="quick actions">
+      <nav data-tour="actions" className="relative mt-4 grid grid-cols-5 gap-1" aria-label="quick actions">
         {actions.map(a => (
-          <Link key={a.href} href={a.href} className="group flex flex-col items-center gap-1.5 rounded-xl py-1.5 text-center text-[11px] leading-tight text-white/90 hover:bg-white/10 sm:text-xs">
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-[#D45E3E] shadow-sm transition-transform group-hover:-translate-y-0.5"><a.icon className="h-5 w-5" /></span>
+          <Link key={a.href} href={a.href} className="group flex min-w-0 flex-col items-center gap-1.5 rounded-xl py-1.5 text-center text-[11px] leading-tight text-white/90 hover:bg-white/10 max-[359px]:text-[10px] sm:text-xs">
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-[#D45E3E] shadow-sm transition-transform group-hover:-translate-y-0.5 max-[359px]:h-8 max-[359px]:w-8"><a.icon className="h-5 w-5 max-[359px]:h-4 max-[359px]:w-4" /></span>
             {a.label}
           </Link>
         ))}
@@ -206,7 +206,7 @@ export function InsightCard({ state, analysing, onAnalyse, locale, t }: {
 }) {
   const ready = state?.status === "ready"
   return (
-    <section className="flex h-full flex-col rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/10 via-card to-amber-50/60 p-5 shadow-sm dark:to-amber-950/10">
+    <section data-tour="insight" className="flex h-full flex-col rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/10 via-card to-amber-50/60 p-5 shadow-sm dark:to-amber-950/10">
       <h3 className="flex items-center gap-2 text-sm font-semibold text-primary"><Sparkles className="h-4 w-4" /> {t("dash.insight.title")}</h3>
       <div className="mt-3 flex-1">
         {analysing ? (
