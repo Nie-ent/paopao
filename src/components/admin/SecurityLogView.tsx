@@ -3,7 +3,8 @@
 import React, { useEffect, useState } from "react"
 import { AlertOctagon, AlertTriangle, CheckCircle2, Info, Loader2, RefreshCw, Search, ShieldAlert, ShieldCheck, X } from "lucide-react"
 import type { SecurityFilter, SecurityLog, SecurityRange } from "@/features/admin/security"
-import { CATEGORY_LABEL, SEVERITY_LABEL, eventDef, type SecurityCategory, type Severity } from "@/lib/security-events"
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
+import { CATEGORY_LABEL, SEVERITY_LABEL, eventDef, type SecurityCategory, type Severity, type TimelinePoint, type TimelineUnit } from "@/lib/security-events"
 import { Select } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 
@@ -23,6 +24,87 @@ function ago(iso: string, now: number) {
   if (m < 60) return `${m} นาทีที่แล้ว`
   const h = Math.round(m / 60)
   return h < 24 ? `${h} ชม.ที่แล้ว` : `${Math.round(h / 24)} วันที่แล้ว`
+}
+
+// Status colours, always shown with their icon and label (legend, tooltip), never colour alone
+const SEV_FILL: Record<Severity, string> = { critical: "#dc2626", warning: "#f59e0b", info: "#cbd5e1" }
+const STACK: Severity[] = ["critical", "warning", "info"] // bottom to top: the dangerous ones sit on the baseline
+
+function tickLabel(key: string, unit: TimelineUnit) {
+  if (unit === "hour") return `${key.slice(11, 13)}:00`
+  return new Date(`${key}T12:00:00+07:00`).toLocaleDateString("th-TH", { day: "numeric", month: "short", timeZone: "Asia/Bangkok" })
+}
+
+function TimelineTooltip({ active, payload, unit }: { active?: boolean; payload?: { payload: TimelinePoint }[]; unit: TimelineUnit }) {
+  const p = active ? payload?.[0]?.payload : null
+  if (!p) return null
+  const when = unit === "hour"
+    ? `${tickLabel(p.key.slice(0, 10), "day")} ${p.key.slice(11, 13)}:00–${p.key.slice(11, 13)}:59`
+    : tickLabel(p.key, "day")
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-md">
+      <p className="mb-1 font-semibold text-slate-900">{when}</p>
+      {STACK.slice().reverse().map(k => {
+        const Icon = SEV_STYLE[k].icon
+        return (
+          <p key={k} className="flex items-center justify-between gap-4 text-slate-600">
+            <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: SEV_FILL[k] }} /><Icon className="h-3 w-3" /> {SEVERITY_LABEL[k]}</span>
+            <span className="font-semibold tabular-nums text-slate-900">{p[k]}</span>
+          </p>
+        )
+      })}
+    </div>
+  )
+}
+
+/** A stacked segment; only the top non-empty segment of a bar gets rounded corners */
+function Segment(props: { x?: number; y?: number; width?: number; height?: number; fill?: string; dataKey?: string; payload?: TimelinePoint }) {
+  const { x = 0, y = 0, width = 0, height = 0, fill, dataKey, payload } = props
+  if (height <= 0 || !payload) return null
+  const top = [...STACK].reverse().find(k => payload[k] > 0)
+  const r = top === dataKey ? Math.min(4, width / 2, height) : 0
+  const d = `M${x},${y + height} V${y + r} Q${x},${y} ${x + r},${y} H${x + width - r} Q${x + width},${y} ${x + width},${y + r} V${y + height} Z`
+  return <path d={d} fill={fill} stroke="#ffffff" strokeWidth={1} />
+}
+
+/** Events over time, stacked by severity, for the selected range and severity/category filters */
+function Timeline({ points, unit, title }: { points: TimelinePoint[]; unit: TimelineUnit; title: string }) {
+  const totals = STACK.reduce((t, k) => ({ ...t, [k]: points.reduce((s, p) => s + p[k], 0) }), {} as Record<Severity, number>)
+  const empty = STACK.every(k => totals[k] === 0)
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="font-semibold">{title}</h3>
+          <p className="text-xs text-slate-500">{unit === "hour" ? "รายชั่วโมง" : "รายวัน"} · ตามช่วงเวลา ระดับ และหมวดที่เลือก (ไม่รวมคำค้น)</p>
+        </div>
+        <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600" aria-label="คำอธิบายสี">
+          {STACK.slice().reverse().map(k => {
+            const Icon = SEV_STYLE[k].icon
+            return (
+              <li key={k} className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-sm" style={{ background: SEV_FILL[k] }} /><Icon className="h-3.5 w-3.5" /> {SEVERITY_LABEL[k]} <span className="font-semibold tabular-nums text-slate-900">{totals[k]}</span>
+              </li>
+            )
+          })}
+        </ul>
+      </div>
+      <div className="relative h-56 [&_.recharts-wrapper:focus:not(:focus-visible)]:outline-none [&_svg:focus:not(:focus-visible)]:outline-none">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={points} margin={{ top: 4, right: 4, left: -24, bottom: 0 }} barCategoryGap="20%">
+            <CartesianGrid stroke="#f1f5f9" vertical={false} />
+            <XAxis dataKey="key" tickFormatter={k => tickLabel(String(k), unit)} tick={{ fontSize: 11, fill: "#64748b" }} tickLine={false} axisLine={{ stroke: "#e2e8f0" }} minTickGap={16} />
+            <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#64748b" }} tickLine={false} axisLine={false} width={40} />
+            <Tooltip content={<TimelineTooltip unit={unit} />} cursor={{ fill: "#f1f5f9" }} />
+            {STACK.map(k => (
+              <Bar key={k} dataKey={k} stackId="sev" fill={SEV_FILL[k]} maxBarSize={36} shape={<Segment />} isAnimationActive={false} />
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
+        {empty && <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-slate-400">ไม่มีเหตุการณ์ในช่วงนี้</p>}
+      </div>
+    </section>
+  )
 }
 
 function SeverityBadge({ severity }: { severity: string }) {
@@ -120,6 +202,8 @@ export function SecurityLogView({ fetchLog }: { fetchLog: (f: SecurityFilter) =>
           })}
         </div>
       )}
+
+      {s && <Timeline points={s.timeline.points} unit={s.timeline.unit} title={`เหตุการณ์ใน ${RANGE_LABEL[filter.range]}`} />}
 
       {s && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 [&>*]:min-w-0">

@@ -64,3 +64,31 @@ export function topSources(rows: { ip: string | null; severity: string; createdA
   }
   return [...by.values()].sort((a, b) => b.critical - a.critical || b.count - a.count || b.last.getTime() - a.last.getTime()).slice(0, limit)
 }
+
+export type TimelineUnit = "hour" | "day"
+export type TimelinePoint = { key: string; critical: number; warning: number; info: number }
+
+/** Bangkok bucket key of a moment: "YYYY-MM-DD" by day, "YYYY-MM-DDTHH" by hour */
+export function bucketKey(at: Date, unit: TimelineUnit) {
+  return new Date(at.getTime() + 7 * 3600_000).toISOString().slice(0, unit === "hour" ? 13 : 10)
+}
+
+/**
+ * Every hour or day from `since` to `now` (Bangkok), with the counts per severity that the database
+ * returned for it and zero for the rest, so quiet periods show as gaps rather than disappearing.
+ */
+export function fillTimeline(rows: { key: string; severity: string; n: number }[], since: Date, now: Date, unit: TimelineUnit): TimelinePoint[] {
+  const step = unit === "hour" ? 3600_000 : 86_400_000
+  const points = new Map<string, TimelinePoint>()
+  for (let t = since.getTime(); t <= now.getTime(); t += step) {
+    const key = bucketKey(new Date(t), unit)
+    if (!points.has(key)) points.set(key, { key, critical: 0, warning: 0, info: 0 })
+  }
+  const last = bucketKey(now, unit)
+  if (!points.has(last)) points.set(last, { key: last, critical: 0, warning: 0, info: 0 })
+  for (const r of rows) {
+    const p = points.get(r.key)
+    if (p && (r.severity === "critical" || r.severity === "warning" || r.severity === "info")) p[r.severity] += r.n
+  }
+  return [...points.values()]
+}
