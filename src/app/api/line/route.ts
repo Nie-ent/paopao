@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { validateSignature } from '@line/bot-sdk';
 import { lineConfig } from '@/config/line';
 import { handleLineEvent } from '@/services/line.service';
+import { logSecurityEvent } from '@/lib/security-log';
 
 export const maxDuration = 60;
 
@@ -14,6 +15,7 @@ export async function POST(req: Request) {
     // 2. Every request must carry LINE's signature. Fails closed when the secret isn't configured.
     if (!lineConfig.channelSecret || !validateSignature(Buffer.from(bodyText), lineConfig.channelSecret, signature)) {
       console.warn("Rejected LINE webhook: missing or invalid signature.");
+      await logSecurityEvent("webhook_bad_signature", { detail: signature ? "ลายเซ็นไม่ตรง" : "ไม่มีลายเซ็น" });
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

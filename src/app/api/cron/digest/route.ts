@@ -5,6 +5,7 @@ import { buildMorningBrief } from "@/lib/morning-brief";
 import { morningBriefCard } from "@/lib/line-cards";
 import { appLink } from "@/lib/site";
 import { isAuthorizedCron } from "@/lib/cron-auth";
+import { logSecurityEvent } from "@/lib/security-log";
 import { purgeExpiredData } from "@/lib/retention";
 import { lastWeekRange, TRIAL_REMINDER_DAYS, trialReminderText, yesterdayRange, type BriefRange } from "@/lib/brief";
 import { processReferrals, referralRewardText } from "@/lib/referral";
@@ -15,7 +16,8 @@ export async function GET(req: Request) {
   try {
     // 1. Only Vercel Cron (which sends `Bearer ${CRON_SECRET}`) may trigger this
     if (!isAuthorizedCron(req)) {
-      return new NextResponse("Unauthorized", { status: 401 });
+      await logSecurityEvent("cron_unauthorized", { detail: "/api/cron/digest" });
+    return new NextResponse("Unauthorized", { status: 401 });
     }
 
     // Daily clean-up of data past its retention period; a failure here must not stop the digest

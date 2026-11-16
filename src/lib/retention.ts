@@ -6,6 +6,8 @@ export const RETENTION = {
   chatDays: 90,
   /** Admin sign-in attempts (they hold IP addresses); rate limiting only looks at the last 15 minutes */
   loginAttemptDays: 30,
+  /** The admin security log (IP addresses of failed sign-ins and blocked requests, admin changes) */
+  securityEventDays: 90,
   /** LINE groups PaoPao was removed from: their bills, debts and member names */
   leftGroupDays: 90,
   /** Group bills with nothing left to pay (all debts settled, or cancelled) */
@@ -18,7 +20,7 @@ const DAY = 24 * 60 * 60 * 1000
 
 /** Deletes expired data. Run daily by the digest cron; safe to run more often. */
 export async function purgeExpiredData(now = new Date()) {
-  const [chats, drafts, attempts, groups, bills, groupUsage] = await Promise.all([
+  const [chats, drafts, attempts, groups, bills, groupUsage, security] = await Promise.all([
     prisma.chatSession.deleteMany({ where: { updatedAt: { lt: new Date(now.getTime() - RETENTION.chatDays * DAY) } } }),
     prisma.pendingEntry.deleteMany({ where: { expiresAt: { lt: now } } }),
     prisma.loginAttempt.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - RETENTION.loginAttemptDays * DAY) } } }),
@@ -31,6 +33,7 @@ export async function purgeExpiredData(now = new Date()) {
       },
     }),
     prisma.groupUsageEvent.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - RETENTION.groupUsageDays * DAY) } } }),
+    prisma.securityEvent.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - RETENTION.securityEventDays * DAY) } } }),
   ])
-  return { chats: chats.count, drafts: drafts.count, loginAttempts: attempts.count, leftGroups: groups.count, settledBills: bills.count, groupUsage: groupUsage.count }
+  return { chats: chats.count, drafts: drafts.count, loginAttempts: attempts.count, leftGroups: groups.count, settledBills: bills.count, groupUsage: groupUsage.count, securityEvents: security.count }
 }

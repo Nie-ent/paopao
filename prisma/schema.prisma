@@ -76,6 +76,7 @@ model User {
   usageEvents      UsageEvent[]
   aiUsages         AiUsage[]
   featureEvents    FeatureEvent[]
+  securityEvents   SecurityEvent[]
   aiInsights       AiInsight[]
   recurringBills   RecurringBill[]
   pendingEntry     PendingEntry?
@@ -297,6 +298,28 @@ model FeatureEvent {
   @@index([feature, createdAt])
   @@index([userId, createdAt])
   @@index([createdAt])
+}
+
+/// A security-relevant event for the admin security log (src/lib/security-log.ts): sign-in failures,
+/// blocked requests and every admin change. Holds IP addresses, so it is deleted after
+/// RETENTION.securityEventDays (src/lib/retention.ts).
+model SecurityEvent {
+  id        String   @id @default(uuid())
+  /// Key from src/lib/security-events.ts
+  type      String
+  /// info, warning or critical, from the catalog when written
+  severity  String
+  ip        String?
+  /// The account it concerns or the admin who acted; null when unknown or the account was deleted
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  /// Short context, never secrets (e.g. "plan: Pro +30 days", "reason: line_expired")
+  detail    String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([type, createdAt])
+  @@index([ip, createdAt])
 }
 
 /// Tokens of one successful Gemini call (src/lib/ai-usage.ts); cost is priced when read

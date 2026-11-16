@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { completeLineLogin, decodeOAuthCookie, loginChannel, OAUTH_COOKIE, stateMatches } from "@/lib/line-oauth"
 import { signInCookies, upsertLineUser } from "@/lib/line-user"
 import { attachReferral, REFERRAL_COOKIE } from "@/lib/referral"
+import { logSecurityEvent } from "@/lib/security-log"
 
 function readCookie(req: Request, name: string) {
   const pair = (req.headers.get("cookie") ?? "").split(/;\s*/).find(c => c.startsWith(`${name}=`))
@@ -20,16 +21,23 @@ export async function GET(req: Request) {
     return res
   }
 
+  if (url.searchParams.get("error") && url.searchParams.get("error") !== "ACCESS_DENIED") await logSecurityEvent("line_login_failed", { detail: `LINE ตอบ error: ${url.searchParams.get("error")}` })
   if (url.searchParams.get("error")) return fail(url.searchParams.get("error") === "ACCESS_DENIED" ? "line_cancelled" : "line_failed")
   const channel = loginChannel()
   if (!channel) return fail("line_not_configured")
   // The state must be the one we issued to this browser (CSRF / login-fixation protection)
-  if (!session || !stateMatches(session.state, url.searchParams.get("state"))) return fail("line_expired")
+  if (!session || !stateMatches(session.state, url.searchParams.get("state"))) {
+    await logSecurityEvent("login_state_mismatch", { detail: session ? "state ไม่ตรงกับที่ออกให้" : "ไม่มีคุกกี้ state (หมดอายุหรือไม่ได้เริ่มจากหน้านี้)" })
+    return fail("line_expired")
+  }
   const code = url.searchParams.get("code")
   if (!code) return fail("line_failed")
 
   const identity = await completeLineLogin({ code, redirectUri: `${origin}/api/auth/line/callback`, session, channel })
-  if (!identity) return fail("line_failed")
+  if (!identity) {
+    await logSecurityEvent("line_login_failed", { detail: "แลก code กับ LINE ไม่สำเร็จ" })
+    return fail("line_failed")
+  }
 
   const user = await upsertLineUser(identity)
   // Signed up through a friend's invite link: link the new account (no-op for existing ones)
