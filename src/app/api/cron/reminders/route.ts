@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import prisma from "@/lib/db";
 import { lineClient } from "@/config/line";
 import { isAuthorizedCron } from "@/lib/cron-auth";
+import { logSecurityEvent } from "@/lib/security-log";
 import { trackedGoalAmount } from "@/lib/goal-progress";
 import { bangkokDayKey } from "@/lib/dates";
 import { buildBillQuestion, isBillDue } from "@/lib/bills";
@@ -10,6 +11,7 @@ import { appLink } from "@/lib/site";
 // This endpoint is triggered by Vercel Cron every morning at 7:00 AM BKK (0 0 * * *)
 export async function GET(req: Request) {
   if (!isAuthorizedCron(req)) {
+    await logSecurityEvent("cron_unauthorized", { detail: "/api/cron/reminders" });
     return new NextResponse("Unauthorized", { status: 401 });
   }
 

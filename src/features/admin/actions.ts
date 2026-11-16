@@ -6,6 +6,8 @@ import { createHmac, timingSafeEqual } from "crypto"
 import { clientIp, ADMIN_ATTEMPT_PREFIX } from "@/lib/client-ip"
 import { isAdminAccount } from "@/lib/admin-access"
 import { isProActive } from "@/lib/subscription"
+import { getCurrentUser } from "@/lib/current-user"
+import { logSecurityEvent } from "@/lib/security-log"
 
 const ADMIN_COOKIE = "admin_session"
 
@@ -24,6 +26,18 @@ function safeEqual(a: string, b: string) {
 
 const ADMIN_LOGIN_LIMIT = { maxFailures: 5, windowMs: 15 * 60 * 1000 }
 
+/** Records an admin change in the security log, with who made it (src/lib/security-events.ts) */
+async function audit(detail: string) {
+  const me = await getCurrentUser().catch(() => null)
+  await logSecurityEvent("admin_action", { userId: me?.id ?? null, detail })
+}
+
+/** "Name (abcd1234)" for a user in audit lines */
+async function who(userId: string) {
+  const u = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } }).catch(() => null)
+  return `${u?.name ?? "?"} (${userId.slice(0, 8)})`
+}
+
 export async function loginAdmin(password: string) {
   const expected = process.env.ADMIN_PASSWORD
   const token = adminSessionToken()
@@ -36,12 +50,18 @@ export async function loginAdmin(password: string) {
     where: { ip, success: false, createdAt: { gt: new Date(Date.now() - ADMIN_LOGIN_LIMIT.windowMs) } }
   })
   if (failures >= ADMIN_LOGIN_LIMIT.maxFailures) {
+    await logSecurityEvent("admin_login_blocked", { ip: ip.slice(ADMIN_ATTEMPT_PREFIX.length), detail: `ผิด ${failures} ครั้งใน 15 นาที` })
     return { success: false, error: "ลองผิดหลายครั้งเกินไป กรุณารอ 15 นาทีแล้วลองใหม่" }
   }
 
   // Only listed LINE accounts may use the password at all (same answer either way, nothing to probe)
   const ok = typeof password === "string" && safeEqual(password, expected) && await isAdminAccount()
   await prisma.loginAttempt.create({ data: { ip, success: ok } })
+  const me = await getCurrentUser().catch(() => null)
+  await logSecurityEvent(ok ? "admin_login_ok" : "admin_login_failed", {
+    ip: ip.slice(ADMIN_ATTEMPT_PREFIX.length), userId: me?.id ?? null,
+    detail: ok ? null : `ผิดครั้งที่ ${failures + 1} จาก ${ADMIN_LOGIN_LIMIT.maxFailures} ใน 15 นาที`,
+  })
   if (!ok) return { success: false, error: "รหัสผ่านไม่ถูกต้อง" }
 
   const cookieStore = await cookies()
@@ -50,6 +70,10 @@ export async function loginAdmin(password: string) {
 }
 
 export async function logoutAdmin() {
+  if (await isAdmin()) {
+    const me = await getCurrentUser().catch(() => null)
+    await logSecurityEvent("admin_logout", { userId: me?.id ?? null })
+  }
   const cookieStore = await cookies()
   cookieStore.delete(ADMIN_COOKIE)
   return { success: true }
@@ -79,25 +103,29 @@ function rewardData(data: RewardInput) {
 export async function createReward(data: RewardInput) {
   if (!await isAdmin()) return { error: "Unauthorized" }
   await prisma.reward.create({ data: rewardData(data) })
+  await audit(`สร้างของรางวัล "${data.name}" (${data.points} แต้ม)`)
   return { success: true }
 }
 
 export async function updateRewardStatus(id: string, status: string) {
   if (!await isAdmin()) return { error: "Unauthorized" }
-  await prisma.reward.update({ where: { id }, data: { status: status as any } })
+  const r = await prisma.reward.update({ where: { id }, data: { status: status as any } })
+  await audit(`เปลี่ยนสถานะของรางวัล "${r.name}" เป็น ${status}`)
   return { success: true }
 }
 
 export async function updateReward(id: string, data: RewardInput) {
   if (!await isAdmin()) return { error: "Unauthorized" }
   await prisma.reward.update({ where: { id }, data: rewardData(data) })
+  await audit(`แก้ไขของรางวัล "${data.name}" (${data.points} แต้ม)`)
   return { success: true }
 }
 
 export async function deleteReward(id: string) {
   if (!await isAdmin()) return { error: "Unauthorized" }
   await prisma.rewardClaim.deleteMany({ where: { rewardId: id } }) // Cleanup claims referencing this reward
-  await prisma.reward.delete({ where: { id } })
+  const r = await prisma.reward.delete({ where: { id } })
+  await audit(`ลบของรางวัล "${r.name}"`)
   return { success: true }
 }
 
@@ -119,6 +147,7 @@ export async function updateClaimStatus(id: string, status: string) {
     data: { status: status as any },
     include: { user: true, reward: true }
   })
+  await audit(`การแลก "${updated.reward.name}" ของ ${updated.user.name ?? "?"} (${updated.userId.slice(0, 8)}) → ${status}`)
 
   if (status === 'SHIPPED' && updated.user.lineId && updated.user.lineId !== "demo") {
     try {
@@ -142,18 +171,21 @@ export async function getAdminQuests() {
 
 export async function createQuest(data: { title: string, description: string, titleEn?: string, descriptionEn?: string, points: number, type: string, condition?: string }) {
   if (!await isAdmin()) return { error: "Unauthorized" }
+  await audit(`สร้างภารกิจ "${data.title}" (${data.points} แต้ม)`)
   await prisma.quest.create({ data: { ...data, titleEn: data.titleEn?.trim() || null, descriptionEn: data.descriptionEn?.trim() || null, type: data.type as any, condition: (data.condition as any) || 'NONE', status: 'ACTIVE' } })
   return { success: true }
 }
 
 export async function updateQuestStatus(id: string, status: string) {
   if (!await isAdmin()) return { error: "Unauthorized" }
-  await prisma.quest.update({ where: { id }, data: { status: status as any } })
+  const q = await prisma.quest.update({ where: { id }, data: { status: status as any } })
+  await audit(`เปลี่ยนสถานะภารกิจ "${q.title}" เป็น ${status}`)
   return { success: true }
 }
 
 export async function updateQuest(id: string, data: { title: string, description: string, titleEn?: string, descriptionEn?: string, points: number, type: string, condition?: string }) {
   if (!await isAdmin()) return { error: "Unauthorized" }
+  await audit(`แก้ไขภารกิจ "${data.title}" (${data.points} แต้ม)`)
   await prisma.quest.update({ where: { id }, data: { ...data, titleEn: data.titleEn?.trim() || null, descriptionEn: data.descriptionEn?.trim() || null, type: data.type as any, condition: data.condition as any } })
   return { success: true }
 }
@@ -161,7 +193,8 @@ export async function updateQuest(id: string, data: { title: string, description
 export async function deleteQuest(id: string) {
   if (!await isAdmin()) return { error: "Unauthorized" }
   await prisma.questClaim.deleteMany({ where: { questId: id } }) // Cleanup quest claims
-  await prisma.quest.delete({ where: { id } })
+  const q = await prisma.quest.delete({ where: { id } })
+  await audit(`ลบภารกิจ "${q.title}"`)
   return { success: true }
 }
 
@@ -212,6 +245,7 @@ export async function adjustUserPoints(userId: string, pointsDelta: number) {
     where: { id: userId },
     data: { paoPoints: newPoints }
   })
+  await audit(`ปรับแต้ม ${user.name ?? "?"} (${userId.slice(0, 8)}) ${pointsDelta > 0 ? "+" : ""}${pointsDelta} → ${newPoints}`)
   return { success: true }
 }
 
@@ -244,5 +278,6 @@ export async function adminSetPlan(userId: string, change: { action: "extend"; d
     await prisma.user.update({ where: { id: userId }, data: { subscriptionTier: "PRO", proExpiresAt: until } })
   }
   console.info("[admin] plan changed", userId, change)
+  await audit(`เปลี่ยนแพ็กเกจ ${await who(userId)}: ${change.action === "free" ? "เป็น Free" : change.action === "extend" ? `Pro +${change.days} วัน` : `Pro ถึง ${change.date}`}`)
   return { success: true }
 }

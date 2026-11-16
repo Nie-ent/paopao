@@ -4,13 +4,14 @@ import { useSingleFlight } from "@/hooks/use-single-flight"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { logoutAdmin } from "@/features/admin/actions"
-import { LogOut, Package, ListChecks, LayoutDashboard, Users, Loader2, BarChart3 } from "lucide-react"
+import { LogOut, Package, ListChecks, LayoutDashboard, Users, Loader2, BarChart3, ShieldAlert } from "lucide-react"
 
 /** Navigation chrome for signed-in admins. Access is enforced by the server layout and actions. */
 const NAV = [
   { href: "/admin", label: "การเติบโต", short: "เติบโต", icon: LayoutDashboard, active: (p: string) => p === "/admin" },
   { href: "/admin/analytics", label: "สถิติเชิงลึก", short: "สถิติ", icon: BarChart3, active: (p: string) => p.includes("/analytics") },
   { href: "/admin/users", label: "ผู้ใช้", short: "ผู้ใช้", icon: Users, active: (p: string) => p.includes("/users") },
+  { href: "/admin/security", label: "ความปลอดภัย", short: "ความปลอดภัย", icon: ShieldAlert, active: (p: string) => p.includes("/security") },
   { href: "/admin/rewards", label: "จัดการของรางวัล", short: "รางวัล", icon: Package, active: (p: string) => p.includes("/rewards") },
   { href: "/admin/quests", label: "จัดการภารกิจ", short: "ภารกิจ", icon: ListChecks, active: (p: string) => p.includes("/quests") },
   { href: "/admin/claims", label: "ตรวจสอบการส่งของ", short: "ส่งของ", icon: ListChecks, active: (p: string) => p.includes("/claims") },

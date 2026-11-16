@@ -11,6 +11,7 @@ import { signInCookies, upsertLineUser } from "@/lib/line-user"
 import { attachReferral, REFERRAL_COOKIE } from "@/lib/referral"
 import { lineAddFriendUrl } from "@/lib/site"
 import { lineClient } from "@/config/line"
+import { logSecurityEvent } from "@/lib/security-log"
 
 /**
  * Sign-in is LINE only: inside LINE through LIFF (this action), on the web through LINE Login
@@ -18,7 +19,10 @@ import { lineClient } from "@/config/line"
  */
 export async function signInWithLiffAction(accessToken: string) {
   const profile = await verifyLiffAccessToken(accessToken)
-  if (!profile) return redirect("/login?error=line_failed")
+  if (!profile) {
+    await logSecurityEvent("line_login_failed", { detail: "LIFF token ไม่ผ่านการตรวจกับ LINE" })
+    return redirect("/login?error=line_failed")
+  }
 
   const user = await upsertLineUser({ userId: profile.userId, name: profile.displayName, picture: profile.pictureUrl ?? null })
   const signIn = await signInCookies(user)
